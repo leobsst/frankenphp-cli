@@ -1,0 +1,84 @@
+{
+	frankenphp {
+		num_threads 64
+	}
+	order php_server before file_server
+}
+
+phpmyadmin.test:80 {
+	reverse_proxy http://127.0.0.1:8080
+}
+
+mediplace.test {
+	tls /certs/mediplace.test.pem /certs/mediplace.test-key.pem
+
+	# Définir le répertoire racine sur le dossier public/
+	root * /{$CUSTOM_PATH}/api-mediprix/public/
+
+	# Autoriser la compression (optionnel)
+	encode zstd br gzip
+
+	# Exécuter les scripts PHP du dossier public/ et servir les assets
+	php_server {
+		index index.php
+
+		# Required for the public/storage/ directory...
+		resolve_root_symlink
+	}
+}
+
+mediprix-v2.test {
+	tls /certs/mediprix-v2.test.pem /certs/mediprix-v2.test-key.pem
+	# Définir le répertoire racine sur le dossier public/
+	root * /{$CUSTOM_PATH}/mediprix-v2/public/
+	# Autoriser la compression (optionnel)
+	encode zstd br gzip
+	# Exécuter les scripts PHP du dossier public/ et servir les assets
+	php_server {
+		index index.php
+		# Required for the public/storage/ directory...
+		resolve_root_symlink
+	}
+}
+
+pharmacie-gespe.test {
+	tls /certs/pharmacie-gespe.test.pem /certs/pharmacie-gespe.test-key.pem
+	# Définir le répertoire racine sur le dossier public/
+	root * /{$CUSTOM_PATH}/mediprix-v2/public/
+	# Autoriser la compression (optionnel)
+	encode zstd br gzip
+	# Exécuter les scripts PHP du dossier public/ et servir les assets
+	php_server {
+		index index.php
+		# Required for the public/storage/ directory...
+		resolve_root_symlink
+	}
+}
+
+pharmacie-perols.test {
+	tls /certs/pharmacie-perols.test.pem /certs/pharmacie-perols.test-key.pem
+	# Définir le répertoire racine sur le dossier public/
+	root * /{$CUSTOM_PATH}/mediprix-v2/public/
+	# Autoriser la compression (optionnel)
+	encode zstd br gzip
+	# Exécuter les scripts PHP du dossier public/ et servir les assets
+	php_server {
+		index index.php
+		# Required for the public/storage/ directory...
+		resolve_root_symlink
+	}
+}
+
+fluxdeflammes.test {
+	tls /certs/fluxdeflammes.test.pem /certs/fluxdeflammes.test-key.pem
+	# Définir le répertoire racine sur le dossier public/
+	root * /{$CUSTOM_PATH}/fluxdeflammes/public/
+	# Autoriser la compression (optionnel)
+	encode zstd br gzip
+	# Exécuter les scripts PHP du dossier public/ et servir les assets
+	php_server {
+		index index.php
+		# Required for the public/storage/ directory...
+		resolve_root_symlink
+	}
+}
