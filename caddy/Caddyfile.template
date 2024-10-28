@@ -1,0 +1,30 @@
+{
+	frankenphp {
+		num_threads 24
+	}
+	order php_server before file_server
+}
+
+{$DOMAIN} {
+	tls /certs/{$DOMAIN}.pem /certs/{$DOMAIN}-key.pem
+
+	#log {
+	#	level INFO
+	#}
+
+	route {
+		# Définir le répertoire racine sur le dossier public/
+		root * /{$CUSTOM_PATH}/{$PROJECT}/public/
+
+		# Autoriser la compression (optionnel)
+		encode zstd br gzip
+
+		# Exécuter les scripts PHP du dossier public/ et servir les assets
+		php_server {
+			index index.php
+
+			# Required for the public/storage/ directory...
+			resolve_root_symlink
+		}
+	}
+}

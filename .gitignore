@@ -1,0 +1,7 @@
+caddy/certs/*
+caddy/config/*
+caddy/data/*
+caddy/log/*
+database/*
+.config
+.DS_Store
