@@ -9,33 +9,18 @@ services:
     environment:
       MARIADB_ROOT_PASSWORD: REDACTED_PASSWORD
 
-  phpmyadmin:
-    container_name: phpmyadmin
-    image: phpmyadmin:latest
-    restart: unless-stopped
-    environment:
-      PMA_HOST: REDACTED_IP
-      PMA_USER: root
-      PMA_PASSWORD: REDACTED_PASSWORD
-    ports:
-      - 8080:80
-
   franken-php:
     container_name: webserver-and-caddy
     image: custom-frankenphp:latest
     restart: unless-stopped
     network_mode: host
-    user: 501:20
-    ## DISABLED WHEN NET = HOST
-    # ports:
-    #   - "80:80"
-    #   - "443:443"
-    #   - "443:443/udp"
+    user: 1001:1001
     volumes:
       - ${CUSTOM_PATH}:/${CUSTOM_PATH}
       - ${PWD}/caddy/data:/data
       - ${PWD}/caddy/config:/config
       - ${PWD}/caddy/certs:/certs
+      - /etc/letsecnrypt:/etc/letsencrypt
       - ${PWD}/caddy/log:/var/log
       - ${PWD}/caddy/Caddyfile:/etc/caddy/Caddyfile
       - ${PWD}/php/php.ini:/usr/local/etc/php/php.ini

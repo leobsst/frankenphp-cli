@@ -37,6 +37,8 @@ RUN docker-php-ext-enable \
     #xdebug \
     imagick
 
+RUN mkdir /etc/letsencrypt
+
 ARG CUSTOM_PATH=/home
 
 RUN mkdir -p "$CUSTOM_PATH"
