@@ -5,7 +5,21 @@
 	order php_server before file_server
 }
 
-phpmyadmin.test:80 {
+localhost {
+	tls /certs/localhost.pem /certs/localhost-key.pem
+	
+	#@phpmyadmin {
+	#	path /phpMyAdmin5
+	#
+	#handle @phpmyadmin {
+	#	reverse_proxy /phpMyAdmin5/* http://127.0.0.1:8080
+	#}
+
+	log {
+		output file /var/log/caddy/localhost_access.log
+		format console
+	}
+
 	reverse_proxy http://127.0.0.1:8080
 }
 
@@ -16,7 +30,20 @@ mediplace.test {
 	root * /{$CUSTOM_PATH}/api-mediprix/public/
 
 	# Autoriser la compression (optionnel)
-	encode zstd br gzip
+	encode br gzip
+
+	log {
+		output file /var/log/caddy/mediplace_access.log
+		format console
+	}
+
+	@robots {
+        path /robots.txt
+    }
+    handle @robots {
+        header Cache-Control "public, max-age=86400"
+        file_server
+    }
 
 	# Exécuter les scripts PHP du dossier public/ et servir les assets
 	php_server {
@@ -32,7 +59,18 @@ mediprix-v2.test {
 	# Définir le répertoire racine sur le dossier public/
 	root * /{$CUSTOM_PATH}/mediprix-v2/public/
 	# Autoriser la compression (optionnel)
-	encode zstd br gzip
+	encode br gzip
+	log {
+		output file /var/log/caddy/mediprix-v2_access.log
+		format console
+	}
+	@robots {
+        path /robots.txt
+    }
+    handle @robots {
+        header Cache-Control "public, max-age=86400"
+        file_server
+    }
 	# Exécuter les scripts PHP du dossier public/ et servir les assets
 	php_server {
 		index index.php
@@ -46,7 +84,18 @@ pharmacie-gespe.test {
 	# Définir le répertoire racine sur le dossier public/
 	root * /{$CUSTOM_PATH}/mediprix-v2/public/
 	# Autoriser la compression (optionnel)
-	encode zstd br gzip
+	encode br gzip
+	log {
+		output file /var/log/caddy/pharmacie-gespe_access.log
+		format console
+	}
+	@robots {
+        path /robots.txt
+    }
+    handle @robots {
+        header Cache-Control "public, max-age=86400"
+        file_server
+    }
 	# Exécuter les scripts PHP du dossier public/ et servir les assets
 	php_server {
 		index index.php
@@ -60,7 +109,18 @@ pharmacie-perols.test {
 	# Définir le répertoire racine sur le dossier public/
 	root * /{$CUSTOM_PATH}/mediprix-v2/public/
 	# Autoriser la compression (optionnel)
-	encode zstd br gzip
+	encode br gzip
+	log {
+		output file /var/log/caddy/pharmacie-perols_access.log
+		format console
+	}
+	@robots {
+        path /robots.txt
+    }
+    handle @robots {
+        header Cache-Control "public, max-age=86400"
+        file_server
+    }
 	# Exécuter les scripts PHP du dossier public/ et servir les assets
 	php_server {
 		index index.php
@@ -74,7 +134,18 @@ fluxdeflammes.test {
 	# Définir le répertoire racine sur le dossier public/
 	root * /{$CUSTOM_PATH}/fluxdeflammes/public/
 	# Autoriser la compression (optionnel)
-	encode zstd br gzip
+	encode br gzip
+	log {
+		output file /var/log/caddy/fluxdeflammes_access.log
+		format console
+	}
+	@robots {
+        path /robots.txt
+    }
+    handle @robots {
+        header Cache-Control "public, max-age=86400"
+        file_server
+    }
 	# Exécuter les scripts PHP du dossier public/ et servir les assets
 	php_server {
 		index index.php

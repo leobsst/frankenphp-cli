@@ -16,12 +16,14 @@ domains_list=($DOMAINS)
 CUSTOM_PATH="${3:-/home}"
 # Set CERTS_DIR variable to the value of the second positional parameter,
 # or default to "./certs" if no parameter is provided
-CERTS_DIR="${4:-./caddy/certs}"
+CERTS_DIR="./caddy/certs"
 USER="macbookpro3"
 
 if ! [ -f manage_hosts.sh ]; then
     echo "Il manque le fichier manage_host.sh"
     exit 1
+else
+    chmod +x manage_hosts.sh
 fi
 
 if ! [ -f caddy/Caddyfile ]; then
@@ -42,6 +44,10 @@ fi
 if ! [ -f php/php.ini ]; then
     echo "Il manque le fichier php/php.ini"
     exit 1
+fi
+
+if ! [ -d $CERTS_DIR ]; then
+    mkdir -p $CERTS_DIR
 fi
 
 reset-config() {
@@ -73,7 +79,7 @@ function start() {
     fi
 
     # first ensure required executables exists:
-    if [[ `which mkcert` == "" ]] || [[ `nss-config nss --version` == "" ]]; then
+    if [[ `which mkcert` == "" ]]; then
         echo "Requires: mkcert & nss"
         echo
         echo "Run: brew install mkcert nss"
@@ -84,6 +90,8 @@ function start() {
     echo "-- Installing mkcert ..."
     sudo -u $USER mkcert -install
     echo "-- Creating and installing local SSL certificates for domain.s: ${DOMAINS} ..."
+
+    sudo -u $USER mkcert -cert-file ${CERTS_DIR}/localhost.pem -key-file ${CERTS_DIR}/localhost-key.pem localhost
 
     for value in "${domains_list[@]}"; do
         CERT_PEM_FILE="${CERTS_DIR}/${value}.pem"
@@ -108,7 +116,7 @@ function start() {
 
     sudo -u $USER docker build --build-arg CUSTOM_PATH="${CUSTOM_PATH}" -t custom-frankenphp:latest . && \
         sudo -u $USER docker compose down && \
-        sudo -u $USER CUSTOM_PATH=${CUSTOM_PATH} PWD=$(pwd) docker-compose up -d --wait
+        sudo -u $USER CUSTOM_PATH=${CUSTOM_PATH} PWD=$(pwd) docker-compose up -d
 
     # for value in "${domains_list[@]}"; do
     #     DOMAIN=${value%.*}
