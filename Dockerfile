@@ -25,13 +25,19 @@ RUN install-php-extensions \
     zip \
     gd \
     intl \
-    imap \
     pdo_pgsql \
     pgsql \
     imagick \
     #xdebug \
     imap \
-    opcache
+    opcache \
+    bcmath \
+    exif \
+    gmp \
+    sysvsem \
+    mbstring \
+    curl \
+    xml
 
 RUN docker-php-ext-enable \
     #xdebug \

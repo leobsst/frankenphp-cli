@@ -1,7 +1,7 @@
 services:
   db:
     container_name: mariadb
-    image: mariadb:latest
+    image: mariadb:10.11.9
     restart: unless-stopped
     network_mode: host
     volumes:
