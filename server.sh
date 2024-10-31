@@ -102,7 +102,6 @@ function start() {
         sudo ./manage_hosts.sh add 127.0.0.1 ${value}
     done
 
-    config_data=$(cat .config)
     # Mettre à jour le status en "running"
     # Ajouter les domaines au tableau "domains"
     config_domains=$(printf '%s\n' "${domains_list[@]}" | jq -R . | jq -s .)
@@ -193,8 +192,9 @@ function stop() {
 
     echo "- Stopping web server ..."
     sudo -u $USER docker compose down
-    
-    for value in "${domains_list[@]}"; do
+
+    DOMAINS=($(jq -r '.domains[]' .config))
+    for value in "${DOMAINS[@]}"; do
         sudo ./manage_hosts.sh remove 127.0.0.1 ${value}
     done
 

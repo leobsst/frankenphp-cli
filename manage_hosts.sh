@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
 # run:
 # ./manage-etc-hosts.sh add 10.20.1.2 test.com
@@ -6,6 +6,14 @@
 
 # PATH TO YOUR HOSTS FILE
 ETC_HOSTS=/etc/hosts
+OS=$(uname)
+
+if [[ "$OS" == "Darwin" ]]
+then
+    GREP_CMD="grep -p"
+else
+    GREP_CMD="grep -P"
+fi
 
 function remove() {
     # IP to add/remove.
@@ -15,7 +23,7 @@ function remove() {
     HOSTS_LINE="$IP[[:space:]]$HOSTNAME"
     HOSTS_LINE_LOCAL="::1[[:space:]]*$HOSTNAME"
     
-    if [ -n "$(grep -p $HOSTS_LINE $ETC_HOSTS)" ]
+    if [ -n "$($GREP_CMD $HOSTS_LINE $ETC_HOSTS)" ]
     then
         echo "$HOSTS_LINE Found in your $ETC_HOSTS, Removing now...";
         sudo sed -i".bak" "/$HOSTS_LINE/d" $ETC_HOSTS
@@ -41,14 +49,14 @@ function add() {
     line_content=$( printf "%s\t%s\n" "$IP" "$HOSTNAME" )
     line_content_local=$( printf "%s\t\t%s\n" "::1" "$HOSTNAME" )
     
-    if [ -n "$(grep -p $HOSTS_LINE $ETC_HOSTS)" ]
+    if [ -n "$($GREP_CMD $HOSTS_LINE $ETC_HOSTS)" ]
     then
         echo "$line_content already exists"
     else
         echo "Adding $line_content to your $ETC_HOSTS";
         sudo -- sh -c -e "echo '$line_content' >> /etc/hosts";
 
-        if [ -n "$(grep -p $HOSTNAME $ETC_HOSTS)" ]
+        if [ -n "$($GREP_CMD $HOSTNAME $ETC_HOSTS)" ]
         then
             echo "$line_content was added succesfully";
         else
