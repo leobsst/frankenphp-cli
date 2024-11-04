@@ -14,7 +14,7 @@ services:
     image: custom-frankenphp:latest
     restart: unless-stopped
     network_mode: host
-    user: 1001:1001
+    user: ${UID}:${GID}
     volumes:
       - ${CUSTOM_PATH}:/${CUSTOM_PATH}
       - ${PWD}/caddy/data:/data

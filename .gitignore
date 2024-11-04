@@ -5,3 +5,4 @@ caddy/log/*
 database/*
 .config
 .DS_Store
+.env
