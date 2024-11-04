@@ -13,7 +13,7 @@ if [[ `which jq` == "" ]]; then
     exit 1
 fi
 
-chmod +x *.sh
+sudo chmod +x *.sh
 
 ### End ###
 
