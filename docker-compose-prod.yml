@@ -22,7 +22,7 @@ services:
       - ${PWD}/caddy/data:/data
       - ${PWD}/caddy/config:/config
       - ${PWD}/caddy/certs:/certs
-      - /etc/letsecnrypt:/etc/letsencrypt
+      - /etc/letsencrypt:/etc/letsencrypt
       - ${PWD}/caddy/log:/var/log
       - ${PWD}/caddy/Caddyfile:/etc/caddy/Caddyfile
       - ${PWD}/php/php.ini:/usr/local/etc/php/php.ini
