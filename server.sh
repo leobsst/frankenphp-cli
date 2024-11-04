@@ -1,23 +1,66 @@
 #!/usr/bin/env bash
 
-# Vérifier si le script est exécuté avec les droits administrateurs
+### Check if the script is run as root and have jq ###
+
 if [[ "$EUID" -ne 0 ]]; then
     echo "Ce script doit être exécuté avec des droits administrateurs."
     echo "Veuillez réessayer avec 'sudo'."
     exit 1
 fi
 
-# Parameters
-# Set DOMAIN.S variable to the value of the first positional parameter,
-# or default to "localhost" if no parameter is provided
+if [[ `which jq` == "" ]]; then
+    echo "Requires: jq"
+    exit 1
+fi
+
+### End ###
+
+
+
+### Parameters ###
+
 DOMAINS="${2}"
 domains_list=($DOMAINS)
-
 CUSTOM_PATH="${3:-/home}"
-# Set CERTS_DIR variable to the value of the second positional parameter,
-# or default to "./certs" if no parameter is provided
+
+# Define the variables
 CERTS_DIR="./caddy/certs"
-USER="REDACTED_HOSTNAME"
+
+if ! [ -f .env.example ]; then
+    echo "Il manque le fichier .env.example"
+    exit 1
+fi
+
+if ! [ -f .env ]; then
+    echo "Aucun fichier .env trouvé."
+    echo "Création du fichier .env..."
+    echo
+    cp .env.example .env
+    chmod 777 .env
+    echo "Veuillez définir l'utilisateur et le groupe bash dans le fichier .env"
+    exit 1
+fi
+
+source .env
+
+if [[ -z $USER ]] || [[ -z $GROUP ]]; then
+    echo "Veuillez définir l'utilisateur et le groupe bash dans le fichier .env"
+    exit 1
+else
+    chmod 770 .env
+    chown $USER:$GROUP .env
+fi
+
+if [[ -z $DOCKER_USER ]] || [[ -z $DOCKER_GROUP ]]; then
+    echo "Veuillez définir l'utilisateur et le groupe docker dans le fichier .env"
+    exit 1
+fi
+
+### End Parameters ###
+
+
+
+### Check if required files exist ###
 
 if ! [ -f manage_hosts.sh ]; then
     echo "Il manque le fichier manage_host.sh"
@@ -62,10 +105,16 @@ then
     reset-config
 fi
 
-# Vérifier si "domains" est vide
+# Check if status is empty
 if [[ -z "$(echo "$(cat .config)" | jq '.status')" ]]; then
     reset-config
 fi
+
+### End ###
+
+
+
+### Functions ###
 
 function start() {
     if jq -e '.status == "running"' .config > /dev/null; then
@@ -79,43 +128,53 @@ function start() {
     fi
 
     # first ensure required executables exists:
-    if [[ `which mkcert` == "" ]]; then
-        echo "Requires: mkcert & nss"
+    if [[ "$APP_ENV" != "prod" ]] && [[ "$APP_ENV" != "production" ]]; then
+        if [[ `which mkcert` == "" ]]; then
+            echo "Requires: mkcert & nss"
+            exit 1
+        fi
+
+        # finally install certificates
+        echo "-- Installing mkcert ..."
+        sudo -u $USER mkcert -install
+        echo "-- Creating and installing local SSL certificates for domain.s: ${DOMAINS} ..."
+
+        sudo -u $USER mkcert -cert-file ${CERTS_DIR}/localhost.pem -key-file ${CERTS_DIR}/localhost-key.pem localhost
+
+        for value in "${domains_list[@]}"; do
+            CERT_PEM_FILE="${CERTS_DIR}/${value}.pem"
+            KEY_PEM_FILE="${CERTS_DIR}/${value}-key.pem"
+
+            sudo -u $USER mkcert -cert-file ${CERT_PEM_FILE} -key-file ${KEY_PEM_FILE} ${value}
+
+            sudo ./manage_hosts.sh add 127.0.0.1 ${value}
+        done
+
         echo
-        echo "Run: brew install mkcert nss"
-        exit 1
+        echo "-- New SSL certificates generated!"
+    else
+        for value in "${domains_list[@]}"; do
+            sudo ./manage_hosts.sh add 127.0.0.1 ${value}
+        done
     fi
-
-    # finally install certificates
-    echo "-- Installing mkcert ..."
-    sudo -u $USER mkcert -install
-    echo "-- Creating and installing local SSL certificates for domain.s: ${DOMAINS} ..."
-
-    sudo -u $USER mkcert -cert-file ${CERTS_DIR}/localhost.pem -key-file ${CERTS_DIR}/localhost-key.pem localhost
-
-    for value in "${domains_list[@]}"; do
-        CERT_PEM_FILE="${CERTS_DIR}/${value}.pem"
-        KEY_PEM_FILE="${CERTS_DIR}/${value}-key.pem"
-
-        sudo -u $USER mkcert -cert-file ${CERT_PEM_FILE} -key-file ${KEY_PEM_FILE} ${value}
-
-        sudo ./manage_hosts.sh add 127.0.0.1 ${value}
-    done
 
     # Mettre à jour le status en "running"
     # Ajouter les domaines au tableau "domains"
     config_domains=$(printf '%s\n' "${domains_list[@]}" | jq -R . | jq -s .)
     # Mettre à jour le JSON avec le nouveau statut et les domaines
     echo "{\"status\":\"running\", \"domains\":"$config_domains"}" > .config
-
-    echo
-    echo "-- New SSL certificates generated!"
     echo
     echo "- Starting web server ..."
 
-    sudo -u $USER docker build --build-arg CUSTOM_PATH="${CUSTOM_PATH}" -t custom-frankenphp:latest . && \
+    if [[ "$APP_ENV" != "prod" ]] && [[ "$APP_ENV" != "production" ]]; then
+        sudo -u $USER docker build --build-arg CUSTOM_PATH="${CUSTOM_PATH}" -t custom-frankenphp:latest . && \
+            sudo -u $USER docker compose down && \
+            sudo -u $USER CUSTOM_PATH=${CUSTOM_PATH} PWD=$(pwd) UID=${DOCKER_USER} GID=${DOCKER_GROUP} DB_HOST=${DB_HOST} docker-compose up -d
+    else
+        sudo -u $USER docker build --build-arg CUSTOM_PATH="${CUSTOM_PATH}" -t custom-frankenphp:latest . && \
         sudo -u $USER docker compose down && \
-        sudo -u $USER CUSTOM_PATH=${CUSTOM_PATH} PWD=$(pwd) docker-compose up -d
+        sudo -u $USER CUSTOM_PATH=${CUSTOM_PATH} PWD=$(pwd) UID=${DOCKER_USER} GID=${DOCKER_GROUP} DB_HOST=${DB_HOST} docker-compose -f docker-compose-prod.yml up -d
+    fi
 
     # for value in "${domains_list[@]}"; do
     #     DOMAIN=${value%.*}
@@ -203,5 +262,7 @@ function stop() {
     echo
     echo "-- Web server stopped!"
 }
+
+### End Functions ###
 
 $@

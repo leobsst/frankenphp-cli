@@ -14,7 +14,7 @@ services:
     image: phpmyadmin:latest
     restart: unless-stopped
     environment:
-      PMA_HOST: REDACTED_IP
+      PMA_HOST: ${DB_HOST}
       PMA_USER: root
       PMA_PASSWORD: REDACTED_PASSWORD
     ports:
@@ -25,7 +25,7 @@ services:
     image: custom-frankenphp:latest
     restart: unless-stopped
     network_mode: host
-    user: 501:20
+    user: ${UID}:${GID}
     ## DISABLED WHEN NET = HOST
     # ports:
     #   - "80:80"
