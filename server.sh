@@ -109,7 +109,7 @@ function start() {
         sudo ./manage_hosts.sh add 127.0.0.1 ${value}
     done
 
-    sudo -u $USER ./generate_caddyfile.sh
+    ./generate_caddyfile.sh
     if [[ $? -ne 0 ]]; then
         echo "Erreur lors de la génération des fichiers Caddyfile."
         exit 1
