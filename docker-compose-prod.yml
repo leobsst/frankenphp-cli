@@ -4,6 +4,7 @@ services:
     image: mariadb:10.11.9
     restart: unless-stopped
     network_mode: host
+    user: ${UID}:${GID}
     volumes:
       - ${PWD}/database:/var/lib/mysql
     environment:
@@ -17,6 +18,7 @@ services:
     user: ${UID}:${GID}
     volumes:
       - ${CUSTOM_PATH}:/${CUSTOM_PATH}
+      - /media:/media
       - ${PWD}/caddy/data:/data
       - ${PWD}/caddy/config:/config
       - ${PWD}/caddy/certs:/certs
