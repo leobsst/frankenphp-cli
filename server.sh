@@ -97,13 +97,10 @@ function start() {
     # Mettre à jour le JSON avec les domaines
     echo "{\"status\":\"stopped\", \"domains\":"$config_domains"}" > .config
 
-    # first ensure required executables exists:
-    if [[ "$APP_ENV" != "prod" ]] && [[ "$APP_ENV" != "production" ]]; then
-        sudo -u $USER ./generate_ssl.sh
-        if [[ $? -ne 0 ]]; then
-            echo "Erreur lors de la génération des certificats SSL."
-            exit 1
-        fi
+    sudo -u $USER ./generate_ssl.sh
+    if [[ $? -ne 0 ]]; then
+        echo "Erreur lors de la génération des certificats SSL."
+        exit 1
     fi
     for value in "${domains_list[@]}"; do
         sudo ./manage_hosts.sh add 127.0.0.1 ${value}
