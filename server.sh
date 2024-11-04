@@ -13,8 +13,9 @@ if [[ `which jq` == "" ]]; then
     exit 1
 fi
 
-### End ###
+chmod +x *.sh
 
+### End ###
 
 
 ### Parameters ###
@@ -22,9 +23,6 @@ fi
 DOMAINS="${2}"
 domains_list=($DOMAINS)
 CUSTOM_PATH="${3:-/home}"
-
-# Define the variables
-CERTS_DIR="./caddy/certs"
 
 if ! [ -f .env.example ]; then
     echo "Il manque le fichier .env.example"
@@ -59,59 +57,26 @@ fi
 ### End Parameters ###
 
 
-
 ### Check if required files exist ###
 
-if ! [ -f manage_hosts.sh ]; then
-    echo "Il manque le fichier manage_host.sh"
-    exit 1
-else
-    chmod +x manage_hosts.sh
-fi
-
-if ! [ -f caddy/Caddyfile ]; then
-    echo "Il manque le fichier caddy/Caddyfile"
+if ! [ -f check_files.sh ]; then
+    echo "Il manque le fichier check_files.sh"
     exit 1
 fi
 
-if ! [ -f Dockerfile ]; then
-    echo "Il manque le fichier Dockerfile"
+sudo -u $USER ./check_files.sh
+if [[ $? -ne 0 ]]; then
+    echo "Il manque des fichiers."
     exit 1
 fi
 
-if ! [ -f docker-compose.yml ]; then
-    echo "Il manque le fichier docker-compose.yml"
+sudo -u $USER ./check_config.sh
+if [[ $? -ne 0 ]]; then
+    echo "Il manque des fichiers de configuration."
     exit 1
-fi
-
-if ! [ -f php/php.ini ]; then
-    echo "Il manque le fichier php/php.ini"
-    exit 1
-fi
-
-if ! [ -d $CERTS_DIR ]; then
-    mkdir -p $CERTS_DIR
-fi
-
-reset-config() {
-    echo '{"status":"stopped", "domains":[]}' > .config
-}
-
-if ! [ -f ".config" ];
-then
-    echo "Aucun fichier de configuration trouvé."
-    echo "Création du fichier de configuration..."
-    echo
-    reset-config
-fi
-
-# Check if status is empty
-if [[ -z "$(echo "$(cat .config)" | jq '.status')" ]]; then
-    reset-config
 fi
 
 ### End ###
-
 
 
 ### Functions ###
@@ -127,40 +92,30 @@ function start() {
         exit 1
     fi
 
+    # Ajouter les domaines au tableau "domains"
+    config_domains=$(printf '%s\n' "${domains_list[@]}" | jq -R . | jq -s .)
+    # Mettre à jour le JSON avec les domaines
+    echo "{\"status\":\"stopped\", \"domains\":"$config_domains"}" > .config
+
     # first ensure required executables exists:
     if [[ "$APP_ENV" != "prod" ]] && [[ "$APP_ENV" != "production" ]]; then
-        if [[ `which mkcert` == "" ]]; then
-            echo "Requires: mkcert & nss"
+        sudo -u $USER ./generate_ssl.sh
+        if [[ $? -ne 0 ]]; then
+            echo "Erreur lors de la génération des certificats SSL."
             exit 1
         fi
+    fi
+    for value in "${domains_list[@]}"; do
+        sudo ./manage_hosts.sh add 127.0.0.1 ${value}
+    done
 
-        # finally install certificates
-        echo "-- Installing mkcert ..."
-        sudo -u $USER mkcert -install
-        echo "-- Creating and installing local SSL certificates for domain.s: ${DOMAINS} ..."
-
-        sudo -u $USER mkcert -cert-file ${CERTS_DIR}/localhost.pem -key-file ${CERTS_DIR}/localhost-key.pem localhost
-
-        for value in "${domains_list[@]}"; do
-            CERT_PEM_FILE="${CERTS_DIR}/${value}.pem"
-            KEY_PEM_FILE="${CERTS_DIR}/${value}-key.pem"
-
-            sudo -u $USER mkcert -cert-file ${CERT_PEM_FILE} -key-file ${KEY_PEM_FILE} ${value}
-
-            sudo ./manage_hosts.sh add 127.0.0.1 ${value}
-        done
-
-        echo
-        echo "-- New SSL certificates generated!"
-    else
-        for value in "${domains_list[@]}"; do
-            sudo ./manage_hosts.sh add 127.0.0.1 ${value}
-        done
+    sudo -u $USER ./generate_caddyfile.sh
+    if [[ $? -ne 0 ]]; then
+        echo "Erreur lors de la génération des fichiers Caddyfile."
+        exit 1
     fi
 
     # Mettre à jour le status en "running"
-    # Ajouter les domaines au tableau "domains"
-    config_domains=$(printf '%s\n' "${domains_list[@]}" | jq -R . | jq -s .)
     # Mettre à jour le JSON avec le nouveau statut et les domaines
     echo "{\"status\":\"running\", \"domains\":"$config_domains"}" > .config
     echo
@@ -168,79 +123,23 @@ function start() {
 
     if [[ "$APP_ENV" != "prod" ]] && [[ "$APP_ENV" != "production" ]]; then
         sudo -u $USER docker build --build-arg CUSTOM_PATH="${CUSTOM_PATH}" -t custom-frankenphp:latest . && \
-            sudo -u $USER docker compose down && \
-            sudo -u $USER CUSTOM_PATH=${CUSTOM_PATH} PWD=$(pwd) UID=${DOCKER_USER} GID=${DOCKER_GROUP} DB_HOST=${DB_HOST} docker-compose up -d
+            sudo -u $USER docker --log-level error compose down && \
+            sudo -u $USER \
+                CUSTOM_PATH=${CUSTOM_PATH} \
+                PWD=$(pwd) UID=${DOCKER_USER} \
+                GID=${DOCKER_GROUP} \
+                DB_HOST=${DB_HOST} \
+                docker --log-level error compose up -d
     else
         sudo -u $USER docker build --build-arg CUSTOM_PATH="${CUSTOM_PATH}" -t custom-frankenphp:latest . && \
-        sudo -u $USER docker compose down && \
-        sudo -u $USER CUSTOM_PATH=${CUSTOM_PATH} PWD=$(pwd) UID=${DOCKER_USER} GID=${DOCKER_GROUP} DB_HOST=${DB_HOST} docker-compose -f docker-compose-prod.yml up -d
+        sudo -u $USER docker --log-level error compose down && \
+        sudo -u $USER \
+            CUSTOM_PATH=${CUSTOM_PATH} \
+            PWD=$(pwd) UID=${DOCKER_USER} \
+            GID=${DOCKER_GROUP} \
+            DB_HOST=${DB_HOST} \
+            docker --log-level error compose -f docker-compose-prod.yml up -d
     fi
-
-    # for value in "${domains_list[@]}"; do
-    #     DOMAIN=${value%.*}
-    #     if [ "$DOMAIN" = "mediplace" ]
-    #     then
-    #         cp -n $(pwd)/caddy/Caddyfile.template $(pwd)/caddy/mediplace_Caddyfile
-    #         docker run -d \
-    #         -v $(pwd)/caddy/mediplace_Caddyfile:/etc/caddy/Caddyfile \
-    #         -v $(pwd)/caddy/certs:/certs \
-    #         -v $(pwd)/caddy/data:/data \
-    #         -v $(pwd)/caddy/config:/config \
-    #         -v $(pwd)/caddy/logs/${DOMAIN}:/var/log \
-    #         -v $(pwd)/php/php.ini:/usr/local/etc/php/php.ini \
-    #         -v $CUSTOM_PATH/api-mediprix:/$CUSTOM_PATH/api-mediprix \
-    #         -p 80:80 \
-    #         -p 443:443 \
-    #         -p 443:443/udp \
-    #         -e DOMAIN=${value} \
-    #         -e PROJECT=api-mediprix \
-    #         --name ${DOMAIN} \
-    #         --user 501:20 \
-    #         --restart unless-stopped \
-    #         custom-frankenphp:latest
-    #         ((ITER++))
-    #     else
-    #         cp -n $(pwd)/caddy/Caddyfile.template $(pwd)/caddy/${DOMAIN}_Caddyfile
-    #         docker run -d \
-    #         -v $(pwd)/caddy/${DOMAIN}_Caddyfile:/etc/caddy/Caddyfile \
-    #         -v $(pwd)/caddy/certs:/certs \
-    #         -v $(pwd)/caddy/data:/data \
-    #         -v $(pwd)/caddy/config:/config \
-    #         -v $(pwd)/caddy/logs/${DOMAIN}:/var/log \
-    #         -v $(pwd)/php/php.ini:/usr/local/etc/php/php.ini \
-    #         -v $CUSTOM_PATH/$DOMAIN:/$CUSTOM_PATH/${DOMAIN} \
-    #         -p 80:80 \
-    #         -p 443:443 \
-    #         -p 443:443/udp \
-    #         -e DOMAIN=${value} \
-    #         -e PROJECT=${DOMAIN} \
-    #         --name ${DOMAIN} \
-    #         --user 501:20 \
-    #         --restart unless-stopped \
-    #         custom-frankenphp:latest
-    #         ((ITER++))
-    #     fi
-    # done
-
-
-    # docker run -d \
-    #     -v $(pwd)/caddy/Caddyfile:/etc/caddy/Caddyfile \
-    #     -v $(pwd)/caddy/certs:/certs \
-    #     -v $(pwd)/caddy/data:/data \
-    #     -v $(pwd)/caddy/config:/config \
-    #     -v $(pwd)/caddy/log:/var/log \
-    #     -v $(pwd)/php/php.ini:/usr/local/etc/php/php.ini \
-    #     -v $CUSTOM_PATH/api-mediprix:/$CUSTOM_PATH/api-mediprix \
-    #     -v $CUSTOM_PATH/mediprix-v2:/$CUSTOM_PATH/mediprix-v2 \
-    #     -v $CUSTOM_PATH/fluxdeflammes:/$CUSTOM_PATH/fluxdeflammes \
-    #     -p 80:80 \
-    #     -p 443:443 \
-    #     -p 443:443/udp \
-    #     --name franken-php \
-    #     --user 501:20 \
-    #     --restart unless-stopped \
-    #     --net=host \
-    #     custom-frankenphp:latest
 }
 
 function stop() {
@@ -250,14 +149,14 @@ function stop() {
     fi
 
     echo "- Stopping web server ..."
-    sudo -u $USER docker compose down
+    sudo -u $USER docker --log-level error compose down
 
     DOMAINS=($(jq -r '.domains[]' .config))
     for value in "${DOMAINS[@]}"; do
-        sudo ./manage_hosts.sh remove 127.0.0.1 ${value}
+        ./manage_hosts.sh remove 127.0.0.1 ${value}
     done
 
-    reset-config
+    sudo -u $USER ./check_config.sh reset
 
     echo
     echo "-- Web server stopped!"

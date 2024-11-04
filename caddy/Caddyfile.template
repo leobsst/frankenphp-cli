@@ -1,30 +1,30 @@
-{
-	frankenphp {
-		num_threads 24
+full_domain {
+	tls /certs/full_domain.pem /certs/full_domain-key.pem
+
+	# Définir le répertoire racine sur le dossier public/
+	root * /{$CUSTOM_PATH}/custom_domain/public/
+
+	# Autoriser la compression (optionnel)
+	encode br gzip
+
+	log {
+		output file /var/log/caddy/custom_domain_access.log
+		format console
 	}
-	order php_server before file_server
-}
 
-{$DOMAIN} {
-	tls /certs/{$DOMAIN}.pem /certs/{$DOMAIN}-key.pem
+	@robots {
+        path /robots.txt
+    }
+    handle @robots {
+        header Cache-Control "public, max-age=86400"
+        file_server
+    }
 
-	#log {
-	#	level INFO
-	#}
+	# Exécuter les scripts PHP du dossier public/ et servir les assets
+	php_server {
+		index index.php
 
-	route {
-		# Définir le répertoire racine sur le dossier public/
-		root * /{$CUSTOM_PATH}/{$PROJECT}/public/
-
-		# Autoriser la compression (optionnel)
-		encode zstd br gzip
-
-		# Exécuter les scripts PHP du dossier public/ et servir les assets
-		php_server {
-			index index.php
-
-			# Required for the public/storage/ directory...
-			resolve_root_symlink
-		}
+		# Required for the public/storage/ directory...
+		resolve_root_symlink
 	}
 }

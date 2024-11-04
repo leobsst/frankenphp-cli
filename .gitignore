@@ -2,6 +2,7 @@ caddy/certs/*
 caddy/config/*
 caddy/data/*
 caddy/log/*
+caddy/sites/custom/*
 database/*
 .config
 .DS_Store

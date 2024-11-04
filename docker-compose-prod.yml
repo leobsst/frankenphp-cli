@@ -25,4 +25,5 @@ services:
       - /etc/letsencrypt:/etc/letsencrypt
       - ${PWD}/caddy/log:/var/log
       - ${PWD}/caddy/Caddyfile:/etc/caddy/Caddyfile
+      - ${PWD}/caddy/sites:/etc/caddy/sites
       - ${PWD}/php/php.ini:/usr/local/etc/php/php.ini
