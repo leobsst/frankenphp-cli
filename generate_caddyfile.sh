@@ -5,6 +5,10 @@ DOMAINS=$(jq -r '.domains[]' .config)
 domains_list=($DOMAINS)
 OS=$(uname)
 
+if ! [ -d "caddy/sites/custom/" ]; then
+    mkdir caddy/sites/custom/
+fi
+
 for domain in "${domains_list[@]}"; do
     SIMPLE_DOMAIN="${domain%.*}"
     if ! [ -f "caddy/sites/custom/${SIMPLE_DOMAIN}_Caddyfile" ]; then
