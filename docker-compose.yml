@@ -4,6 +4,7 @@ services:
     image: mariadb:10.11.9
     restart: unless-stopped
     network_mode: host
+    user: ${UID}:${GID}
     volumes:
       - ${PWD}/database:/var/lib/mysql
     environment:
