@@ -1,0 +1,10 @@
+localhost {
+	tls /certs/localhost.pem /certs/localhost-key.pem
+
+	log {
+		output file /var/log/caddy/localhost_access.log
+		format console
+	}
+
+	reverse_proxy http://127.0.0.1:8080
+}
