@@ -11,7 +11,7 @@ fi
 
 # finally install certificates
 echo "-- Installing mkcert ..."
-sudo -u $USER mkcert -install
+mkcert -install
 sudo -u $USER mkcert -cert-file $CERTS_DIR/localhost.pem -key-file $CERTS_DIR/localhost-key.pem localhost
 
 if [[ "$APP_ENV" != "prod" ]] && [[ "$APP_ENV" != "production" ]]; then
