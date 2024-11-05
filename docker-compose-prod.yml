@@ -2,7 +2,7 @@ services:
   db:
     container_name: mariadb
     image: mariadb:10.11.9
-    restart: unless-stopped
+    restart: always
     network_mode: host
     user: ${UID}:${GID}
     volumes:
@@ -10,10 +10,17 @@ services:
     environment:
       MARIADB_ROOT_PASSWORD: REDACTED_PASSWORD
 
+  cache:
+    container_name: redis
+    image: redis:alpine
+    restart: always
+    network_mode: host
+    command: redis-server --requirepass Yk59Z8Ev7c2fVY
+
   franken-php:
     container_name: webserver-and-caddy
     image: custom-frankenphp:latest
-    restart: unless-stopped
+    restart: always
     network_mode: host
     user: ${UID}:${GID}
     volumes:
