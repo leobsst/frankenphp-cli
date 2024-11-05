@@ -27,11 +27,6 @@ services:
     restart: unless-stopped
     network_mode: host
     user: ${UID}:${GID}
-    ## DISABLED WHEN NET = HOST
-    # ports:
-    #   - "80:80"
-    #   - "443:443"
-    #   - "443:443/udp"
     volumes:
       - ${CUSTOM_PATH}:/${CUSTOM_PATH}
       - ${PWD}/caddy/data:/data
