@@ -15,6 +15,7 @@ services:
     image: redis:alpine
     restart: always
     network_mode: host
+    command: redis-server
 
   franken-php:
     container_name: webserver-and-caddy
