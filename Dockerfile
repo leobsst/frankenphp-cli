@@ -37,7 +37,8 @@ RUN install-php-extensions \
     sysvsem \
     mbstring \
     curl \
-    xml
+    xml \
+    redis
 
 RUN docker-php-ext-enable \
     #xdebug \
