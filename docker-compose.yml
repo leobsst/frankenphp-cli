@@ -2,7 +2,7 @@ services:
   db:
     container_name: mariadb
     image: mariadb:10.11.9
-    restart: unless-stopped
+    restart: always
     network_mode: host
     user: ${UID}:${GID}
     volumes:
@@ -13,7 +13,7 @@ services:
   phpmyadmin:
     container_name: phpmyadmin
     image: phpmyadmin:latest
-    restart: unless-stopped
+    restart: always
     environment:
       PMA_HOST: ${DB_HOST}
       PMA_USER: root
@@ -24,7 +24,7 @@ services:
   franken-php:
     container_name: webserver-and-caddy
     image: custom-frankenphp:latest
-    restart: unless-stopped
+    restart: always
     network_mode: host
     user: ${UID}:${GID}
     volumes:
