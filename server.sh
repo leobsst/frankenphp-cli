@@ -146,7 +146,11 @@ function stop() {
     fi
 
     echo "- Stopping web server ..."
-    sudo -u $USER docker --log-level error compose down
+    if [[ "$APP_ENV" != "prod" ]] && [[ "$APP_ENV" != "production" ]]; then
+        sudo -u $USER docker --log-level error compose down
+    else
+        sudo -u $USER docker --log-level error compose -f docker-compose-prod.yml down
+    fi
 
     DOMAINS=($(jq -r '.domains[]' .config))
     for value in "${DOMAINS[@]}"; do
