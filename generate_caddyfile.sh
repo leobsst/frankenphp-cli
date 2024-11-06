@@ -7,6 +7,8 @@ OS=$(uname)
 
 if ! [ -d "caddy/sites/custom/" ]; then
     sudo -u $USER mkdir caddy/sites/custom/
+    chmod -R 777 caddy/sites/custom/
+    chown -R $USER:$USER caddy/sites/custom/
 fi
 
 for domain in "${domains_list[@]}"; do
