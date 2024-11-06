@@ -33,7 +33,7 @@ if ! [ -f .env ]; then
     echo "Aucun fichier .env trouvé."
     echo "Création du fichier .env..."
     echo
-    cp .env.example .env
+    sudo -u $USER cp .env.example .env
     chmod 777 .env
     echo "Veuillez définir l'utilisateur et le groupe bash dans le fichier .env"
     exit 1
