@@ -1,30 +1,54 @@
 full_domain {
+	# TLS
 	tls /certs/full_domain.pem /certs/full_domain-key.pem
 
-	# Définir le répertoire racine sur le dossier public/
+	# Root project
 	root * /{$CUSTOM_PATH}/custom_domain/public/
 
-	# Autoriser la compression (optionnel)
+	# Compression Brotli and Gzip
 	encode br gzip
 
+	# Logging
 	log {
 		output file /var/log/caddy/custom_domain_access.log
 		format console
 	}
 
-	@robots {
-        path /robots.txt
-    }
-    handle @robots {
-        header Cache-Control "public, max-age=86400"
-        file_server
-    }
+	# Cache and security headers
+	header {
+		# Cache static files (1 year)
+		/css/* /js/* /images/* /fonts/* /favicon.ico {
+			Cache-Control "public, max-age=31536000, immutable"
+		}
+		
+		# Cache dynamic files (5 minutes)
+		/ {
+			Cache-Control "public, max-age=300"
+		}
+		
+		# Security headers
+		Strict-Transport-Security "max-age=15552000; includeSubDomains; preload"
+		X-Frame-Options "SAMEORIGIN"
+		#X-Content-Type-Options "nosniff"
+		X-XSS-Protection "1; mode=block"
+		Referrer-Policy "no-referrer"
+		
+		# Remove server header
+		-Server
+	}
 
-	# Exécuter les scripts PHP du dossier public/ et servir les assets
+	# Cache for robots.txt file
+	@robots {
+		path /robots.txt
+	}
+	handle @robots {
+		header Cache-Control "public, max-age=86400"
+		file_server
+	}
+
+	# Manage PHP requests with FrankenPHP
 	php_server {
 		index index.php
-
-		# Required for the public/storage/ directory...
 		resolve_root_symlink
 	}
 }
