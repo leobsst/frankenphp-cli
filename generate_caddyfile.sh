@@ -29,6 +29,6 @@ for domain in "${domains_list[@]}"; do
 done
 
 echo
-echo "-- Caddyfile configurations generated successfully --"
+echo "-- Caddyfile configurations generated successfully -- ✅"
 
 exit 0

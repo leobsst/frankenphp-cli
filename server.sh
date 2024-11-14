@@ -2,7 +2,7 @@
 
 ### Check if the script is run as root and have jq ###
 
-if [[ "$EUID" -ne 0 ]]; then
+if [[ "$EUID" -ne 0 ]] && [[ "$(echo "$1" | tr '[:upper:]' '[:lower:]')" != "restart" ]]; then
     echo "Ce script doit être exécuté avec des droits administrateurs."
     echo "Veuillez réessayer avec 'sudo'."
     exit 1
@@ -160,7 +160,24 @@ function stop() {
     sudo -u $USER ./check_config.sh reset
 
     echo
-    echo "-- Web server stopped!"
+    echo "-- Web server stopped! -- ✅"
+}
+
+function restart () {
+    if jq -e '.status == "stopped"' .config > /dev/null; then
+        echo "Le serveur n'est pas en cours d'exécution."
+        exit 1
+    fi
+
+    echo
+    echo "-- Restarting webserver!"
+
+    echo
+    echo "-- Generating new SSL certificates!"
+    ./generate_ssl.sh && sudo -u $USER docker restart webserver-and-caddy >> /dev/null 2>&1
+
+    echo
+    echo "-- Web server restarted! -- ✅"
 }
 
 ### End Functions ###
