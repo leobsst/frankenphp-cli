@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 source .env
-SHELL_FILES_TO_CHECK='manage_hosts.sh check_config.sh generate_ssl.sh generate_caddyfile.sh'
+SHELL_FILES_TO_CHECK='manage_hosts.sh check_config.sh generate_ssl.sh generate_caddyfile.sh restart_server.sh'
 SHELL_FILES_TO_CHECK=($SHELL_FILES_TO_CHECK)
 APP_FILES_TO_CHECK=('caddy/Caddyfile Dockerfile docker-compose.yml docker-compose-prod.yml php/php.ini')
 APP_FILES_TO_CHECK=($APP_FILES_TO_CHECK)

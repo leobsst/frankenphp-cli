@@ -164,20 +164,7 @@ function stop() {
 }
 
 function restart () {
-    if jq -e '.status == "stopped"' .config > /dev/null; then
-        echo "Le serveur n'est pas en cours d'exécution."
-        exit 1
-    fi
-
-    echo
-    echo "-- Restarting webserver!"
-
-    echo
-    echo "-- Generating new SSL certificates!"
-    ./generate_ssl.sh && sudo -u $USER docker restart webserver-and-caddy >> /dev/null 2>&1
-
-    echo
-    echo "-- Web server restarted! -- ✅"
+    sudo -u $USER ./restart_server.sh
 }
 
 ### End Functions ###
