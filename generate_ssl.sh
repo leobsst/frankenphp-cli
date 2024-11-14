@@ -25,9 +25,10 @@ if [[ "$APP_ENV" != "prod" ]] && [[ "$APP_ENV" != "production" ]]; then
     done
 
     echo
-    echo "-- New SSL certificates generated!"
+    echo "-- New SSL certificates generated! -- ✅"
 fi
 
-chmod -R 777 $CERTS_DIR
+chmod -R 777 $CERTS_DIR/
+chown -R $USER:$GROUP $CERTS_DIR/
 
 exit 0
