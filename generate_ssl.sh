@@ -7,12 +7,14 @@ domains_list=($DOMAINS)
 if [[ `which mkcert` == "" ]]; then
     echo "Requires: mkcert & nss"
     exit 1
+else
+    MKCERT=$(which mkcert)
 fi
 
 # finally install certificates
 echo "-- Installing mkcert ..."
-mkcert -install
-mkcert -cert-file $CERTS_DIR/localhost.pem -key-file $CERTS_DIR/localhost-key.pem localhost
+$MKCERT -install
+$MKCERT -cert-file $CERTS_DIR/localhost.pem -key-file $CERTS_DIR/localhost-key.pem localhost
 
 if [[ "$APP_ENV" != "prod" ]] && [[ "$APP_ENV" != "production" ]]; then
     echo "-- Creating and installing local SSL certificates for domain.s: ${DOMAINS} ..."
@@ -21,7 +23,7 @@ if [[ "$APP_ENV" != "prod" ]] && [[ "$APP_ENV" != "production" ]]; then
         CERT_PEM_FILE="$CERTS_DIR/${value}.pem"
         KEY_PEM_FILE="$CERTS_DIR/${value}-key.pem"
 
-        mkcert -cert-file ${CERT_PEM_FILE} -key-file ${KEY_PEM_FILE} ${value}
+        $MKCERT -cert-file ${CERT_PEM_FILE} -key-file ${KEY_PEM_FILE} ${value}
     done
 
     echo
