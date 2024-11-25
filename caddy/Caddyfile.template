@@ -21,9 +21,9 @@ full_domain {
 			Cache-Control "public, max-age=31536000, immutable"
 		}
 		
-		# Cache dynamic files (5 minutes)
+		# Cache dynamic files (1 hour)
 		/ {
-			Cache-Control "public, max-age=300"
+			Cache-Control "public, max-age=3600"
 		}
 		
 		# Security headers
