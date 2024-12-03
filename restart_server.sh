@@ -54,7 +54,8 @@ echo
 ./generate_ssl.sh \
     && sudo -u $USER docker restart webserver-and-caddy >> /dev/null 2>&1 \
     && sudo -u $USER docker restart mariadb >> /dev/null 2>&1 \
-    && sudo -u $USER docker restart phpmyadmin >> /dev/null 2>&1
+    && sudo -u $USER docker restart phpmyadmin >> /dev/null 2>&1 \
+    && sudo -u $USER docker restart redis >> /dev/null 2>&1
 
 echo
 echo "-- Web server restarted! -- ✅"
