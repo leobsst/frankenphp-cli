@@ -27,6 +27,7 @@ RUN install-php-extensions \
     intl \
     pdo_pgsql \
     pgsql \
+    mysqli \
     imagick \
     #xdebug \
     imap \
