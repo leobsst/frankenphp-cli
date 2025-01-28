@@ -23,20 +23,22 @@ function remove() {
     HOSTS_LINE="$IP[[:space:]]$HOSTNAME"
     HOSTS_LINE_LOCAL="::1[[:space:]]*$HOSTNAME"
     
-    if [ -n "$($GREP_CMD $HOSTS_LINE $ETC_HOSTS)" ]
-    then
-        echo "$HOSTS_LINE Found in your $ETC_HOSTS, Removing now...";
-        sudo sed -i".bak" "/$HOSTS_LINE/d" $ETC_HOSTS
-
-        if [[ $IP == "127.0.0.1" ]]
+    if [[ "$ETC_HOSTS" != "localhost" ]]; then
+        if [ -n "$($GREP_CMD $HOSTS_LINE $ETC_HOSTS)" ]
         then
-            if [ -n "$(grep -E "::1[[:space:]]+$HOSTNAME" $ETC_HOSTS)" ]
+            echo "$HOSTS_LINE Found in your $ETC_HOSTS, Removing now...";
+            sudo sed -i".bak" "/$HOSTS_LINE/d" $ETC_HOSTS
+
+            if [[ $IP == "127.0.0.1" ]]
             then
-            sudo sed -i".bak" "/$HOSTS_LINE_LOCAL/d" $ETC_HOSTS
+                if [ -n "$(grep -E "::1[[:space:]]+$HOSTNAME" $ETC_HOSTS)" ]
+                then
+                sudo sed -i".bak" "/$HOSTS_LINE_LOCAL/d" $ETC_HOSTS
+                fi
             fi
+        else
+            echo "$HOSTS_LINE was not found in your $ETC_HOSTS";
         fi
-    else
-        echo "$HOSTS_LINE was not found in your $ETC_HOSTS";
     fi
 }
 
