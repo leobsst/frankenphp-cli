@@ -125,7 +125,6 @@ function start() {
                 CUSTOM_PATH=${CUSTOM_PATH} \
                 PWD=$(pwd) UID=${DOCKER_USER} \
                 GID=${DOCKER_GROUP} \
-                DB_HOST=${DB_HOST} \
                 docker --log-level error compose up -d
     else
         sudo -u $USER docker build --build-arg CUSTOM_PATH="${CUSTOM_PATH}" -t custom-frankenphp:latest . && \
@@ -134,7 +133,6 @@ function start() {
             CUSTOM_PATH=${CUSTOM_PATH} \
             PWD=$(pwd) UID=${DOCKER_USER} \
             GID=${DOCKER_GROUP} \
-            DB_HOST=${DB_HOST} \
             docker --log-level error compose -f docker-compose-prod.yml up -d
     fi
 }
