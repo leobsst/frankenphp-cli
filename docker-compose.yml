@@ -1,39 +1,54 @@
+version: '3.8'
+
 services:
   db:
-    container_name: mariadb
+    container_name: franken_mariadb
     image: mariadb:10.11.9
     restart: always
-    network_mode: host
     user: ${UID}:${GID}
     volumes:
       - ${PWD}/database:/var/lib/mysql
+    ports:
+      - 127.0.0.1:3306:3306
+      - '[::1]:3306:3306'
     environment:
       MARIADB_ROOT_PASSWORD: TS2DHFaAfENQ
+    networks:
+      - franken_network
 
   phpmyadmin:
-    container_name: phpmyadmin
+    container_name: franken_phpmyadmin
     image: phpmyadmin:latest
     restart: always
     environment:
-      PMA_HOST: ${DB_HOST}
+      PMA_HOST: franken_mariadb
       PMA_USER: root
       PMA_PASSWORD: TS2DHFaAfENQ
     ports:
-      - 8080:80
+      - 127.0.0.1:8080:80
+      - '[::1]:8080:80'
+    networks:
+      - franken_network
 
   cache:
-    container_name: redis
+    container_name: franken_redis
     image: redis:alpine
     restart: always
-    network_mode: host
     command: redis-server
+    ports:
+      - 127.0.0.1:6379:6379
+      - '[::1]:6379:6379'
+    networks:
+      - franken_network
 
   franken-php:
     container_name: webserver-and-caddy
     image: custom-frankenphp:latest
     restart: always
-    network_mode: host
     user: ${UID}:${GID}
+    ports:
+      - 80:80
+      - 443:443
     volumes:
       - ${CUSTOM_PATH}:/${CUSTOM_PATH}
       - ${PWD}/caddy/data:/data
@@ -43,3 +58,9 @@ services:
       - ${PWD}/caddy/Caddyfile:/etc/caddy/Caddyfile
       - ${PWD}/caddy/sites:/etc/caddy/sites
       - ${PWD}/php/php.ini:/usr/local/etc/php/php.ini
+    networks:
+      - franken_network
+
+networks:
+  franken_network:
+    driver: bridge
