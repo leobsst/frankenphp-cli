@@ -118,17 +118,15 @@ function start() {
     echo
     echo "- Starting web server ..."
 
+    sudo -u $USER docker build --build-arg CUSTOM_PATH="${CUSTOM_PATH}" --build-arg WWWGROUP="${WWWGROUP}" -t custom-frankenphp:latest . && \
+    sudo -u $USER docker --log-level error compose down
     if [[ "$APP_ENV" != "prod" ]] && [[ "$APP_ENV" != "production" ]]; then
-        sudo -u $USER docker build --build-arg CUSTOM_PATH="${CUSTOM_PATH}" -t custom-frankenphp:latest . && \
-            sudo -u $USER docker --log-level error compose down && \
-            sudo -u $USER \
-                CUSTOM_PATH=${CUSTOM_PATH} \
-                PWD=$(pwd) UID=${DOCKER_USER} \
-                GID=${DOCKER_GROUP} \
-                docker --log-level error compose up -d
+        sudo -u $USER \
+            CUSTOM_PATH=${CUSTOM_PATH} \
+            PWD=$(pwd) UID=${DOCKER_USER} \
+            GID=${DOCKER_GROUP} \
+            docker --log-level error compose up -d
     else
-        sudo -u $USER docker build --build-arg CUSTOM_PATH="${CUSTOM_PATH}" -t custom-frankenphp:latest . && \
-        sudo -u $USER docker --log-level error compose down && \
         sudo -u $USER \
             CUSTOM_PATH=${CUSTOM_PATH} \
             PWD=$(pwd) UID=${DOCKER_USER} \
