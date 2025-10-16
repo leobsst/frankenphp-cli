@@ -7,7 +7,7 @@ services:
     restart: always
     user: ${UID}:${GID}
     volumes:
-      - ${PWD}/database:/var/lib/mysql
+      - ./database:/var/lib/mysql
     ports:
       - 127.0.0.1:3306:3306
       - '[::1]:3306:3306'
@@ -46,16 +46,17 @@ services:
     image: custom-frankenphp:latest
     restart: always
     network_mode: host
-    user: ${UID}:${GID}
+    environment:
+      WWWUSER: '${WWWUSER}'
     volumes:
       - ${CUSTOM_PATH}:/${CUSTOM_PATH}
-      - ${PWD}/caddy/data:/data
-      - ${PWD}/caddy/config:/config
-      - ${PWD}/caddy/certs:/certs
-      - ${PWD}/caddy/log:/var/log
-      - ${PWD}/caddy/Caddyfile:/etc/caddy/Caddyfile
-      - ${PWD}/caddy/sites:/etc/caddy/sites
-      - ${PWD}/php/php.ini:/usr/local/etc/php/php.ini
+      - ./caddy/data:/data
+      - ./caddy/config:/config
+      - ./caddy/certs:/certs
+      - ./caddy/log:/var/log
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile
+      - ./caddy/sites:/etc/caddy/sites
+      - ./php/php.ini:/usr/local/etc/php/php.ini
 
 networks:
   franken_network:
