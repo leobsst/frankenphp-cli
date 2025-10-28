@@ -49,11 +49,6 @@ else
     chown $USER:$GROUP .env
 fi
 
-if [[ -z $DOCKER_USER ]] || [[ -z $DOCKER_GROUP ]]; then
-    echo "Veuillez définir l'utilisateur et le groupe docker dans le fichier .env"
-    exit 1
-fi
-
 ### End Parameters ###
 
 
@@ -123,14 +118,12 @@ function start() {
     if [[ "$APP_ENV" != "prod" ]] && [[ "$APP_ENV" != "production" ]]; then
         sudo -u $USER \
             CUSTOM_PATH=${CUSTOM_PATH} \
-            PWD=$(pwd) UID=${DOCKER_USER} \
-            GID=${DOCKER_GROUP} \
+            PWD=$(pwd) \
             docker --log-level error compose up -d
     else
         sudo -u $USER \
             CUSTOM_PATH=${CUSTOM_PATH} \
-            PWD=$(pwd) UID=${DOCKER_USER} \
-            GID=${DOCKER_GROUP} \
+            PWD=$(pwd) \
             docker --log-level error compose -f docker-compose-prod.yml up -d
     fi
 }

@@ -18,11 +18,6 @@ if [[ -z $USER ]] || [[ -z $GROUP ]]; then
     exit 1
 fi
 
-if [[ -z $DOCKER_USER ]] || [[ -z $DOCKER_GROUP ]]; then
-    echo "Veuillez exécuter le script server.sh"
-    exit 1
-fi
-
 if ! [ -f check_files.sh ]; then
     echo "Il manque le fichier check_files.sh"
     exit 1
