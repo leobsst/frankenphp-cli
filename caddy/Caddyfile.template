@@ -38,13 +38,13 @@ full_domain {
 	}
 
 	# Cache for robots.txt file
-	@robots {
-		path /robots.txt
-	}
-	handle @robots {
-		header Cache-Control "public, max-age=86400"
-		file_server
-	}
+	#@robots {
+	#	path /robots.txt
+	#}
+	#handle @robots {
+	#	header Cache-Control "public, max-age=86400"
+	#	file_server
+	#}
 
 	# Manage PHP requests with FrankenPHP
 	php_server {
