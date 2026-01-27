@@ -8,7 +8,13 @@ services:
     volumes:
       - ${PWD}/database:/var/lib/mysql
     environment:
-      MARIADB_ROOT_PASSWORD: REDACTED_PASSWORD
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   cache:
     container_name: redis
@@ -16,6 +22,12 @@ services:
     restart: always
     network_mode: host
     command: redis-server
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   franken-php:
     container_name: webserver-and-caddy
@@ -34,3 +46,8 @@ services:
       - ${PWD}/caddy/Caddyfile:/etc/caddy/Caddyfile
       - ${PWD}/caddy/sites:/etc/caddy/sites
       - ${PWD}/php/php.ini:/usr/local/etc/php/php.ini
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy

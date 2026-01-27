@@ -1,56 +1,55 @@
 #!/usr/bin/env bash
 
-source .env
+source "$(dirname "$0")/utils.sh"
 
-if [[ `which jq` == "" ]]; then
-    echo "Requires: jq"
-    exit 1
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Parse optional flags
+FORCE_SSL="${FORCE_SSL:-0}"
+export FORCE_SSL
+for arg in "$@"; do
+    case "$arg" in
+        --force-ssl) FORCE_SSL=1 ;;
+    esac
+done
+
+load_env "$SCRIPT_DIR/.env"
+
+require_command jq
+
+require_file "$SCRIPT_DIR/.env"
+require_env_var USER
+require_env_var GROUP
+
+# Generate MariaDB root password if not set
+if [[ -z "${MARIADB_ROOT_PASSWORD:-}" ]]; then
+    MARIADB_ROOT_PASSWORD="$(openssl rand -base64 24 | tr -d '/+=' | head -c 32)"
+    echo "MARIADB_ROOT_PASSWORD=$MARIADB_ROOT_PASSWORD" >> "$SCRIPT_DIR/.env"
+    log_info "Mot de passe MariaDB généré et ajouté au fichier .env"
 fi
 
-if ! [ -f .env ]; then
-    echo "Aucun fichier .env trouvé."
-    echo "Veuillez exécuter le script server.sh"
-    exit 1
-fi
+require_file "$SCRIPT_DIR/check_files.sh"
 
-if [[ -z $USER ]] || [[ -z $GROUP ]]; then
-    echo "Veuillez définir l'utilisateur et le groupe bash dans le fichier .env"
-    exit 1
-fi
+sudo -u "$USER" "$SCRIPT_DIR/check_files.sh"
+sudo -u "$USER" "$SCRIPT_DIR/check_config.sh"
 
-if ! [ -f check_files.sh ]; then
-    echo "Il manque le fichier check_files.sh"
-    exit 1
-fi
-
-sudo -u $USER ./check_files.sh
-if [[ $? -ne 0 ]]; then
-    echo "Il manque des fichiers."
-    exit 1
-fi
-
-sudo -u $USER ./check_config.sh
-if [[ $? -ne 0 ]]; then
-    echo "Il manque des fichiers de configuration."
-    exit 1
-fi
-
-if jq -e '.status == "stopped"' .config > /dev/null; then
-    echo "Le serveur n'est pas en cours d'exécution."
+if jq -e '.status == "stopped"' "$SCRIPT_DIR/.config" > /dev/null 2>&1; then
+    log_error "Le serveur n'est pas en cours d'exécution."
     exit 1
 fi
 
 echo
-echo "-- Restarting webserver!"
+log_info "Restarting webserver!"
 
 echo
-echo "-- Generating new SSL certificates!"
+log_info "Generating SSL certificates!"
 echo
-./generate_ssl.sh \
-    && sudo -u $USER docker restart webserver-and-caddy >> /dev/null 2>&1 \
-    && sudo -u $USER docker restart mariadb >> /dev/null 2>&1 \
-    && sudo -u $USER docker restart phpmyadmin >> /dev/null 2>&1 \
-    && sudo -u $USER docker restart redis >> /dev/null 2>&1
+"$SCRIPT_DIR/generate_ssl.sh"
+
+sudo -u "$USER" docker restart webserver-and-caddy > /dev/null 2>&1
+sudo -u "$USER" docker restart franken_mariadb > /dev/null 2>&1
+sudo -u "$USER" docker restart franken_phpmyadmin > /dev/null 2>&1
+sudo -u "$USER" docker restart franken_redis > /dev/null 2>&1
 
 echo
-echo "-- Web server restarted! -- ✅"
+log_success "Web server restarted!"

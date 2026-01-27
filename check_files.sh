@@ -1,29 +1,39 @@
 #!/usr/bin/env bash
 
-source .env
-SHELL_FILES_TO_CHECK='manage_hosts.sh check_config.sh generate_ssl.sh generate_caddyfile.sh restart_server.sh'
-SHELL_FILES_TO_CHECK=($SHELL_FILES_TO_CHECK)
-APP_FILES_TO_CHECK=('caddy/Caddyfile Dockerfile docker-compose.yml docker-compose-prod.yml php/php.ini')
-APP_FILES_TO_CHECK=($APP_FILES_TO_CHECK)
+source "$(dirname "$0")/utils.sh"
 
-for shell in "${SHELL_FILES_TO_CHECK[@]}"; do
-    if ! [[ -f ${shell} ]]; then
-        echo "Il manque le fichier ${shell}"
-        exit 1
-    else
-        chmod +x ${shell}
-    fi
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+load_env "$SCRIPT_DIR/.env"
+
+SHELL_FILES=(
+    manage_hosts.sh
+    check_config.sh
+    generate_ssl.sh
+    generate_caddyfile.sh
+    restart_server.sh
+    utils.sh
+)
+
+APP_FILES=(
+    caddy/Caddyfile
+    Dockerfile
+    docker-compose.yml
+    docker-compose-prod.yml
+    php/php.ini
+)
+
+for shell_file in "${SHELL_FILES[@]}"; do
+    require_file "$SCRIPT_DIR/$shell_file"
+    chmod +x "$SCRIPT_DIR/$shell_file"
 done
 
-for file in "${APP_FILES_TO_CHECK[@]}"; do
-    if ! [[ -f ${file} ]]; then
-        echo "Il manque le fichier ${file}"
-        exit 1
-    fi
+for app_file in "${APP_FILES[@]}"; do
+    require_file "$SCRIPT_DIR/$app_file"
 done
 
-if ! [ -d $CERTS_DIR ]; then
-    mkdir -p $CERTS_DIR
+if [[ ! -d "$CERTS_DIR" ]]; then
+    mkdir -p "$CERTS_DIR"
 fi
 
 exit 0

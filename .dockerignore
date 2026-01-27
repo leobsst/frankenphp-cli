@@ -1,0 +1,14 @@
+caddy/certs/
+caddy/config/
+caddy/data/
+caddy/log/
+caddy/sites/custom/
+database/
+.config
+.env
+.env.example
+.git/
+.gitignore
+.DS_Store
+*.sh
+*.md

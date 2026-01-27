@@ -1,36 +1,55 @@
 #!/usr/bin/env bash
 
-source .env
-DOMAINS=$(jq -r '.domains[]' .config)
-domains_list=($DOMAINS)
+source "$(dirname "$0")/utils.sh"
 
-if [[ `which mkcert` == "" ]]; then
-    echo "Requires: mkcert & nss"
-    exit 1
-else
-    MKCERT=$(which mkcert)
-fi
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# finally install certificates
-echo "-- Installing mkcert ..."
-$MKCERT -install
-$MKCERT -cert-file $CERTS_DIR/localhost.pem -key-file $CERTS_DIR/localhost-key.pem localhost
+load_env "$SCRIPT_DIR/.env"
 
-if [[ "$APP_ENV" != "prod" ]] && [[ "$APP_ENV" != "production" ]]; then
-    echo "-- Creating and installing local SSL certificates for domain.s: ${DOMAINS} ..."
+require_command jq
+require_command mkcert
 
-    for value in "${domains_list[@]}"; do
-        CERT_PEM_FILE="$CERTS_DIR/${value}.pem"
-        KEY_PEM_FILE="$CERTS_DIR/${value}-key.pem"
+domains_list=()
+while IFS= read -r d; do
+    domains_list+=("$d")
+done < <(get_config_domains)
 
-        $MKCERT -cert-file ${CERT_PEM_FILE} -key-file ${KEY_PEM_FILE} ${value}
+MKCERT="$(command -v mkcert)"
+
+log_info "Installing mkcert ..."
+"$MKCERT" -install
+
+"$MKCERT" -cert-file "$CERTS_DIR/localhost.pem" -key-file "$CERTS_DIR/localhost-key.pem" localhost
+
+if ! is_production; then
+    log_info "Creating and installing local SSL certificates for domain.s: ${domains_list[*]} ..."
+
+    for domain in "${domains_list[@]}"; do
+        CERT_PEM_FILE="$CERTS_DIR/${domain}.pem"
+        KEY_PEM_FILE="$CERTS_DIR/${domain}-key.pem"
+
+        # Skip if certificate already exists and is valid (less than 30 days old)
+        if [[ "${FORCE_SSL:-0}" != "1" ]] && [[ -f "$CERT_PEM_FILE" ]] && [[ -f "$KEY_PEM_FILE" ]]; then
+            if is_macos; then
+                cert_age=$(( ( $(date +%s) - $(stat -f %m "$CERT_PEM_FILE") ) / 86400 ))
+            else
+                cert_age=$(( ( $(date +%s) - $(date -r "$CERT_PEM_FILE" +%s) ) / 86400 ))
+            fi
+
+            if [[ "$cert_age" -lt 30 ]]; then
+                echo "  Certificate for $domain is still valid ($cert_age days old), skipping."
+                continue
+            fi
+        fi
+
+        "$MKCERT" -cert-file "$CERT_PEM_FILE" -key-file "$KEY_PEM_FILE" "$domain"
     done
 
     echo
-    echo "-- New SSL certificates generated! -- ✅"
+    log_success "New SSL certificates generated!"
 fi
 
-chmod -R 777 $CERTS_DIR/
-chown -R $USER:$GROUP $CERTS_DIR/
+chmod -R 750 "$CERTS_DIR/"
+chown -R "$USER:$GROUP" "$CERTS_DIR/"
 
 exit 0

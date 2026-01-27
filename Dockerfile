@@ -1,8 +1,6 @@
 FROM dunglas/frankenphp:latest-php8.3
 
-#RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
-
-RUN apt-get update && apt-get install -qq -y \
+RUN apt-get update && apt-get install -qq -y --no-install-recommends \
     git \
     zip \
     unzip \
@@ -13,14 +11,13 @@ RUN apt-get update && apt-get install -qq -y \
     libfreetype6-dev \
     libbz2-dev \
     libzip-dev \
-    libicu-dev
-
-RUN apt-get update && apt-get install -y \
-    libmagickwand-dev --no-install-recommends \
+    libicu-dev \
+    libmagickwand-dev \
     libmagickcore-dev \
     libgmp-dev \
     && docker-php-ext-configure intl \
     && docker-php-ext-install intl zip \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 RUN install-php-extensions \
@@ -43,8 +40,7 @@ RUN install-php-extensions \
     xml \
     redis
 
-RUN docker-php-ext-enable \
-    imagick
+RUN docker-php-ext-enable imagick
 
 RUN mkdir /etc/letsencrypt
 
@@ -55,4 +51,3 @@ RUN mkdir -p "$CUSTOM_PATH"
 WORKDIR $CUSTOM_PATH
 
 ENV CUSTOM_PATH=$CUSTOM_PATH
-

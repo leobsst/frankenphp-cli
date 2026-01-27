@@ -8,43 +8,36 @@ full_domain {
 	# Compression Brotli and Gzip
 	encode br gzip
 
-	# Logging
+	# Logging with rotation
 	log {
-		output file /var/log/caddy/custom_domain_access.log
+		output file /var/log/caddy/custom_domain_access.log {
+			roll_size 10mb
+			roll_keep 5
+			roll_keep_for 720h
+		}
 		format console
 	}
 
-	# Cache and security headers
+	# Cache static files (1 year)
+	@static path /css/* /js/* /images/* /fonts/* /favicon.ico
+	header @static Cache-Control "public, max-age=31536000, immutable"
+
+	# Cache dynamic pages (1 hour)
+	@dynamic not path /css/* /js/* /images/* /fonts/* /favicon.ico /robots.txt
+	header @dynamic Cache-Control "public, max-age=3600"
+
+	# No cache for robots.txt
+	@robots path /robots.txt
+	header @robots Cache-Control "no-store"
+
+	# Security headers
 	header {
-		# Cache static files (1 year)
-		/css/* /js/* /images/* /fonts/* /favicon.ico {
-			Cache-Control "public, max-age=31536000, immutable"
-		}
-		
-		# Cache dynamic files (1 hour)
-		/ {
-			Cache-Control "public, max-age=3600"
-		}
-		
-		# Security headers
 		Strict-Transport-Security "max-age=15552000; includeSubDomains; preload"
 		X-Frame-Options "SAMEORIGIN"
-		#X-Content-Type-Options "nosniff"
 		X-XSS-Protection "1; mode=block"
 		Referrer-Policy "no-referrer"
-		
-		# Remove server header
 		-Server
 	}
-
-	# Cache for robots.txt file
-	#@robots {
-	#	path /robots.txt
-	#}
-	#handle @robots {
-	#	header Cache-Control "public, max-age=86400"
-	#	file_server
-	#}
 
 	# Manage PHP requests with FrankenPHP
 	php_server {
