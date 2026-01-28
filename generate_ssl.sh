@@ -16,19 +16,20 @@ done < <(get_config_domains)
 
 MKCERT="$(command -v mkcert)"
 
+# mkcert -install requires sudo to add root CA to system trust store
 log_info "Installing mkcert ..."
-"$MKCERT" -install
+sudo "$MKCERT" -install
 
 "$MKCERT" -cert-file "$CERTS_DIR/localhost.pem" -key-file "$CERTS_DIR/localhost-key.pem" localhost
 
 if ! is_production; then
-    log_info "Creating and installing local SSL certificates for domain.s: ${domains_list[*]} ..."
+    log_info "Creating and installing local SSL certificates for domain(s): ${domains_list[*]} ..."
 
     for domain in "${domains_list[@]}"; do
         CERT_PEM_FILE="$CERTS_DIR/${domain}.pem"
         KEY_PEM_FILE="$CERTS_DIR/${domain}-key.pem"
 
-        # Skip if certificate already exists and is valid (less than 30 days old)
+        # Skip if certificate already exists and is less than 30 days old
         if [[ "${FORCE_SSL:-0}" != "1" ]] && [[ -f "$CERT_PEM_FILE" ]] && [[ -f "$KEY_PEM_FILE" ]]; then
             if is_macos; then
                 cert_age=$(( ( $(date +%s) - $(stat -f %m "$CERT_PEM_FILE") ) / 86400 ))
@@ -50,6 +51,5 @@ if ! is_production; then
 fi
 
 chmod -R 750 "$CERTS_DIR/"
-chown -R "$USER:$GROUP" "$CERTS_DIR/"
 
 exit 0

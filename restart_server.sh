@@ -24,32 +24,39 @@ require_env_var GROUP
 # Generate MariaDB root password if not set
 if [[ -z "${MARIADB_ROOT_PASSWORD:-}" ]]; then
     MARIADB_ROOT_PASSWORD="$(openssl rand -base64 24 | tr -d '/+=' | head -c 32)"
-    echo "MARIADB_ROOT_PASSWORD=$MARIADB_ROOT_PASSWORD" >> "$SCRIPT_DIR/.env"
-    log_info "Mot de passe MariaDB généré et ajouté au fichier .env"
+    if grep -q "^MARIADB_ROOT_PASSWORD=" "$SCRIPT_DIR/.env"; then
+        sed_inplace "s|^MARIADB_ROOT_PASSWORD=.*|MARIADB_ROOT_PASSWORD=$MARIADB_ROOT_PASSWORD|" "$SCRIPT_DIR/.env"
+    else
+        echo "MARIADB_ROOT_PASSWORD=$MARIADB_ROOT_PASSWORD" >> "$SCRIPT_DIR/.env"
+    fi
+    log_info "MariaDB password generated and saved to .env"
 fi
 
 require_file "$SCRIPT_DIR/check_files.sh"
 
-sudo -u "$USER" "$SCRIPT_DIR/check_files.sh"
-sudo -u "$USER" "$SCRIPT_DIR/check_config.sh"
+"$SCRIPT_DIR/check_files.sh"
+"$SCRIPT_DIR/check_config.sh"
 
 if jq -e '.status == "stopped"' "$SCRIPT_DIR/.config" > /dev/null 2>&1; then
-    log_error "Le serveur n'est pas en cours d'exécution."
+    log_error "The server is not running."
     exit 1
 fi
 
 echo
-log_info "Restarting webserver!"
+log_info "Restarting web server..."
 
 echo
-log_info "Generating SSL certificates!"
+log_info "Generating SSL certificates..."
 echo
 "$SCRIPT_DIR/generate_ssl.sh"
 
-sudo -u "$USER" docker restart webserver-and-caddy > /dev/null 2>&1
-sudo -u "$USER" docker restart franken_mariadb > /dev/null 2>&1
-sudo -u "$USER" docker restart franken_phpmyadmin > /dev/null 2>&1
-sudo -u "$USER" docker restart franken_redis > /dev/null 2>&1
+docker restart webserver-and-caddy > /dev/null 2>&1
+docker restart franken_mariadb > /dev/null 2>&1
+docker restart franken_phpmyadmin > /dev/null 2>&1
+docker restart franken_redis > /dev/null 2>&1
+
+# Sync MariaDB password with .env value
+sync_db_password "$MARIADB_ROOT_PASSWORD"
 
 echo
 log_success "Web server restarted!"

@@ -15,7 +15,7 @@ remove() {
     fi
 
     if grep -qE "$HOSTS_LINE" "$ETC_HOSTS"; then
-        echo "$HOSTS_LINE Found in your $ETC_HOSTS, Removing now..."
+        echo "$HOSTS_LINE found in $ETC_HOSTS, removing..."
         sed_inplace "/$HOSTS_LINE/d" "$ETC_HOSTS"
 
         if [[ "$IP" == "127.0.0.1" ]]; then
@@ -24,7 +24,7 @@ remove() {
             fi
         fi
     else
-        echo "$HOSTS_LINE was not found in your $ETC_HOSTS"
+        echo "$HOSTS_LINE was not found in $ETC_HOSTS"
     fi
 }
 
@@ -41,13 +41,13 @@ add() {
     if grep -qE "$HOSTS_LINE" "$ETC_HOSTS"; then
         echo "$line_content already exists"
     else
-        echo "Adding $line_content to your $ETC_HOSTS"
+        echo "Adding $line_content to $ETC_HOSTS"
         printf "%s\t%s\n" "$IP" "$HOSTNAME" >> "$ETC_HOSTS"
 
         if grep -qE "$HOSTNAME" "$ETC_HOSTS"; then
             echo "$line_content was added successfully"
         else
-            log_error "Failed to add $line_content, Try again!"
+            log_error "Failed to add $line_content, try again!"
             return 1
         fi
 
@@ -63,7 +63,7 @@ case "${1:-}" in
     add)    add "$2" "$3" ;;
     remove) remove "$2" "$3" ;;
     *)
-        log_error "Action inconnue: ${1:-<vide>}"
+        log_error "Unknown action: ${1:-<empty>}"
         echo "Usage: ./manage_hosts.sh {add|remove} <IP> <HOSTNAME>"
         exit 1
         ;;
