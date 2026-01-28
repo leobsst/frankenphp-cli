@@ -44,6 +44,9 @@ RUN docker-php-ext-enable imagick
 
 RUN mkdir /etc/letsencrypt
 
+# Create PHP error log directory
+RUN mkdir -p /var/log/php && chmod 755 /var/log/php
+
 ARG CUSTOM_PATH=/home
 
 RUN mkdir -p "$CUSTOM_PATH"

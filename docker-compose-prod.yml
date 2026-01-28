@@ -5,6 +5,7 @@ services:
     restart: always
     network_mode: host
     user: ${UID}:${GID}
+    env_file: .env
     volumes:
       - ${PWD}/database:/var/lib/mysql
     environment:
@@ -46,6 +47,7 @@ services:
       - ${PWD}/caddy/Caddyfile:/etc/caddy/Caddyfile
       - ${PWD}/caddy/sites:/etc/caddy/sites
       - ${PWD}/php/php.ini:/usr/local/etc/php/php.ini
+      - ${PWD}/php/php-prod.ini:/usr/local/etc/php/conf.d/99-production.ini
     depends_on:
       db:
         condition: service_healthy
