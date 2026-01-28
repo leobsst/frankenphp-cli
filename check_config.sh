@@ -10,8 +10,8 @@ reset() {
 }
 
 if [[ ! -f "$CONFIG_FILE" ]]; then
-    echo "Aucun fichier de configuration trouvé."
-    echo "Création du fichier de configuration..."
+    echo "No configuration file found."
+    echo "Creating configuration file..."
     echo
     reset
 fi
@@ -27,7 +27,7 @@ case "${1:-}" in
     reset) reset ;;
     "")    ;; # No action, just validation above
     *)
-        log_error "Action inconnue: $1"
+        log_error "Unknown action: $1"
         echo "Usage: ./check_config.sh [reset]"
         exit 1
         ;;

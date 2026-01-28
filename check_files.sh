@@ -13,6 +13,9 @@ SHELL_FILES=(
     generate_caddyfile.sh
     restart_server.sh
     utils.sh
+    actions/start.sh
+    actions/stop.sh
+    actions/status.sh
 )
 
 APP_FILES=(
@@ -21,6 +24,7 @@ APP_FILES=(
     docker-compose.yml
     docker-compose-prod.yml
     php/php.ini
+    php/php-prod.ini
 )
 
 for shell_file in "${SHELL_FILES[@]}"; do
