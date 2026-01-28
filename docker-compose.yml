@@ -4,6 +4,7 @@ services:
     image: mariadb:10.11.9
     restart: always
     user: ${UID}:${GID}
+    env_file: .env
     volumes:
       - ./database:/var/lib/mysql
     ports:
@@ -23,6 +24,7 @@ services:
     container_name: franken_phpmyadmin
     image: phpmyadmin:latest
     restart: always
+    env_file: .env
     environment:
       PMA_HOST: franken_mariadb
       PMA_USER: root
