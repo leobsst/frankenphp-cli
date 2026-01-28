@@ -1,5 +1,6 @@
 FROM dunglas/frankenphp:latest-php8.3
 
+# hadolint ignore=DL3008
 RUN apt-get update && apt-get install -qq -y --no-install-recommends \
     git \
     zip \
@@ -40,12 +41,9 @@ RUN install-php-extensions \
     xml \
     redis
 
-RUN docker-php-ext-enable imagick
-
-RUN mkdir /etc/letsencrypt
-
-# Create PHP error log directory
-RUN mkdir -p /var/log/php && chmod 755 /var/log/php
+RUN docker-php-ext-enable imagick \
+    && mkdir /etc/letsencrypt \
+    && mkdir -p /var/log/php && chmod 755 /var/log/php
 
 ARG CUSTOM_PATH=/home
 
