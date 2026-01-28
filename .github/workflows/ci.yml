@@ -2,9 +2,17 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop, python]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - "Dockerfile"
+      - "docker-compose*.yml"
+      - ".github/workflows/ci.yml"
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   lint:
