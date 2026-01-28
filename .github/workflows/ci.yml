@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: '.'
+          severity: warning
+
+  hadolint:
+    name: Hadolint (Dockerfile)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lint Dockerfile
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+
+  validate-compose:
+    name: Validate Docker Compose
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create test environment
+        run: |
+          cp .env.example .env
+          echo "USER=ci" >> .env
+          echo "GROUP=ci" >> .env
+          echo "MARIADB_ROOT_PASSWORD=testpassword" >> .env
+          mkdir -p caddy/certs
+
+      - name: Validate docker-compose.yml
+        run: |
+          CUSTOM_PATH=/home \
+          DB_PORT=127.0.0.1:3306:3306 \
+          PMA_PORT=127.0.0.1:8080:80 \
+          REDIS_PORT=127.0.0.1:6379:6379 \
+          MARIADB_ROOT_PASSWORD=test \
+          docker compose config -q
+
+      - name: Validate docker-compose-prod.yml
+        run: |
+          CUSTOM_PATH=/home \
+          DB_PORT=127.0.0.1:3306:3306 \
+          PMA_PORT=127.0.0.1:8080:80 \
+          REDIS_PORT=127.0.0.1:6379:6379 \
+          MARIADB_ROOT_PASSWORD=test \
+          PWD=$(pwd) \
+          docker compose -f docker-compose-prod.yml config -q
