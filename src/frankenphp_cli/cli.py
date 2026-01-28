@@ -43,9 +43,7 @@ def main(
 def start(
     domains: str = typer.Argument(..., help="Space-separated domain names"),
     path: str = typer.Argument("/home", help="Custom path for project root"),
-    force_ssl: bool = typer.Option(
-        False, "--force-ssl", help="Force SSL certificate regeneration"
-    ),
+    force_ssl: bool = typer.Option(False, "--force-ssl", help="Force SSL certificate regeneration"),
 ) -> None:
     """Start the FrankenPHP development server."""
     from .commands.start import start_server
@@ -64,9 +62,7 @@ def stop() -> None:
 
 @app.command()
 def restart(
-    force_ssl: bool = typer.Option(
-        False, "--force-ssl", help="Force SSL certificate regeneration"
-    ),
+    force_ssl: bool = typer.Option(False, "--force-ssl", help="Force SSL certificate regeneration"),
 ) -> None:
     """Restart the FrankenPHP development server."""
     from .commands.restart import restart_server

@@ -36,9 +36,7 @@ class HostsManager:
             try:
                 self.hosts_path.write_text(content)
             except PermissionError as e:
-                raise HostsFileError(
-                    f"Failed to write hosts file. Run as Administrator: {e}"
-                )
+                raise HostsFileError(f"Failed to write hosts file. Run as Administrator: {e}")
         else:
             # Use sudo tee to write with privileges
             process = subprocess.run(
@@ -47,9 +45,7 @@ class HostsManager:
                 capture_output=True,
             )
             if process.returncode != 0:
-                raise HostsFileError(
-                    f"Failed to write hosts file: {process.stderr.decode()}"
-                )
+                raise HostsFileError(f"Failed to write hosts file: {process.stderr.decode()}")
 
     def has_entry(self, ip: str, hostname: str) -> bool:
         """Check if an entry exists in the hosts file.
@@ -116,8 +112,7 @@ class HostsManager:
         new_lines = [
             line
             for line in lines
-            if not re.match(pattern_v4, line.strip())
-            and not re.match(pattern_v6, line.strip())
+            if not re.match(pattern_v4, line.strip()) and not re.match(pattern_v6, line.strip())
         ]
 
         if len(new_lines) != len(lines):

@@ -122,7 +122,6 @@ class DockerManager:
             True if restarted, False if not found.
         """
         try:
-
             container = self.client.containers.get(name)
             container.restart()
             return True

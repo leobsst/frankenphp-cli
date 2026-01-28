@@ -68,4 +68,13 @@ strict = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-v --cov=frankenphp_cli --cov-report=term-missing"
+addopts = "-v"
+
+[tool.coverage.run]
+source = ["src/frankenphp_cli"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+]
