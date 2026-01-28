@@ -27,7 +27,9 @@ done
 
 DOMAINS="${POSITIONAL[0]:-}"
 read -ra domains_list <<< "$DOMAINS"
+export domains_list
 CUSTOM_PATH="${POSITIONAL[1]:-/home}"
+export CUSTOM_PATH
 
 require_file "$SCRIPT_DIR/.env.example"
 

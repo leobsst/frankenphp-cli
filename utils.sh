@@ -92,6 +92,7 @@ load_env() {
     local env_file="${1:-$SCRIPT_DIR/.env}"
     if [[ -f "$env_file" ]]; then
         set -a
+        # shellcheck source=/dev/null
         source "$env_file"
         set +a
     else

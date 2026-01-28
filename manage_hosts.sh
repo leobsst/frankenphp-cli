@@ -7,7 +7,7 @@ ETC_HOSTS=/etc/hosts
 remove() {
     local IP="${1:-127.0.0.1}"
     local HOSTNAME="${2:-localhost}"
-    local HOSTS_LINE="$IP[[:space:]]$HOSTNAME"
+    local HOSTS_LINE="${IP}[[:space:]]${HOSTNAME}"
     local HOSTS_LINE_LOCAL="::1[[:space:]]*$HOSTNAME"
 
     if [[ "$HOSTNAME" == "localhost" ]]; then
@@ -31,12 +31,9 @@ remove() {
 add() {
     local IP="${1:-127.0.0.1}"
     local HOSTNAME="${2:-localhost}"
-    local HOSTS_LINE="$IP[[:space:]]$HOSTNAME"
+    local HOSTS_LINE="${IP}[[:space:]]${HOSTNAME}"
     local line_content
-    local line_content_local
-
     line_content=$(printf "%s\t%s\n" "$IP" "$HOSTNAME")
-    line_content_local=$(printf "%s\t\t%s\n" "::1" "$HOSTNAME")
 
     if grep -qE "$HOSTS_LINE" "$ETC_HOSTS"; then
         echo "$line_content already exists"
