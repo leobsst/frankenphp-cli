@@ -204,24 +204,24 @@ jobs:
             frankenmanager setup --status
             ```
 
-  publish-pypi:
-    name: Publish to PyPI
-    needs: [build-python-package]
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
-    environment:
-      name: pypi
-      url: https://pypi.org/project/frankenmanager/
-    permissions:
-      id-token: write
-    steps:
-      - name: Download Python package
-        uses: actions/download-artifact@v4
-        with:
-          name: python-package
-          path: dist
+  # publish-pypi:
+  #   name: Publish to PyPI
+  #   needs: [build-python-package]
+  #   runs-on: ubuntu-latest
+  #   if: startsWith(github.ref, 'refs/tags/v')
+  #   environment:
+  #     name: pypi
+  #     url: https://pypi.org/project/frankenmanager/
+  #   permissions:
+  #     id-token: write
+  #   steps:
+  #     - name: Download Python package
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: python-package
+  #         path: dist
 
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          skip-existing: true
+  #     - name: Publish to PyPI
+  #       uses: pypa/gh-action-pypi-publish@release/v1
+  #       with:
+  #         skip-existing: true

@@ -1,6 +1,19 @@
-# FrankenPHP CLI
+# FrankenManager
 
-A development and production server management tool for hosting Laravel and PHP applications using Docker containers with FrankenPHP (Caddy + PHP 8.3).
+[![Python](https://img.shields.io/badge/Python-3.9+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![PHP](https://img.shields.io/badge/PHP-8.3-777BB4?style=flat-square&logo=php&logoColor=white)](https://php.net)
+[![Docker](https://img.shields.io/badge/Docker-Required-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docker.com)
+[![FrankenPHP](https://img.shields.io/badge/FrankenPHP-Caddy-00ADD8?style=flat-square&logo=go&logoColor=white)](https://frankenphp.dev)
+[![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-macOS%20|%20Linux%20|%20Windows-lightgrey?style=flat-square)]()
+
+A powerful CLI tool for managing local PHP development environments using Docker containers with [FrankenPHP](https://frankenphp.dev) (Caddy + PHP 8.3).
+
+**FrankenManager** simplifies the process of running multiple PHP projects locally with:
+- Automatic HTTPS with locally-trusted certificates
+- No manual `/etc/hosts` editing (passwordless after setup)
+- One command to start/stop your entire development stack
+- Pre-built binaries - no Python installation required
 
 ## Features
 
@@ -10,81 +23,96 @@ A development and production server management tool for hosting Laravel and PHP 
 - MariaDB database with health checks
 - Redis cache server
 - phpMyAdmin for database management
-- Automatic `/etc/hosts` management
+- Automatic `/etc/hosts` management (passwordless after setup)
 - Production and development configurations
 - Brotli + Gzip compression
 - Static asset caching
 - Security headers (HSTS, X-Frame-Options, CSP, etc.)
 - Cross-platform support (macOS, Linux, Windows)
-
-## Prerequisites
-
-- Python 3.9+
-- Docker & Docker Compose v2
-- [mkcert](https://github.com/FiloSottile/mkcert) (for local SSL certificates)
-
-### macOS
-
-```bash
-brew install python mkcert
-```
-
-### Linux (Debian/Ubuntu)
-
-```bash
-sudo apt-get install -y python3 python3-pip python3-venv
-# Install mkcert: https://github.com/FiloSottile/mkcert#installation
-```
-
-### Windows
-
-```powershell
-# Install Python from https://python.org
-# Install mkcert from https://github.com/FiloSottile/mkcert#installation
-```
+- Pre-built binaries (no Python required)
 
 ## Installation
 
-1. Clone the repository:
+### Option 1: Pre-built Binaries (Recommended)
+
+Download the latest binary for your platform from the [Releases](https://github.com/leobsst/frankenphp-cli/releases) page.
+
+#### macOS (Apple Silicon)
 
 ```bash
-git clone https://github.com/LEOBSST/frankenphp-cli.git
-cd frankenphp-cli
+curl -L https://github.com/leobsst/frankenphp-cli/releases/latest/download/frankenmanager-macos-arm64 -o /usr/local/bin/frankenmanager
+chmod +x /usr/local/bin/frankenmanager
 ```
 
-2. Create a virtual environment and install the CLI:
+#### macOS (Intel)
 
 ```bash
+curl -L https://github.com/leobsst/frankenphp-cli/releases/latest/download/frankenmanager-macos-x86_64 -o /usr/local/bin/frankenmanager
+chmod +x /usr/local/bin/frankenmanager
+```
+
+#### Linux
+
+```bash
+curl -L https://github.com/leobsst/frankenphp-cli/releases/latest/download/frankenmanager-linux-x86_64 -o /usr/local/bin/frankenmanager
+chmod +x /usr/local/bin/frankenmanager
+```
+
+#### Windows
+
+Download `frankenmanager-windows-x86_64.exe` from the releases page and add it to your PATH.
+
+### Option 2: Python Package (pip)
+
+```bash
+pip install frankenmanager
+# or
+pipx install frankenmanager
+```
+
+### Option 3: From Source
+
+```bash
+git clone https://github.com/leobsst/frankenphp-cli.git
+cd frankenphp-cli
 python3 -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -e .
 ```
 
-3. Copy and configure the environment file:
+## First-Time Setup
+
+After installation, run the setup command to configure passwordless privilege escalation and install dependencies:
 
 ```bash
-cp .env.example .env
+# macOS/Linux
+sudo frankenmanager setup --install-mkcert
+
+# Windows (run in Administrator terminal)
+frankenmanager setup --install-mkcert
 ```
 
-4. Edit `.env` and set your system user and group:
+This will:
+- Configure passwordless `/etc/hosts` modifications (no more sudo prompts)
+- Install mkcert for SSL certificate generation
 
-```env
-APP_ENV=dev
-USER=your-username
-GROUP=your-group
+Check the setup status:
+
+```bash
+frankenmanager setup --status
 ```
+
+## Prerequisites
+
+- Docker & Docker Compose v2
+- mkcert (installed automatically with `--install-mkcert`)
 
 ## Usage
-
-> **Note:** Make sure to activate the virtual environment before using the CLI:
-> ```bash
-> source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-> ```
 
 ### Start the server
 
 ```bash
-frankenphp start "domain1.test domain2.test" /path/to/projects
+frankenmanager start "domain1.test domain2.test" /path/to/projects
 ```
 
 - **domains**: Space-separated list of local domains (quoted)
@@ -92,7 +120,7 @@ frankenphp start "domain1.test domain2.test" /path/to/projects
 
 ### Multi-Domain Setup
 
-FrankenPHP CLI allows you to serve multiple PHP/Laravel projects simultaneously, each with its own local domain. The domain name determines which project folder is served.
+FrankenManager allows you to serve multiple PHP/Laravel projects simultaneously, each with its own local domain. The domain name determines which project folder is served.
 
 **How it works:**
 
@@ -104,7 +132,7 @@ FrankenPHP CLI allows you to serve multiple PHP/Laravel projects simultaneously,
 **Example:**
 
 ```bash
-frankenphp start "shop.test blog.test api.test" /home/dev/projects
+frankenmanager start "shop.test blog.test api.test" /home/dev/projects
 ```
 
 This creates the following mapping:
@@ -134,63 +162,58 @@ This creates the following mapping:
 
 1. Validates all domain names format (e.g., `myapp.test`)
 2. Generates SSL certificates for each domain via mkcert
-3. Adds entries to `/etc/hosts` (requires sudo)
+3. Adds entries to `/etc/hosts` (passwordless if setup was run)
 4. Creates Caddyfile configuration for each domain
 5. Builds and starts Docker containers
 6. Syncs MariaDB password if changed
 
-**Single domain:**
-
-```bash
-frankenphp start "myapp.test" /home/dev/projects
-```
-
-**Multiple domains (same projects path):**
-
-```bash
-frankenphp start "app1.test app2.test app3.test" /home/dev/projects
-```
-
 ### Stop the server
 
 ```bash
-frankenphp stop
+frankenmanager stop
 ```
 
 ### Restart containers
 
 ```bash
-frankenphp restart
+frankenmanager restart
 ```
 
 ### Check status
 
 ```bash
-frankenphp status
+frankenmanager status
 ```
 
 ### Force SSL certificate regeneration
 
 ```bash
-frankenphp start "domain.test" /path/to/projects --force-ssl
+frankenmanager start "domain.test" /path/to/projects --force-ssl
 ```
 
 ### Show version
 
 ```bash
-frankenphp --version
+frankenmanager --version
 ```
 
 ### Show help
 
 ```bash
-frankenphp --help
-frankenphp start --help
+frankenmanager --help
+frankenmanager start --help
+frankenmanager setup --help
 ```
 
 ## Configuration
 
 ### Environment Variables (.env)
+
+Copy the example file and configure:
+
+```bash
+cp .env.example .env
+```
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -216,6 +239,7 @@ Set `APP_ENV=prod` in `.env` to enable:
 ```
 frankenphp-cli/
 ├── pyproject.toml              Python package configuration
+├── frankenmanager.spec         PyInstaller build spec
 ├── src/frankenphp_cli/         CLI package
 │   ├── cli.py                  Main CLI (Typer app)
 │   ├── exceptions.py           Custom exceptions
@@ -223,7 +247,8 @@ frankenphp-cli/
 │   │   ├── start.py            Start server
 │   │   ├── stop.py             Stop server
 │   │   ├── restart.py          Restart containers
-│   │   └── status.py           Show status
+│   │   ├── status.py           Show status
+│   │   └── setup.py            Privilege & mkcert setup
 │   ├── core/                   Core functionality
 │   │   ├── config.py           JSON config management
 │   │   ├── environment.py      .env file handling
@@ -231,11 +256,14 @@ frankenphp-cli/
 │   │   ├── ssl_manager.py      mkcert wrapper
 │   │   ├── hosts_manager.py    /etc/hosts management
 │   │   ├── caddyfile.py        Caddyfile generation
-│   │   └── password_manager.py MariaDB password sync
+│   │   ├── password_manager.py MariaDB password sync
+│   │   └── privilege_manager.py Passwordless sudo setup
 │   └── utils/                  Utilities
 │       ├── platform.py         Cross-platform detection
 │       ├── logging.py          Rich console output
 │       └── validation.py       Input validation
+├── scripts/
+│   └── build.py                Binary build script
 ├── tests/                      Test suite
 ├── Dockerfile                  Custom FrankenPHP image
 ├── docker-compose.yml          Development setup
@@ -289,20 +317,20 @@ mypy src/
 ruff check src/
 ```
 
-## Log Rotation
-
-### PHP Error Logs
-
-PHP errors are logged to `caddy/log/php/php_errors.log`. To set up automatic rotation on the host:
+### Build binaries
 
 ```bash
-sudo cp config/logrotate-php /etc/logrotate.d/frankenphp-php
-sudo sed -i "s|INSTALL_PATH|$(pwd)|g" /etc/logrotate.d/frankenphp-php
+pip install pyinstaller
+python scripts/build.py --clean --test --release
 ```
 
-### Caddy Access Logs
+## Platform Support
 
-Caddy logs are automatically rotated (10MB per file, 5 backups, 30 days retention).
+| Feature | macOS | Linux | Windows |
+|---------|-------|-------|---------|
+| Pre-built binary | arm64 + x86_64 | x86_64 | x86_64 |
+| Passwordless hosts | sudoers helper | sudoers helper | Admin required |
+| mkcert auto-install | Homebrew | Direct download | Chocolatey/Scoop |
 
 ## Troubleshooting
 
@@ -311,19 +339,47 @@ Caddy logs are automatically rotated (10MB per file, 5 backups, 30 days retentio
 Stop it first:
 
 ```bash
-frankenphp stop
+frankenmanager stop
 ```
 
-### Admin password prompt
+### Admin password prompt (after setup)
 
-The CLI runs as your local user but will prompt for `sudo` when modifying `/etc/hosts` or installing the mkcert root CA. This is expected.
+If you still get password prompts after running `sudo frankenmanager setup`:
+
+```bash
+# Check setup status
+frankenmanager setup --status
+
+# Re-run setup if needed
+sudo frankenmanager setup
+```
 
 ### SSL certificate issues
 
 Force regeneration:
 
 ```bash
-frankenphp start "domain.test" /path --force-ssl
+frankenmanager start "domain.test" /path --force-ssl
+```
+
+### mkcert not found
+
+Install it automatically:
+
+```bash
+sudo frankenmanager setup --install-mkcert
+```
+
+Or manually:
+
+```bash
+# macOS
+brew install mkcert
+
+# Linux (see https://github.com/FiloSottile/mkcert)
+
+# Windows
+choco install mkcert
 ```
 
 ### Container health check failures
@@ -335,13 +391,28 @@ docker logs webserver-and-caddy
 docker logs franken_mariadb
 ```
 
-### Module not found errors
+### Windows: "Access Denied" for hosts file
 
-Make sure the virtual environment is activated:
+Run your terminal as Administrator, or configure hosts file permissions:
+
+1. Right-click on `C:\Windows\System32\drivers\etc\hosts`
+2. Go to Properties -> Security -> Edit
+3. Add your user with "Modify" permission
+
+## Log Rotation
+
+### PHP Error Logs
+
+PHP errors are logged to `caddy/log/php/php_errors.log`. To set up automatic rotation on the host:
 
 ```bash
-source .venv/bin/activate
+sudo cp config/logrotate-php /etc/logrotate.d/frankenmanager-php
+sudo sed -i "s|INSTALL_PATH|$(pwd)|g" /etc/logrotate.d/frankenmanager-php
 ```
+
+### Caddy Access Logs
+
+Caddy logs are automatically rotated (10MB per file, 5 backups, 30 days retention).
 
 ## License
 
