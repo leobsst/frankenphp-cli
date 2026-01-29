@@ -207,13 +207,48 @@ frankenmanager setup --help
 
 ## Configuration
 
-### Environment Variables (.env)
+### Data Directory
 
-Copy the example file and configure:
+FrankenManager stores all configuration files, certificates, and generated data in a dedicated directory:
+
+| Platform | Location |
+|----------|----------|
+| macOS/Linux | `~/.frankenmanager/` |
+| Windows | `%LOCALAPPDATA%\frankenmanager\` |
+
+You can override this location with the `FRANKENMANAGER_DATA_DIR` environment variable.
+
+**Directory structure:**
+
+```
+~/.frankenmanager/
+├── .config                 # Server state (running/stopped, domains)
+├── .env                    # Environment configuration
+├── docker-compose.yml      # Docker Compose configuration
+├── Dockerfile              # Custom FrankenPHP image
+├── caddy/
+│   ├── Caddyfile           # Main Caddy configuration
+│   ├── Caddyfile.template  # Per-site template
+│   ├── sites/custom/       # Generated site configs
+│   ├── certs/              # SSL certificates
+│   ├── data/               # Caddy data
+│   ├── config/             # Caddy config
+│   └── log/                # Access and error logs
+├── php/
+│   ├── php.ini             # PHP configuration
+│   └── php-prod.ini        # Production overrides
+└── database/               # MariaDB data
+```
+
+Check your data directory location:
 
 ```bash
-cp .env.example .env
+frankenmanager setup --status
 ```
+
+### Environment Variables (.env)
+
+The `.env` file is automatically created in the data directory on first run. Edit it to configure:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -236,6 +271,8 @@ Set `APP_ENV=prod` in `.env` to enable:
 
 ## Architecture
 
+### Source Code Structure
+
 ```
 frankenphp-cli/
 ├── pyproject.toml              Python package configuration
@@ -243,6 +280,7 @@ frankenphp-cli/
 ├── src/frankenphp_cli/         CLI package
 │   ├── cli.py                  Main CLI (Typer app)
 │   ├── exceptions.py           Custom exceptions
+│   ├── resources/              Bundled config files (for binary)
 │   ├── commands/               Command implementations
 │   │   ├── start.py            Start server
 │   │   ├── stop.py             Stop server
@@ -257,29 +295,15 @@ frankenphp-cli/
 │   │   ├── hosts_manager.py    /etc/hosts management
 │   │   ├── caddyfile.py        Caddyfile generation
 │   │   ├── password_manager.py MariaDB password sync
-│   │   └── privilege_manager.py Passwordless sudo setup
+│   │   ├── privilege_manager.py Passwordless sudo setup
+│   │   └── resources.py        Data directory management
 │   └── utils/                  Utilities
 │       ├── platform.py         Cross-platform detection
 │       ├── logging.py          Rich console output
 │       └── validation.py       Input validation
 ├── scripts/
 │   └── build.py                Binary build script
-├── tests/                      Test suite
-├── Dockerfile                  Custom FrankenPHP image
-├── docker-compose.yml          Development setup
-├── docker-compose-prod.yml     Production setup
-├── php/
-│   ├── php.ini                 Base PHP configuration
-│   └── php-prod.ini            Production PHP overrides
-├── caddy/
-│   ├── Caddyfile               Main Caddy configuration
-│   ├── Caddyfile.template      Per-site template
-│   ├── sites/custom/           Generated site configs
-│   ├── certs/                  SSL certificates
-│   └── log/                    Access and error logs
-├── config/
-│   └── logrotate-php           PHP log rotation config
-└── database/                   MariaDB data (gitignored)
+└── tests/                      Test suite
 ```
 
 ## Services
@@ -403,16 +427,37 @@ Run your terminal as Administrator, or configure hosts file permissions:
 
 ### PHP Error Logs
 
-PHP errors are logged to `caddy/log/php/php_errors.log`. To set up automatic rotation on the host:
+PHP errors are logged to `~/.frankenmanager/caddy/log/php/php_errors.log`. To set up automatic rotation on the host:
 
 ```bash
 sudo cp config/logrotate-php /etc/logrotate.d/frankenmanager-php
-sudo sed -i "s|INSTALL_PATH|$(pwd)|g" /etc/logrotate.d/frankenmanager-php
+sudo sed -i "s|INSTALL_PATH|$HOME/.frankenmanager|g" /etc/logrotate.d/frankenmanager-php
 ```
 
 ### Caddy Access Logs
 
 Caddy logs are automatically rotated (10MB per file, 5 backups, 30 days retention).
+
+## Uninstall
+
+To completely remove FrankenManager:
+
+```bash
+# Stop running containers
+frankenmanager stop
+
+# Remove privilege configuration
+sudo frankenmanager setup --remove
+
+# Remove the binary (if installed via binary)
+sudo rm /usr/local/bin/frankenmanager
+
+# Remove data directory
+rm -rf ~/.frankenmanager
+
+# Or on Windows:
+# rmdir /s %LOCALAPPDATA%\frankenmanager
+```
 
 ## License
 
