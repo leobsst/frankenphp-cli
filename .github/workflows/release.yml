@@ -160,7 +160,7 @@ jobs:
 
             | Platform | Architecture | Download |
             |----------|--------------|----------|
-            | macOS | Apple Silicon (M1/M2) | `frankenmanager-macos-arm64` |
+            | macOS | Apple Silicon | `frankenmanager-macos-arm64` |
             | macOS | Intel | `frankenmanager-macos-x86_64` |
             | Linux | x86_64 | `frankenmanager-linux-x86_64` |
             | Windows | x86_64 | `frankenmanager-windows-x86_64.exe` |
