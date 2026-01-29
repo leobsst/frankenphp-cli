@@ -26,7 +26,7 @@ jobs:
             artifact_name: frankenmanager-linux-x86_64
           - os: macos-latest
             artifact_name: frankenmanager-macos-arm64
-          - os: macos-13
+          - os: macos-15-large
             artifact_name: frankenmanager-macos-x86_64
           - os: windows-latest
             artifact_name: frankenmanager-windows-x86_64.exe
