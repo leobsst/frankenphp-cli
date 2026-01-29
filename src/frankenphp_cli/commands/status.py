@@ -1,19 +1,13 @@
 """Status command implementation."""
 
-from pathlib import Path
-
 from rich.console import Console
 from rich.table import Table
 
 from ..core.config import ConfigManager
 from ..core.docker_manager import DockerManager
+from ..core.resources import get_project_dir
 
 console = Console()
-
-
-def get_project_dir() -> Path:
-    """Get the project directory."""
-    return Path.cwd()
 
 
 def show_status() -> None:

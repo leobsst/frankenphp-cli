@@ -1,18 +1,12 @@
 """Stop command implementation."""
 
-from pathlib import Path
-
 from ..core.config import ConfigManager
 from ..core.docker_manager import DockerManager
 from ..core.environment import EnvironmentManager
 from ..core.hosts_manager import HostsManager
+from ..core.resources import get_project_dir
 from ..exceptions import ServerStateError
 from ..utils.logging import log_info, log_success
-
-
-def get_project_dir() -> Path:
-    """Get the project directory."""
-    return Path.cwd()
 
 
 def stop_server() -> None:

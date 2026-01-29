@@ -4,6 +4,7 @@ from rich.console import Console
 from rich.table import Table
 
 from ..core.privilege_manager import MkcertInstaller, PrivilegeManager
+from ..core.resources import get_data_dir_info
 from ..exceptions import ConfigurationError
 from ..utils.logging import log_error, log_info, log_success, log_warning
 
@@ -38,6 +39,19 @@ def setup_privileges(
 def _show_status(manager: PrivilegeManager, mkcert: MkcertInstaller) -> None:
     """Display the current configuration status."""
     status = manager.get_status()
+    data_info = get_data_dir_info()
+
+    # Data directory table
+    data_table = Table(title="Data Directory")
+    data_table.add_column("Setting", style="cyan")
+    data_table.add_column("Value", style="green")
+
+    data_table.add_row("Location", data_info["data_dir"])
+    data_table.add_row("Mode", data_info["mode"].capitalize())
+    data_table.add_row("Initialized", "Yes" if data_info["initialized"] == "True" else "No")
+
+    console.print(data_table)
+    console.print("")
 
     # Privilege status table
     priv_table = Table(title="Privilege Configuration Status")
