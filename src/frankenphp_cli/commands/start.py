@@ -9,19 +9,11 @@ from ..core.docker_manager import DockerManager
 from ..core.environment import EnvironmentManager
 from ..core.hosts_manager import HostsManager
 from ..core.password_manager import PasswordManager
+from ..core.resources import get_project_dir
 from ..core.ssl_manager import SSLManager
 from ..exceptions import ServerStateError
 from ..utils.logging import log_error, log_info, log_success
 from ..utils.validation import validate_directory, validate_domain
-
-
-def get_project_dir() -> Path:
-    """Get the project directory (where the CLI was installed from).
-
-    For development, this returns the directory containing the package.
-    """
-    # Start from the current working directory
-    return Path.cwd()
 
 
 def start_server(domains: list[str], custom_path: Path, force_ssl: bool) -> None:

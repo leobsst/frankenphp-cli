@@ -1,19 +1,13 @@
 """Restart command implementation."""
 
-from pathlib import Path
-
 from ..core.config import ConfigManager
 from ..core.docker_manager import DockerManager
 from ..core.environment import EnvironmentManager
 from ..core.password_manager import PasswordManager
+from ..core.resources import get_project_dir
 from ..core.ssl_manager import SSLManager
 from ..exceptions import ServerStateError
 from ..utils.logging import log_info, log_success
-
-
-def get_project_dir() -> Path:
-    """Get the project directory."""
-    return Path.cwd()
 
 
 def restart_server(force_ssl: bool) -> None:
