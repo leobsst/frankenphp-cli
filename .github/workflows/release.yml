@@ -1,0 +1,227 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g., 1.0.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-binaries:
+    name: Build ${{ matrix.os }} binary
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: frankenmanager-linux-x86_64
+          - os: macos-latest
+            artifact_name: frankenmanager-macos-arm64
+          - os: macos-13
+            artifact_name: frankenmanager-macos-x86_64
+          - os: windows-latest
+            artifact_name: frankenmanager-windows-x86_64.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pyinstaller
+
+      - name: Build binary
+        run: python scripts/build.py --clean --release
+
+      - name: Test binary (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          chmod +x dist/frankenmanager-*
+          ./dist/frankenmanager-* --version
+          ./dist/frankenmanager-* --help
+
+      - name: Test binary (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          dist\frankenmanager-*.exe --version
+          dist\frankenmanager-*.exe --help
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: dist/frankenmanager-*
+          if-no-files-found: error
+
+  build-python-package:
+    name: Build Python package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+
+      - name: Build package
+        run: python -m build
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package
+          path: dist/
+          if-no-files-found: error
+
+  create-release:
+    name: Create GitHub Release
+    needs: [build-binaries, build-python-package]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+
+          # Copy binaries
+          cp artifacts/frankenmanager-linux-x86_64/* release-assets/ || true
+          cp artifacts/frankenmanager-macos-arm64/* release-assets/ || true
+          cp artifacts/frankenmanager-macos-x86_64/* release-assets/ || true
+          cp artifacts/frankenmanager-windows-x86_64.exe/* release-assets/ || true
+
+          # Copy Python packages
+          cp artifacts/python-package/* release-assets/ || true
+
+          # Make Unix binaries executable
+          chmod +x release-assets/frankenmanager-linux-* release-assets/frankenmanager-macos-* 2>/dev/null || true
+
+          # List all assets
+          echo "Release assets:"
+          ls -la release-assets/
+
+      - name: Generate checksums
+        run: |
+          cd release-assets
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Get version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', github.event.inputs.version) || github.ref_name }}
+          name: FrankenManager v${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+          generate_release_notes: true
+          files: |
+            release-assets/*
+          body: |
+            ## Installation
+
+            ### Pre-built Binaries (Recommended)
+
+            Download the appropriate binary for your platform:
+
+            | Platform | Architecture | Download |
+            |----------|--------------|----------|
+            | macOS | Apple Silicon (M1/M2) | `frankenmanager-macos-arm64` |
+            | macOS | Intel | `frankenmanager-macos-x86_64` |
+            | Linux | x86_64 | `frankenmanager-linux-x86_64` |
+            | Windows | x86_64 | `frankenmanager-windows-x86_64.exe` |
+
+            #### Quick Install (macOS/Linux)
+
+            ```bash
+            # macOS (Apple Silicon)
+            curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/frankenmanager-macos-arm64 -o /usr/local/bin/frankenmanager
+            chmod +x /usr/local/bin/frankenmanager
+
+            # Linux
+            curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/frankenmanager-linux-x86_64 -o /usr/local/bin/frankenmanager
+            chmod +x /usr/local/bin/frankenmanager
+            ```
+
+            ### Python Package (pip)
+
+            ```bash
+            pip install frankenmanager
+            # or
+            pipx install frankenmanager
+            ```
+
+            ## First-time Setup
+
+            After installation, run the setup command to configure passwordless privilege escalation and install dependencies:
+
+            ```bash
+            sudo frankenmanager setup --install-mkcert
+            ```
+
+            This will:
+            - Configure passwordless `/etc/hosts` modifications
+            - Install mkcert for SSL certificate generation
+
+            ## Verify Installation
+
+            ```bash
+            frankenmanager --version
+            frankenmanager setup --status
+            ```
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: [build-python-package]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    environment:
+      name: pypi
+      url: https://pypi.org/project/frankenmanager/
+    permissions:
+      id-token: write
+    steps:
+      - name: Download Python package
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package
+          path: dist
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
