@@ -1,0 +1,55 @@
+services:
+  db:
+    container_name: mariadb
+    image: mariadb:10.11.9
+    restart: always
+    network_mode: host
+    user: ${UID}:${GID}
+    env_file: .env
+    volumes:
+      - ${PWD}/database:/var/lib/mysql
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  cache:
+    container_name: redis
+    image: redis:alpine
+    restart: always
+    network_mode: host
+    command: redis-server
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  franken-php:
+    container_name: webserver-and-caddy
+    image: custom-frankenphp:latest
+    restart: always
+    network_mode: host
+    user: ${UID}:${GID}
+    volumes:
+      - ${CUSTOM_PATH}:/${CUSTOM_PATH}
+      - /media:/media
+      - ${PWD}/caddy/data:/data
+      - ${PWD}/caddy/config:/config
+      - ${PWD}/caddy/certs:/certs
+      - /etc/letsencrypt:/etc/letsencrypt
+      - ${PWD}/caddy/log:/var/log
+      - ${PWD}/caddy/Caddyfile:/etc/caddy/Caddyfile
+      - ${PWD}/caddy/sites:/etc/caddy/sites
+      - ${PWD}/php/php.ini:/usr/local/etc/php/php.ini
+      - ${PWD}/php/php-prod.ini:/usr/local/etc/php/conf.d/99-production.ini
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
