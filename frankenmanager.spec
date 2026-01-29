@@ -18,12 +18,16 @@ block_cipher = None
 
 # Get the source directory
 src_path = Path("src/frankenphp_cli")
+resources_path = src_path / "resources"
 
 a = Analysis(
     ["src/frankenphp_cli/__main__.py"],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[
+        # Bundle all resources (config files, templates, etc.)
+        (str(resources_path), "resources"),
+    ],
     hiddenimports=[
         # Typer and Rich dependencies
         "typer",
@@ -61,6 +65,7 @@ a = Analysis(
         "frankenphp_cli.core.caddyfile",
         "frankenphp_cli.core.password_manager",
         "frankenphp_cli.core.privilege_manager",
+        "frankenphp_cli.core.resources",
         "frankenphp_cli.utils",
         "frankenphp_cli.utils.logging",
         "frankenphp_cli.utils.platform",

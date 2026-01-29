@@ -58,6 +58,9 @@ Repository = "https://github.com/leobsst/frankenphp-cli/tree/python"
 [tool.hatch.build.targets.wheel]
 packages = ["src/frankenphp_cli"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"src/frankenphp_cli/resources" = "frankenphp_cli/resources"
+
 [tool.ruff]
 target-version = "py39"
 line-length = 100
