@@ -47,4 +47,9 @@ htmlcov/
 *.swp
 *.swo
 
+# PyInstaller
+*.spec.bak
+*.manifest
+*.spec.~*
+
 instance/
