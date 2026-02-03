@@ -49,7 +49,7 @@ build = [
 ]
 
 [project.scripts]
-frankenmanager = "frankenphp_cli.cli:app"
+frankenmanager = "frankenmanager.cli:app"
 
 [project.urls]
 Homepage = "https://blam-prod.fr"
@@ -57,10 +57,18 @@ Documentation = "https://github.com/leobsst/frankenphp-cli/blob/python/README.md
 Repository = "https://github.com/leobsst/frankenphp-cli/tree/python"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/frankenphp_cli"]
+packages = ["src/frankenmanager"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"src/frankenphp_cli/resources" = "frankenphp_cli/resources"
+# Bundle resources from project root (no duplication in src/)
+".env.example" = "frankenmanager/resources/.env.example"
+"docker-compose.yml" = "frankenmanager/resources/docker-compose.yml"
+"docker-compose-prod.yml" = "frankenmanager/resources/docker-compose-prod.yml"
+"Dockerfile" = "frankenmanager/resources/Dockerfile"
+"caddy/Caddyfile" = "frankenmanager/resources/caddy/Caddyfile"
+"caddy/Caddyfile.template" = "frankenmanager/resources/caddy/Caddyfile.template"
+"php/php.ini" = "frankenmanager/resources/php/php.ini"
+"php/php-prod.ini" = "frankenmanager/resources/php/php-prod.ini"
 
 [tool.ruff]
 target-version = "py39"
@@ -83,7 +91,7 @@ testpaths = ["tests"]
 addopts = "-v"
 
 [tool.coverage.run]
-source = ["src/frankenphp_cli"]
+source = ["src/frankenmanager"]
 
 [tool.coverage.report]
 exclude_lines = [
