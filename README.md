@@ -62,15 +62,7 @@ chmod +x /usr/local/bin/frankenmanager
 
 Download `frankenmanager-windows-x86_64.exe` from the releases page and add it to your PATH.
 
-### Option 2: Python Package (pip)
-
-```bash
-pip install frankenmanager
-# or
-pipx install frankenmanager
-```
-
-### Option 3: From Source
+### Option 2: From Source
 
 ```bash
 git clone https://github.com/leobsst/frankenphp-cli.git
@@ -205,6 +197,23 @@ frankenmanager start --help
 frankenmanager setup --help
 ```
 
+### Update to latest version
+
+FrankenManager can update itself when new releases are available:
+
+```bash
+# Update to latest version
+frankenmanager update
+
+# Check for updates without installing
+frankenmanager update --check
+
+# Force reinstall latest version
+frankenmanager update --force
+```
+
+When you run any command, FrankenManager automatically checks for updates and notifies you if a new version is available.
+
 ## Configuration
 
 ### Data Directory
@@ -253,11 +262,17 @@ The `.env` file is automatically created in the data directory on first run. Edi
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `APP_ENV` | `dev` | Environment (`dev` or `prod`) |
-| `USER` | - | System user for file ownership |
-| `GROUP` | - | System group for file ownership |
+| `UID` | (auto-filled) | System user ID for file ownership |
+| `GID` | (auto-filled) | System group ID for file ownership |
 | `CERTS_DIR` | `./caddy/certs` | SSL certificates directory |
 | `MARIADB_ROOT_PASSWORD` | (auto-generated) | MariaDB root password |
-| `EXPOSE_SERVICES` | `false` | Expose DB/Redis to the network (not just localhost) |
+| `EXPOSE_SERVICES` | `false` | Expose services to the network (not just localhost) |
+| `DB_PORT` | `3306` | MariaDB port |
+| `PMA_PORT` | `8080` | phpMyAdmin port |
+| `REDIS_PORT` | `6379` | Redis port |
+| `WEB_HTTP_PORT` | `80` | Web server HTTP port |
+| `WEB_HTTPS_PORT` | `443` | Web server HTTPS port |
+| `MYSQL_MAX_ALLOWED_PACKET` | `512M` | MariaDB max packet size |
 
 ### Production Mode
 
@@ -277,10 +292,15 @@ Set `APP_ENV=prod` in `.env` to enable:
 frankenphp-cli/
 ├── pyproject.toml              Python package configuration
 ├── frankenmanager.spec         PyInstaller build spec
+├── .env.example                Environment template
+├── docker-compose.yml          Docker Compose (dev)
+├── docker-compose-prod.yml     Docker Compose (prod)
+├── Dockerfile                  Custom FrankenPHP image
+├── caddy/                      Caddy configuration
+├── php/                        PHP configuration
 ├── src/frankenmanager/         CLI package
 │   ├── cli.py                  Main CLI (Typer app)
 │   ├── exceptions.py           Custom exceptions
-│   ├── resources/              Bundled config files (for binary)
 │   ├── commands/               Command implementations
 │   │   ├── start.py            Start server
 │   │   ├── stop.py             Stop server
@@ -296,7 +316,8 @@ frankenphp-cli/
 │   │   ├── caddyfile.py        Caddyfile generation
 │   │   ├── password_manager.py MariaDB password sync
 │   │   ├── privilege_manager.py Passwordless sudo setup
-│   │   └── resources.py        Data directory management
+│   │   ├── resources.py        Data directory management
+│   │   └── updater.py          Self-update functionality
 │   └── utils/                  Utilities
 │       ├── platform.py         Cross-platform detection
 │       ├── logging.py          Rich console output
@@ -308,12 +329,14 @@ frankenphp-cli/
 
 ## Services
 
-| Service | Container | Port | Description |
-|---------|-----------|------|-------------|
+| Service | Container | Default Port | Description |
+|---------|-----------|--------------|-------------|
 | FrankenPHP | webserver-and-caddy | 80, 443 | Web server (host network) |
 | MariaDB | franken_mariadb | 3306 | Database |
 | Redis | franken_redis | 6379 | Cache |
 | phpMyAdmin | franken_phpmyadmin | 8080 | Database UI |
+
+All ports are configurable via the `.env` file. See [Environment Variables](#environment-variables-env) for details.
 
 ## Development
 
