@@ -3,8 +3,8 @@
 from pathlib import Path
 
 import pytest
-from frankenphp_cli.exceptions import ValidationError
-from frankenphp_cli.utils.validation import validate_directory, validate_domain
+from frankenmanager.exceptions import ValidationError
+from frankenmanager.utils.validation import validate_directory, validate_domain
 
 
 class TestValidateDomain:

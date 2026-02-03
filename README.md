@@ -277,7 +277,7 @@ Set `APP_ENV=prod` in `.env` to enable:
 frankenphp-cli/
 ├── pyproject.toml              Python package configuration
 ├── frankenmanager.spec         PyInstaller build spec
-├── src/frankenphp_cli/         CLI package
+├── src/frankenmanager/         CLI package
 │   ├── cli.py                  Main CLI (Typer app)
 │   ├── exceptions.py           Custom exceptions
 │   ├── resources/              Bundled config files (for binary)
