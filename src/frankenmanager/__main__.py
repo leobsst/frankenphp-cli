@@ -1,4 +1,4 @@
-"""Entry point for python -m frankenphp_cli."""
+"""Entry point for python -m frankenmanager."""
 
 import sys
 from pathlib import Path
@@ -10,7 +10,7 @@ if __name__ == "__main__":
     if str(src_path) not in sys.path:
         sys.path.insert(0, str(src_path))
 
-    from frankenphp_cli.cli import app
+    from frankenmanager.cli import app
 
     app()
 else:

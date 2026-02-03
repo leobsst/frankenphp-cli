@@ -17,17 +17,25 @@ from pathlib import Path
 block_cipher = None
 
 # Get the source directory
-src_path = Path("src/frankenphp_cli")
-resources_path = src_path / "resources"
+src_path = Path("src/frankenmanager")
+
+# Bundle resources directly from project root (no duplication needed)
+resource_files = [
+    (".env.example", "resources"),
+    ("docker-compose.yml", "resources"),
+    ("docker-compose-prod.yml", "resources"),
+    ("Dockerfile", "resources"),
+    ("caddy/Caddyfile", "resources/caddy"),
+    ("caddy/Caddyfile.template", "resources/caddy"),
+    ("php/php.ini", "resources/php"),
+    ("php/php-prod.ini", "resources/php"),
+]
 
 a = Analysis(
-    ["src/frankenphp_cli/__main__.py"],
+    ["src/frankenmanager/__main__.py"],
     pathex=[],
     binaries=[],
-    datas=[
-        # Bundle all resources (config files, templates, etc.)
-        (str(resources_path), "resources"),
-    ],
+    datas=resource_files,
     hiddenimports=[
         # Typer and Rich dependencies
         "typer",
@@ -48,29 +56,29 @@ a = Analysis(
         # Python-dotenv
         "dotenv",
         # Our modules
-        "frankenphp_cli",
-        "frankenphp_cli.cli",
-        "frankenphp_cli.commands",
-        "frankenphp_cli.commands.start",
-        "frankenphp_cli.commands.stop",
-        "frankenphp_cli.commands.restart",
-        "frankenphp_cli.commands.status",
-        "frankenphp_cli.commands.setup",
-        "frankenphp_cli.core",
-        "frankenphp_cli.core.config",
-        "frankenphp_cli.core.docker_manager",
-        "frankenphp_cli.core.environment",
-        "frankenphp_cli.core.hosts_manager",
-        "frankenphp_cli.core.ssl_manager",
-        "frankenphp_cli.core.caddyfile",
-        "frankenphp_cli.core.password_manager",
-        "frankenphp_cli.core.privilege_manager",
-        "frankenphp_cli.core.resources",
-        "frankenphp_cli.utils",
-        "frankenphp_cli.utils.logging",
-        "frankenphp_cli.utils.platform",
-        "frankenphp_cli.utils.validation",
-        "frankenphp_cli.exceptions",
+        "frankenmanager",
+        "frankenmanager.cli",
+        "frankenmanager.commands",
+        "frankenmanager.commands.start",
+        "frankenmanager.commands.stop",
+        "frankenmanager.commands.restart",
+        "frankenmanager.commands.status",
+        "frankenmanager.commands.setup",
+        "frankenmanager.core",
+        "frankenmanager.core.config",
+        "frankenmanager.core.docker_manager",
+        "frankenmanager.core.environment",
+        "frankenmanager.core.hosts_manager",
+        "frankenmanager.core.ssl_manager",
+        "frankenmanager.core.caddyfile",
+        "frankenmanager.core.password_manager",
+        "frankenmanager.core.privilege_manager",
+        "frankenmanager.core.resources",
+        "frankenmanager.utils",
+        "frankenmanager.utils.logging",
+        "frankenmanager.utils.platform",
+        "frankenmanager.utils.validation",
+        "frankenmanager.exceptions",
     ],
     hookspath=[],
     hooksconfig={},
