@@ -1,5 +1,6 @@
 """Environment file (.env) management."""
 
+import os
 import secrets
 import string
 from pathlib import Path
@@ -25,6 +26,8 @@ class EnvironmentManager:
     def ensure_env_exists(self) -> bool:
         """Create .env from .env.example if it doesn't exist.
 
+        Automatically fills UID and GID with the current user's values.
+
         Returns:
             True if the file already existed, False if newly created.
 
@@ -34,7 +37,16 @@ class EnvironmentManager:
         if not self.env_path.exists():
             if not self.env_example_path.exists():
                 raise ConfigurationError(f"Missing {self.env_example_path}")
-            self.env_path.write_text(self.env_example_path.read_text())
+
+            content = self.env_example_path.read_text()
+
+            # Auto-fill UID and GID with current user's values
+            uid = os.getuid()
+            gid = os.getgid()
+            content = content.replace("UID=", f"UID={uid}", 1)
+            content = content.replace("GID=", f"GID={gid}", 1)
+
+            self.env_path.write_text(content)
             self.env_path.chmod(0o660)
             return False
         return True
