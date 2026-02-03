@@ -12,7 +12,7 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 
-from packaging.version import Version  # type: ignore[import-not-found]
+from packaging.version import Version
 
 from .. import __version__
 from ..utils.logging import log_error, log_info, log_success, log_warning

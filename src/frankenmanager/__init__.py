@@ -1,7 +1,7 @@
 """FrankenPHP Manager - Docker development environment manager."""
 
 try:
-    from ._version import __version__  # type: ignore[import-not-found]
+    from ._version import __version__
 except ImportError:
     # Development install without version file
     __version__ = "0.0.0.dev"
