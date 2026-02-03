@@ -102,6 +102,8 @@ def start_server(domains: list[str], custom_path: Path, force_ssl: bool) -> None
         db_port = env.get("DB_PORT") or "3306"
         pma_port = env.get("PMA_PORT") or "8080"
         redis_port = env.get("REDIS_PORT") or "6379"
+        web_http_port = env.get("WEB_HTTP_PORT") or "80"
+        web_https_port = env.get("WEB_HTTPS_PORT") or "443"
 
         env_vars = {
             "CUSTOM_PATH": str(custom_path),
@@ -110,6 +112,8 @@ def start_server(domains: list[str], custom_path: Path, force_ssl: bool) -> None
             "DB_PORT": f"{localhost}{db_port}:3306",
             "PMA_PORT": f"{localhost}{pma_port}:80",
             "REDIS_PORT": f"{localhost}{redis_port}:6379",
+            "WEB_HTTP_PORT": web_http_port,
+            "WEB_HTTPS_PORT": web_https_port,
             "MARIADB_ROOT_PASSWORD": env.require("MARIADB_ROOT_PASSWORD"),
             "MYSQL_MAX_ALLOWED_PACKET": env.get("MYSQL_MAX_ALLOWED_PACKET") or "512M",
             "PWD": str(project_dir),
