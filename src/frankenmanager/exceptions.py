@@ -1,8 +1,8 @@
-"""Custom exceptions for FrankenPHP CLI."""
+"""Custom exceptions for FrankenPHP Manager."""
 
 
 class FrankenPHPError(Exception):
-    """Base exception for FrankenPHP CLI."""
+    """Base exception for FrankenPHP Manager."""
 
     pass
 

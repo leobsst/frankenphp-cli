@@ -1,4 +1,9 @@
-"""FrankenPHP CLI - Docker development environment manager."""
+"""FrankenPHP Manager - Docker development environment manager."""
 
-__version__ = "1.0.0"
+try:
+    from ._version import __version__  # type: ignore[import-not-found]
+except ImportError:
+    # Development install without version file
+    __version__ = "0.0.0.dev"
+
 __all__ = ["__version__"]

@@ -1,1 +1,1 @@
-"""Core modules for FrankenPHP CLI."""
+"""Core modules for FrankenPHP Manager."""

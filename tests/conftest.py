@@ -1,4 +1,4 @@
-"""Pytest fixtures for FrankenPHP CLI tests."""
+"""Pytest fixtures for FrankenPHP Manager tests."""
 
 import tempfile
 from pathlib import Path

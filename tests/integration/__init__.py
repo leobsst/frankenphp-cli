@@ -1,1 +1,1 @@
-"""Integration tests for FrankenPHP CLI."""
+"""Integration tests for FrankenPHP Manager."""
