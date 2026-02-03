@@ -1,10 +1,10 @@
 """Tests for validation utilities."""
 
-import pytest
 from pathlib import Path
 
-from frankenphp_cli.utils.validation import validate_domain, validate_directory
+import pytest
 from frankenphp_cli.exceptions import ValidationError
+from frankenphp_cli.utils.validation import validate_directory, validate_domain
 
 
 class TestValidateDomain:

@@ -172,9 +172,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Build FrankenManager binary")
     parser.add_argument("--clean", action="store_true", help="Clean build artifacts first")
     parser.add_argument("--test", action="store_true", help="Test the built binary")
-    parser.add_argument(
-        "--release", action="store_true", help="Rename binary with platform suffix"
-    )
+    parser.add_argument("--release", action="store_true", help="Rename binary with platform suffix")
     args = parser.parse_args()
 
     # Find project root (parent of scripts directory)

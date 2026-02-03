@@ -97,7 +97,7 @@ class PrivilegeManager:
         Returns:
             Shell script content for the hosts helper.
         """
-        return f'''#!/bin/bash
+        return f"""#!/bin/bash
 # FrankenManager Hosts Helper
 # This script is allowed to run with passwordless sudo to modify /etc/hosts
 # It only allows adding/removing entries matching 127.0.0.1 or ::1
@@ -154,7 +154,7 @@ elif [[ "$ACTION" == "remove" ]]; then
         echo "Entry not found"
     fi
 fi
-'''
+"""
 
     def get_windows_helper_script_content(self) -> str:
         """Generate the Windows PowerShell helper script content.
@@ -162,7 +162,7 @@ fi
         Returns:
             PowerShell script content for the hosts helper.
         """
-        return f'''# FrankenManager Hosts Helper for Windows
+        return f"""# FrankenManager Hosts Helper for Windows
 # This script modifies the hosts file
 
 param(
@@ -209,7 +209,7 @@ elseif ($Action -eq "remove") {{
         Write-Output "Entry not found"
     }}
 }}
-'''
+"""
 
     def get_sudoers_content(self) -> str:
         """Generate the content for the sudoers file.

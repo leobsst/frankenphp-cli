@@ -32,18 +32,18 @@ def start_server(domains: list[str], custom_path: Path, force_ssl: bool) -> None
 
     # Ensure .env exists
     if not env.ensure_env_exists():
-        log_error("Created .env file. Please set USER and GROUP, then try again.")
+        log_error("Created .env file. Please review the settings, then try again.")
         sys.exit(1)
 
     env.load()
 
     # Check required environment variables
     try:
-        env.require("USER")
-        env.require("GROUP")
+        env.require("UID")
+        env.require("GID")
     except Exception as e:
         log_error(str(e))
-        log_error("Please set USER and GROUP in .env file.")
+        log_error("Please set UID and GID in .env file.")
         sys.exit(1)
 
     # Generate password if not set
@@ -96,11 +96,20 @@ def start_server(domains: list[str], custom_path: Path, force_ssl: bool) -> None
 
         # Prepare environment variables for docker-compose
         expose = env.get("EXPOSE_SERVICES") == "true"
+        localhost = "" if expose else "127.0.0.1:"
+
+        # Get port configurations from .env (with defaults)
+        db_port = env.get("DB_PORT") or "3306"
+        pma_port = env.get("PMA_PORT") or "8080"
+        redis_port = env.get("REDIS_PORT") or "6379"
+
         env_vars = {
             "CUSTOM_PATH": str(custom_path),
-            "DB_PORT": "3306:3306" if expose else "127.0.0.1:3306:3306",
-            "PMA_PORT": "8080:80" if expose else "127.0.0.1:8080:80",
-            "REDIS_PORT": "6379:6379" if expose else "127.0.0.1:6379:6379",
+            "UID": env.require("UID"),
+            "GID": env.require("GID"),
+            "DB_PORT": f"{localhost}{db_port}:3306",
+            "PMA_PORT": f"{localhost}{pma_port}:80",
+            "REDIS_PORT": f"{localhost}{redis_port}:6379",
             "MARIADB_ROOT_PASSWORD": env.require("MARIADB_ROOT_PASSWORD"),
             "MYSQL_MAX_ALLOWED_PACKET": env.get("MYSQL_MAX_ALLOWED_PACKET") or "512M",
             "PWD": str(project_dir),
