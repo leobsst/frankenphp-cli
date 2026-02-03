@@ -33,6 +33,7 @@ dependencies = [
     "rich>=13.0.0",
     "docker>=7.0.0",
     "python-dotenv>=1.0.0",
+    "packaging>=21.0",
 ]
 
 [project.optional-dependencies]

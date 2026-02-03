@@ -34,8 +34,18 @@ def main(
         callback=version_callback,
         is_eager=True,
     ),
+    no_update_check: bool = typer.Option(
+        False,
+        "--no-update-check",
+        help="Skip checking for updates on startup",
+        hidden=True,
+    ),
 ) -> None:
     """FrankenManager - FrankenPHP Docker development environment manager."""
+    if not no_update_check:
+        from .core.updater import notify_if_update_available
+
+        notify_if_update_available()
 
 
 @app.command()
@@ -108,6 +118,41 @@ def setup(
     from .commands.setup import setup_privileges
 
     setup_privileges(remove=remove, show_status=show_status, install_mkcert=install_mkcert)
+
+
+@app.command()
+def update(
+    force: bool = typer.Option(
+        False, "--force", "-f", help="Force update even if on latest version"
+    ),
+    check_only: bool = typer.Option(
+        False, "--check", "-c", help="Only check for updates, don't install"
+    ),
+) -> None:
+    """Update FrankenManager to the latest version.
+
+    This command downloads and installs the latest release from GitHub.
+
+    Examples:
+        frankenmanager update          # Update to latest version
+        frankenmanager update --check  # Check for updates without installing
+        frankenmanager update --force  # Force reinstall latest version
+    """
+    from .core.updater import check_for_updates, get_current_version, update_binary
+    from .utils.logging import log_info, log_success
+
+    if check_only:
+        log_info(f"Current version: {get_current_version()}")
+        update_info = check_for_updates()
+        if update_info:
+            log_info(f"New version available: {update_info['version']}")
+            log_info(f"Release: {update_info.get('name', 'N/A')}")
+        else:
+            log_success("You are on the latest version!")
+    else:
+        success = update_binary(force=force)
+        if not success:
+            raise typer.Exit(1)
 
 
 if __name__ == "__main__":
