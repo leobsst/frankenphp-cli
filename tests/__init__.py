@@ -1,1 +1,1 @@
-"""Test suite for FrankenPHP CLI."""
+"""Test suite for FrankenPHP Manager."""

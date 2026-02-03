@@ -1,1 +1,1 @@
-"""Utility modules for FrankenPHP CLI."""
+"""Utility modules for FrankenPHP Manager."""

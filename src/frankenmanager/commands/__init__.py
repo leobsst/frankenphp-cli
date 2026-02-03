@@ -1,1 +1,1 @@
-"""Command handlers for FrankenPHP CLI."""
+"""Command handlers for FrankenPHP Manager."""
