@@ -74,6 +74,10 @@ ignore = ["UP007"]  # Allow Union[X, Y] for Python 3.9 compatibility
 python_version = "3.9"
 strict = true
 
+[[tool.mypy.overrides]]
+module = "docker.*"
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v"
