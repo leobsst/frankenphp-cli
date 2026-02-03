@@ -102,6 +102,7 @@ def start_server(domains: list[str], custom_path: Path, force_ssl: bool) -> None
             "PMA_PORT": "8080:80" if expose else "127.0.0.1:8080:80",
             "REDIS_PORT": "6379:6379" if expose else "127.0.0.1:6379:6379",
             "MARIADB_ROOT_PASSWORD": env.require("MARIADB_ROOT_PASSWORD"),
+            "MYSQL_MAX_ALLOWED_PACKET": env.get("MYSQL_MAX_ALLOWED_PACKET") or "512M",
             "PWD": str(project_dir),
         }
         docker.compose_up(env_vars, env.is_production())

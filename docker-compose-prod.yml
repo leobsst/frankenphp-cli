@@ -3,6 +3,7 @@ services:
     container_name: mariadb
     image: mariadb:10.11.9
     restart: always
+    command: --max-allowed-packet=${MYSQL_MAX_ALLOWED_PACKET:-512M}
     network_mode: host
     user: ${UID}:${GID}
     env_file: .env
