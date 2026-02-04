@@ -93,3 +93,26 @@ class ConfigManager:
             The status string ('running' or 'stopped').
         """
         return self.load().status
+
+    def add_domains(self, new_domains: list[str]) -> None:
+        """Add new domains to the existing configuration.
+
+        Args:
+            new_domains: List of new domain names to add.
+        """
+        current = self.load()
+        # Merge existing and new domains, removing duplicates while preserving order
+        all_domains = current.domains + [d for d in new_domains if d not in current.domains]
+        self._config = ServerConfig(status=current.status, domains=all_domains)
+        self.save()
+
+    def remove_domains(self, domains_to_remove: list[str]) -> None:
+        """Remove domains from the existing configuration.
+
+        Args:
+            domains_to_remove: List of domain names to remove.
+        """
+        current = self.load()
+        remaining_domains = [d for d in current.domains if d not in domains_to_remove]
+        self._config = ServerConfig(status=current.status, domains=remaining_domains)
+        self.save()

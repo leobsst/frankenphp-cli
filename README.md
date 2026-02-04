@@ -177,6 +177,64 @@ frankenmanager restart
 frankenmanager status
 ```
 
+### Dynamic Host Management
+
+You can add, remove, and restore hosts while the server is running without restarting the entire stack.
+
+#### Add a new host
+
+```bash
+# Add a single domain
+frankenmanager add-host "newapp.test"
+
+# Add multiple domains
+frankenmanager add-host "app1.test app2.test"
+
+# Force SSL certificate regeneration
+frankenmanager add-host "newapp.test" --force-ssl
+```
+
+This will:
+1. Validate the domain name(s)
+2. Generate SSL certificates
+3. Add entries to `/etc/hosts`
+4. Generate Caddyfile configuration(s)
+5. Restart only the FrankenPHP container (other services remain untouched)
+
+#### Remove a host
+
+```bash
+# Remove a single domain
+frankenmanager remove-host "oldapp.test"
+
+# Remove multiple domains
+frankenmanager remove-host "app1.test app2.test"
+```
+
+This will:
+1. Remove entries from `/etc/hosts`
+2. Archive the Caddyfile to `caddy/sites/archive/` (not deleted)
+3. Restart only the FrankenPHP container
+
+#### Restore an archived host
+
+```bash
+# List all archived hosts
+frankenmanager restore-host --list
+
+# Restore a single domain
+frankenmanager restore-host "myapp.test"
+
+# Restore multiple domains with SSL regeneration
+frankenmanager restore-host "app1.test app2.test" --force-ssl
+```
+
+This will:
+1. Move the Caddyfile from `archive/` back to `custom/`
+2. Generate SSL certificates
+3. Add entries to `/etc/hosts`
+4. Restart only the FrankenPHP container
+
 ### Force SSL certificate regeneration
 
 ```bash
@@ -194,6 +252,9 @@ frankenmanager --version
 ```bash
 frankenmanager --help
 frankenmanager start --help
+frankenmanager add-host --help
+frankenmanager remove-host --help
+frankenmanager restore-host --help
 frankenmanager setup --help
 ```
 
@@ -238,7 +299,10 @@ You can override this location with the `FRANKENMANAGER_DATA_DIR` environment va
 ├── caddy/
 │   ├── Caddyfile           # Main Caddy configuration
 │   ├── Caddyfile.template  # Per-site template
-│   ├── sites/custom/       # Generated site configs
+│   ├── sites/
+│   │   ├── custom/         # Active site configs
+│   │   ├── default/        # Default site configs
+│   │   └── archive/        # Archived site configs (from remove-host)
 │   ├── certs/              # SSL certificates
 │   ├── data/               # Caddy data
 │   ├── config/             # Caddy config
@@ -306,7 +370,10 @@ frankenphp-cli/
 │   │   ├── stop.py             Stop server
 │   │   ├── restart.py          Restart containers
 │   │   ├── status.py           Show status
-│   │   └── setup.py            Privilege & mkcert setup
+│   │   ├── setup.py            Privilege & mkcert setup
+│   │   ├── add_host.py         Add host(s) dynamically
+│   │   ├── remove_host.py      Remove host(s) and archive
+│   │   └── restore_host.py     Restore archived host(s)
 │   ├── core/                   Core functionality
 │   │   ├── config.py           JSON config management
 │   │   ├── environment.py      .env file handling

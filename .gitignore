@@ -3,6 +3,7 @@ caddy/config/*
 caddy/data/*
 caddy/log/*
 caddy/sites/custom/*
+caddy/sites/archive/*
 database/*
 .config
 .db_password_history

@@ -92,6 +92,80 @@ def restart(
     restart_server(force_ssl)
 
 
+@app.command(name="add-host")
+def add_host_cmd(
+    domains: str = typer.Argument(..., help="Space-separated domain names to add"),
+    force_ssl: bool = typer.Option(False, "--force-ssl", help="Force SSL certificate regeneration"),
+) -> None:
+    """Add new host(s) to the running server.
+
+    This command allows you to add new domains while the server is running,
+    without having to stop and restart the entire environment.
+
+    Examples:
+        frankenmanager add-host "newapp.test"
+        frankenmanager add-host "app1.test app2.test" --force-ssl
+    """
+    from .commands.add_host import add_host
+
+    domain_list = domains.split()
+    add_host(domain_list, force_ssl)
+
+
+@app.command(name="remove-host")
+def remove_host_cmd(
+    domains: str = typer.Argument(..., help="Space-separated domain names to remove"),
+) -> None:
+    """Remove host(s) from the running server.
+
+    This command allows you to remove domains while the server is running,
+    without having to stop and restart the entire environment.
+
+    The Caddyfile configurations will be archived (not deleted) in case
+    you need to restore them later.
+
+    Examples:
+        frankenmanager remove-host "oldapp.test"
+        frankenmanager remove-host "app1.test app2.test"
+    """
+    from .commands.remove_host import remove_host
+
+    domain_list = domains.split()
+    remove_host(domain_list)
+
+
+@app.command(name="restore-host")
+def restore_host_cmd(
+    domains: Optional[str] = typer.Argument(None, help="Space-separated domain names to restore"),
+    list_archived: bool = typer.Option(False, "--list", "-l", help="List all archived hosts"),
+    force_ssl: bool = typer.Option(False, "--force-ssl", help="Force SSL certificate regeneration"),
+) -> None:
+    """Restore archived host(s) to the running server.
+
+    This command allows you to restore previously removed domains from the archive.
+    Use --list to see all available archived hosts.
+
+    Examples:
+        frankenmanager restore-host --list
+        frankenmanager restore-host "myapp.test"
+        frankenmanager restore-host "app1.test app2.test" --force-ssl
+    """
+    from .commands.restore_host import list_archived_hosts, restore_host
+
+    if list_archived:
+        list_archived_hosts()
+        return
+
+    if not domains:
+        console.print(
+            "[yellow]Specify domains to restore or use --list to see archived hosts.[/yellow]"
+        )
+        raise typer.Exit(1)
+
+    domain_list = domains.split()
+    restore_host(domain_list, force_ssl)
+
+
 @app.command()
 def status() -> None:
     """Show the current server status."""
