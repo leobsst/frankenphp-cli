@@ -51,14 +51,27 @@ def main(
 @app.command()
 def start(
     domains: str = typer.Argument(..., help="Space-separated domain names"),
-    path: str = typer.Argument("/home", help="Custom path for project root"),
+    path: Optional[str] = typer.Option(
+        None,
+        "--path",
+        "-p",
+        help="Project root path (uses DEFAULT_PROJECT_PATH from .env if not set)",
+    ),
     force_ssl: bool = typer.Option(False, "--force-ssl", help="Force SSL certificate regeneration"),
 ) -> None:
-    """Start the FrankenPHP development server."""
+    """Start the FrankenPHP development server.
+
+    If --path is not specified, uses DEFAULT_PROJECT_PATH from .env file.
+
+    Examples:
+        frankenmanager start "myapp.test"
+        frankenmanager start "myapp.test api.test" --path /home/projects
+    """
     from .commands.start import start_server
 
     domain_list = domains.split()
-    start_server(domain_list, Path(path), force_ssl)
+    custom_path = Path(path) if path else None
+    start_server(domain_list, custom_path, force_ssl)
 
 
 @app.command()

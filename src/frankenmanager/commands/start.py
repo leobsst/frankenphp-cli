@@ -2,6 +2,7 @@
 
 import sys
 from pathlib import Path
+from typing import Optional
 
 from ..core.caddyfile import CaddyfileGenerator
 from ..core.config import ConfigManager
@@ -16,12 +17,30 @@ from ..utils.logging import log_error, log_info, log_success
 from ..utils.validation import validate_directory, validate_domain
 
 
-def start_server(domains: list[str], custom_path: Path, force_ssl: bool) -> None:
+def _resolve_path(env_value: Optional[str], default: str, project_dir: Path) -> Path:
+    """Resolve a path from environment variable or default.
+
+    Args:
+        env_value: Value from environment variable (may be empty/None).
+        default: Default relative path.
+        project_dir: Project directory for relative paths.
+
+    Returns:
+        Resolved absolute path.
+    """
+    path_str = env_value if env_value else default
+    path = Path(path_str)
+    if not path.is_absolute():
+        path = project_dir / path
+    return path
+
+
+def start_server(domains: list[str], custom_path: Optional[Path], force_ssl: bool) -> None:
     """Start the FrankenPHP server.
 
     Args:
         domains: List of domain names to serve.
-        custom_path: Path to the project root.
+        custom_path: Path to the project root (None to use DEFAULT_PROJECT_PATH).
         force_ssl: Whether to force SSL certificate regeneration.
     """
     project_dir = get_project_dir()
@@ -46,6 +65,14 @@ def start_server(domains: list[str], custom_path: Path, force_ssl: bool) -> None
         log_error("Please set UID and GID in .env file.")
         sys.exit(1)
 
+    # Resolve project path
+    if custom_path is None:
+        default_path = env.get("DEFAULT_PROJECT_PATH")
+        if not default_path:
+            log_error("No project path specified and DEFAULT_PROJECT_PATH is not set in .env")
+            sys.exit(1)
+        custom_path = Path(default_path)
+
     # Generate password if not set
     if not env.get("MARIADB_ROOT_PASSWORD"):
         password = env.generate_mariadb_password()
@@ -53,11 +80,15 @@ def start_server(domains: list[str], custom_path: Path, force_ssl: bool) -> None
         log_info("MariaDB password generated and saved to .env")
         env.load()  # Reload to get the new password
 
+    # Resolve storage paths from environment
+    certs_dir = _resolve_path(env.get("CERTS_DIR"), "./caddy/certs", project_dir)
+    sites_dir = _resolve_path(env.get("SITES_DIR"), "./caddy/sites/custom", project_dir)
+    database_dir = _resolve_path(env.get("DATABASE_DIR"), "./database", project_dir)
+
     docker = DockerManager(project_dir)
-    certs_dir = project_dir / (env.get("CERTS_DIR") or "./caddy/certs")
     ssl = SSLManager(certs_dir)
     hosts = HostsManager()
-    caddyfile = CaddyfileGenerator(project_dir)
+    caddyfile = CaddyfileGenerator(project_dir, sites_dir)
     password_manager = PasswordManager(project_dir, docker)
 
     # Check state
@@ -117,6 +148,9 @@ def start_server(domains: list[str], custom_path: Path, force_ssl: bool) -> None
             "MARIADB_ROOT_PASSWORD": env.require("MARIADB_ROOT_PASSWORD"),
             "MYSQL_MAX_ALLOWED_PACKET": env.get("MYSQL_MAX_ALLOWED_PACKET") or "512M",
             "PWD": str(project_dir),
+            "CERTS_DIR": str(certs_dir),
+            "SITES_DIR": str(sites_dir),
+            "DATABASE_DIR": str(database_dir),
         }
         docker.compose_up(env_vars, env.is_production())
 
