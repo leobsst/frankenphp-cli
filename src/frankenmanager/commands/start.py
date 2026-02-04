@@ -141,6 +141,7 @@ def start_server(domains: list[str], custom_path: Optional[Path], force_ssl: boo
             "CUSTOM_PATH": str(custom_path),
             "UID": env.require("UID"),
             "GID": env.require("GID"),
+            "SIMPLE_DB_PORT": db_port,
             "DB_PORT": f"{localhost}{db_port}:3306",
             "PMA_PORT": f"{localhost}{pma_port}:80",
             "REDIS_PORT": f"{localhost}{redis_port}:6379",
