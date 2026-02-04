@@ -51,7 +51,8 @@ def start_server(domains: list[str], custom_path: Optional[Path], force_ssl: boo
 
     # Ensure .env exists
     if not env.ensure_env_exists():
-        log_error("Created .env file. Please review the settings, then try again.")
+        env_path = project_dir / ".env"
+        log_info(f"Created .env file at {env_path}. Please review settings, then try again.")
         sys.exit(1)
 
     env.load()
