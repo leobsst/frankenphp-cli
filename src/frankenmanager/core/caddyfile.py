@@ -1,6 +1,7 @@
 """Caddyfile generation from templates."""
 
 from pathlib import Path
+from typing import Optional
 
 from ..utils.logging import log_info, log_success
 
@@ -8,15 +9,16 @@ from ..utils.logging import log_info, log_success
 class CaddyfileGenerator:
     """Generates Caddyfile configurations from templates."""
 
-    def __init__(self, project_dir: Path) -> None:
+    def __init__(self, project_dir: Path, sites_dir: Optional[Path] = None) -> None:
         """Initialize the Caddyfile generator.
 
         Args:
             project_dir: Path to the project directory.
+            sites_dir: Optional custom directory for site configs.
         """
         self.project_dir = project_dir
         self.template_path = project_dir / "caddy" / "Caddyfile.template"
-        self.custom_dir = project_dir / "caddy" / "sites" / "custom"
+        self.custom_dir = sites_dir if sites_dir else (project_dir / "caddy" / "sites" / "custom")
 
     def ensure_custom_dir(self) -> None:
         """Create the custom Caddyfile directory if it doesn't exist."""

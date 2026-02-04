@@ -7,7 +7,7 @@ services:
     user: ${UID}:${GID}
     env_file: .env
     volumes:
-      - ./database:/var/lib/mysql
+      - ${DATABASE_DIR:-./database}:/var/lib/mysql
     ports:
       - ${DB_PORT:-127.0.0.1:3306:3306}
     environment:
@@ -67,7 +67,7 @@ services:
       - ${CUSTOM_PATH}:/${CUSTOM_PATH}
       - ./caddy/data:/data
       - ./caddy/config:/config
-      - ./caddy/certs:/certs
+      - ${CERTS_DIR:-./caddy/certs}:/certs
       - ./caddy/log:/var/log
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile
       - ./caddy/sites:/etc/caddy/sites
