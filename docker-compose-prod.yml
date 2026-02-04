@@ -42,14 +42,13 @@ services:
       WEB_HTTPS_PORT: '${WEB_HTTPS_PORT:-443}'
     volumes:
       - ${CUSTOM_PATH}:/${CUSTOM_PATH}
-      - /media:/media
-      - ${PWD}/caddy/data:/data
-      - ${PWD}/caddy/config:/config
-      - ${CERTS_DIR:-${PWD}/caddy/certs}:/certs
+      - ${CADDY_DIR:-${PWD}/caddy}/data:/data
+      - ${CADDY_DIR:-${PWD}/caddy}/config:/config
+      - ${CADDY_DIR:-${PWD}/caddy}/certs:/certs
       - /etc/letsencrypt:/etc/letsencrypt
-      - ${PWD}/caddy/log:/var/log
-      - ${PWD}/caddy/Caddyfile:/etc/caddy/Caddyfile
-      - ${PWD}/caddy/sites:/etc/caddy/sites
+      - ${CADDY_DIR:-${PWD}/caddy}/log:/var/log
+      - ${CADDY_DIR:-${PWD}/caddy}/Caddyfile:/etc/caddy/Caddyfile
+      - ${CADDY_DIR:-${PWD}/caddy}/sites:/etc/caddy/sites
       - ${PWD}/php/php.ini:/usr/local/etc/php/php.ini
       - ${PWD}/php/php-prod.ini:/usr/local/etc/php/conf.d/99-production.ini
     depends_on:

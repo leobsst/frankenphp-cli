@@ -82,8 +82,9 @@ def start_server(domains: list[str], custom_path: Optional[Path], force_ssl: boo
         env.load()  # Reload to get the new password
 
     # Resolve storage paths from environment
-    certs_dir = _resolve_path(env.get("CERTS_DIR"), "./caddy/certs", project_dir)
-    sites_dir = _resolve_path(env.get("SITES_DIR"), "./caddy/sites/custom", project_dir)
+    caddy_dir = _resolve_path(env.get("CADDY_DIR"), "./caddy", project_dir)
+    certs_dir = caddy_dir / "certs"
+    sites_dir = caddy_dir / "sites" / "custom"
     database_dir = _resolve_path(env.get("DATABASE_DIR"), "./database", project_dir)
 
     docker = DockerManager(project_dir)
@@ -150,8 +151,7 @@ def start_server(domains: list[str], custom_path: Optional[Path], force_ssl: boo
             "MARIADB_ROOT_PASSWORD": env.require("MARIADB_ROOT_PASSWORD"),
             "MYSQL_MAX_ALLOWED_PACKET": env.get("MYSQL_MAX_ALLOWED_PACKET") or "512M",
             "PWD": str(project_dir),
-            "CERTS_DIR": str(certs_dir),
-            "SITES_DIR": str(sites_dir),
+            "CADDY_DIR": str(caddy_dir),
             "DATABASE_DIR": str(database_dir),
         }
         docker.compose_up(env_vars, env.is_production())

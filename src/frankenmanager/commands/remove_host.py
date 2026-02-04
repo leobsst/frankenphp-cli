@@ -74,10 +74,10 @@ def remove_host(domains: list[str]) -> None:
         return
 
     # Resolve storage paths from environment
-    sites_dir = _resolve_path(env.get("SITES_DIR"), "./caddy/sites/custom", project_dir)
+    caddy_dir = _resolve_path(env.get("CADDY_DIR"), "./caddy", project_dir)
 
     hosts = HostsManager()
-    caddyfile = CaddyfileGenerator(project_dir, sites_dir)
+    caddyfile = CaddyfileGenerator(project_dir, caddy_dir / "sites" / "custom")
 
     try:
         log_info(f"Removing {len(domains_to_remove)} domain(s)...")

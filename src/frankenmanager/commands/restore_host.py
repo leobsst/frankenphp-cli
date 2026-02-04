@@ -43,8 +43,8 @@ def list_archived_hosts() -> None:
     env = EnvironmentManager(project_dir / ".env", project_dir / ".env.example")
     env.load()
 
-    sites_dir = _resolve_path(env.get("SITES_DIR"), "./caddy/sites/custom", project_dir)
-    caddyfile = CaddyfileGenerator(project_dir, sites_dir)
+    caddy_dir = _resolve_path(env.get("CADDY_DIR"), "./caddy", project_dir)
+    caddyfile = CaddyfileGenerator(project_dir, caddy_dir / "sites" / "custom")
 
     archived = caddyfile.list_archived()
 
@@ -92,12 +92,11 @@ def restore_host(domains: list[str], force_ssl: bool) -> None:
     existing_domains = config.get_domains()
 
     # Resolve storage paths from environment
-    certs_dir = _resolve_path(env.get("CERTS_DIR"), "./caddy/certs", project_dir)
-    sites_dir = _resolve_path(env.get("SITES_DIR"), "./caddy/sites/custom", project_dir)
+    caddy_dir = _resolve_path(env.get("CADDY_DIR"), "./caddy", project_dir)
 
-    ssl = SSLManager(certs_dir)
+    ssl = SSLManager(caddy_dir / "certs")
     hosts = HostsManager()
-    caddyfile = CaddyfileGenerator(project_dir, sites_dir)
+    caddyfile = CaddyfileGenerator(project_dir, caddy_dir / "sites" / "custom")
 
     # Filter out domains that are already active
     domains_to_restore: list[str] = []
