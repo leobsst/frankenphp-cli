@@ -28,6 +28,7 @@ services:
     env_file: .env
     environment:
       PMA_HOST: franken_mariadb
+      PMA_PORT: ${SIMPLE_DB_PORT:-3306}
       PMA_USER: root
       PMA_PASSWORD: ${MARIADB_ROOT_PASSWORD}
     ports:
