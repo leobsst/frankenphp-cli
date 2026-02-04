@@ -72,12 +72,11 @@ def add_host(domains: list[str], force_ssl: bool) -> None:
         return
 
     # Resolve storage paths from environment
-    certs_dir = _resolve_path(env.get("CERTS_DIR"), "./caddy/certs", project_dir)
-    sites_dir = _resolve_path(env.get("SITES_DIR"), "./caddy/sites/custom", project_dir)
+    caddy_dir = _resolve_path(env.get("CADDY_DIR"), "./caddy", project_dir)
 
-    ssl = SSLManager(certs_dir)
+    ssl = SSLManager(caddy_dir / "certs")
     hosts = HostsManager()
-    caddyfile = CaddyfileGenerator(project_dir, sites_dir)
+    caddyfile = CaddyfileGenerator(project_dir, caddy_dir / "sites" / "custom")
 
     hosts_added: list[str] = []
 

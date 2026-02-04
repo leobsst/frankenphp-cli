@@ -66,12 +66,12 @@ services:
       WEB_HTTPS_PORT: '${WEB_HTTPS_PORT:-443}'
     volumes:
       - ${CUSTOM_PATH}:/${CUSTOM_PATH}
-      - ./caddy/data:/data
-      - ./caddy/config:/config
-      - ${CERTS_DIR:-./caddy/certs}:/certs
-      - ./caddy/log:/var/log
-      - ./caddy/Caddyfile:/etc/caddy/Caddyfile
-      - ./caddy/sites:/etc/caddy/sites
+      - ${CADDY_DIR:-./caddy}/data:/data
+      - ${CADDY_DIR:-./caddy}/config:/config
+      - ${CADDY_DIR:-./caddy}/certs:/certs
+      - ${CADDY_DIR:-./caddy}/log:/var/log
+      - ${CADDY_DIR:-./caddy}/Caddyfile:/etc/caddy/Caddyfile
+      - ${CADDY_DIR:-./caddy}/sites:/etc/caddy/sites
       - ./php/php.ini:/usr/local/etc/php/php.ini
     depends_on:
       db:
