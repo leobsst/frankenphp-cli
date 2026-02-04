@@ -134,8 +134,8 @@ if ! [[ "$HOSTNAME" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*[a-zA-Z0-9]$ ]]; then
 fi
 
 if [[ "$ACTION" == "add" ]]; then
-    # Check if entry already exists
-    if grep -q "^$IP[[:space:]]\\+$HOSTNAME$" "$HOSTS_FILE" 2>/dev/null; then
+    # Check if entry already exists (use -E for extended regex on macOS)
+    if grep -Eq "^$IP[[:space:]]+$HOSTNAME$" "$HOSTS_FILE" 2>/dev/null; then
         echo "Entry already exists"
         exit 0
     fi
@@ -145,13 +145,15 @@ if [[ "$ACTION" == "add" ]]; then
     echo "Added $IP $HOSTNAME"
 
 elif [[ "$ACTION" == "remove" ]]; then
-    # Remove entry using sed
-    if grep -q "^$IP[[:space:]]\\+$HOSTNAME$" "$HOSTS_FILE" 2>/dev/null; then
-        sed -i.bak "/^$IP[[:space:]]\\+$HOSTNAME$/d" "$HOSTS_FILE"
+    # Remove entry using sed (use -E for extended regex on macOS)
+    if grep -Eq "^$IP[[:space:]]+$HOSTNAME$" "$HOSTS_FILE" 2>/dev/null; then
+        sed -E -i.bak "/^$IP[[:space:]]+$HOSTNAME$/d" "$HOSTS_FILE"
         rm -f "${{HOSTS_FILE}}.bak"
         echo "Removed $IP $HOSTNAME"
+        exit 0
     else
         echo "Entry not found"
+        exit 1
     fi
 fi
 """
@@ -494,15 +496,16 @@ elseif ($Action -eq "remove") {{
         # On Unix, test if sudo works without password for our helper
         helper_path = self.get_helper_script_path()
         try:
-            subprocess.run(
+            result = subprocess.run(
                 ["sudo", "-n", str(helper_path), "--help"],
                 capture_output=True,
                 timeout=5,
                 check=False,
             )
-            # -n flag makes sudo fail if password is required
-            # Our script doesn't have --help, so it will fail, but
-            # the key is whether sudo itself required a password
+            # -n flag makes sudo print "password is required" to stderr
+            # if password would be needed
+            if b"password is required" in result.stderr:
+                return False
             return True
         except subprocess.TimeoutExpired:
             return False
