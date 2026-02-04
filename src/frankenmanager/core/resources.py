@@ -143,6 +143,7 @@ def _ensure_directory_structure(app_dir: Path) -> None:
     # Caddy directories
     (app_dir / "caddy" / "sites" / "custom").mkdir(parents=True, exist_ok=True)
     (app_dir / "caddy" / "sites" / "default").mkdir(parents=True, exist_ok=True)
+    (app_dir / "caddy" / "sites" / "archive").mkdir(parents=True, exist_ok=True)
     (app_dir / "caddy" / "certs").mkdir(parents=True, exist_ok=True)
     (app_dir / "caddy" / "log" / "caddy").mkdir(parents=True, exist_ok=True)
     (app_dir / "caddy" / "log" / "php").mkdir(parents=True, exist_ok=True)
