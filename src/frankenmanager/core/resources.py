@@ -97,6 +97,10 @@ def ensure_resources_extracted() -> Path:
 
     log_info(f"Initializing FrankenManager data directory: {app_dir}")
 
+    # Clean up any files that were incorrectly created as directories by Docker
+    # Docker creates empty directories when mounting a non-existent file
+    _cleanup_incorrect_directories(app_dir)
+
     # List of files/directories to copy from bundled resources
     items_to_copy = [
         ".env.example",
@@ -118,8 +122,10 @@ def ensure_resources_extracted() -> Path:
             if not dst.exists():
                 shutil.copy2(src, dst)
         elif src.is_dir():
-            if not dst.exists():
-                shutil.copytree(src, dst)
+            # Use dirs_exist_ok=True to merge contents if directory already exists
+            # This ensures files like Caddyfile are copied even if _ensure_directory_structure
+            # already created parent directories
+            shutil.copytree(src, dst, dirs_exist_ok=True)
 
     # Ensure directory structure again after copying (in case caddy wasn't in resources)
     _ensure_directory_structure(app_dir)
@@ -155,6 +161,30 @@ def _ensure_directory_structure(app_dir: Path) -> None:
 
     # Database directory (MariaDB data)
     (app_dir / "database").mkdir(parents=True, exist_ok=True)
+
+
+def _cleanup_incorrect_directories(app_dir: Path) -> None:
+    """Remove directories that should be files.
+
+    Docker creates empty directories when mounting a non-existent file path.
+    This causes issues when we later try to copy the actual files.
+
+    Args:
+        app_dir: The application data directory.
+    """
+    # List of paths that should be files, not directories
+    should_be_files = [
+        app_dir / "caddy" / "Caddyfile",
+        app_dir / "caddy" / "Caddyfile.template",
+        app_dir / "php" / "php.ini",
+        app_dir / "php" / "php-prod.ini",
+    ]
+
+    for path in should_be_files:
+        if path.exists() and path.is_dir():
+            # This is a directory but should be a file - remove it
+            shutil.rmtree(path)
+            log_warning(f"Removed incorrectly created directory: {path}")
 
 
 def get_project_dir() -> Path:
