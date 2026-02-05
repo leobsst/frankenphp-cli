@@ -135,7 +135,8 @@ fi
 
 if [[ "$ACTION" == "add" ]]; then
     # Check if entry already exists (use -E for extended regex on macOS)
-    if grep -Eq "^$IP[[:space:]]+$HOSTNAME$" "$HOSTS_FILE" 2>/dev/null; then
+    # Allow trailing whitespace in the pattern
+    if grep -Eq "^$IP[[:space:]]+$HOSTNAME[[:space:]]*$" "$HOSTS_FILE" 2>/dev/null; then
         echo "Entry already exists"
         exit 0
     fi
@@ -146,9 +147,9 @@ if [[ "$ACTION" == "add" ]]; then
 
 elif [[ "$ACTION" == "remove" ]]; then
     # Remove entry using sed (use -E for extended regex on macOS)
-    if grep -Eq "^$IP[[:space:]]+$HOSTNAME$" "$HOSTS_FILE" 2>/dev/null; then
-        sed -E -i.bak "/^$IP[[:space:]]+$HOSTNAME$/d" "$HOSTS_FILE"
-        rm -f "${{HOSTS_FILE}}.bak"
+    # Allow trailing whitespace in the pattern
+    if grep -Eq "^$IP[[:space:]]+$HOSTNAME[[:space:]]*$" "$HOSTS_FILE" 2>/dev/null; then
+        sed -E -i '' "/^$IP[[:space:]]+$HOSTNAME[[:space:]]*$/d" "$HOSTS_FILE"
         echo "Removed $IP $HOSTNAME"
         exit 0
     else
