@@ -96,7 +96,7 @@ class HostsManager:
             True if entry exists, False otherwise.
         """
         content = self._read_hosts()
-        pattern = rf"^{re.escape(ip)}\s+{re.escape(hostname)}"
+        pattern = rf"^{re.escape(ip)}\s+{re.escape(hostname)}\s*$"
         return bool(re.search(pattern, content, re.MULTILINE))
 
     def _add_entry_via_helper(self, ip: str, hostname: str) -> bool:
@@ -197,13 +197,14 @@ class HostsManager:
         lines = content.splitlines()
 
         # Filter out matching lines (both IPv4 and IPv6)
-        pattern_v4 = rf"^{re.escape(ip)}\s+{re.escape(hostname)}$"
-        pattern_v6 = rf"^::1\s+{re.escape(hostname)}$"
+        # Allow trailing whitespace in the pattern
+        pattern_v4 = rf"^{re.escape(ip)}\s+{re.escape(hostname)}\s*$"
+        pattern_v6 = rf"^::1\s+{re.escape(hostname)}\s*$"
 
         new_lines = [
             line
             for line in lines
-            if not re.match(pattern_v4, line.strip()) and not re.match(pattern_v6, line.strip())
+            if not re.match(pattern_v4, line) and not re.match(pattern_v6, line)
         ]
 
         if len(new_lines) != len(lines):
