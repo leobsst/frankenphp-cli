@@ -114,9 +114,10 @@ def start_server(
         # Merge provided domains with registered ones
         if registered_domains:
             # Combine both lists, removing duplicates while preserving order
-            all_domains = registered_domains + [d for d in domains if d not in registered_domains]
+            new_domains_list = [d for d in domains if d not in registered_domains]
+            all_domains = registered_domains + new_domains_list
             log_info(f"Registered domains: {', '.join(registered_domains)}")
-            log_info(f"New domains: {', '.join([d for d in domains if d not in registered_domains])}")
+            log_info(f"New domains: {', '.join(new_domains_list)}")
             domains = all_domains
         # If no registered domains, just use the provided ones
 
