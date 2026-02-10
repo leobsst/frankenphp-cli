@@ -1,6 +1,8 @@
 """Restart command implementation."""
 
-from ..core.config import ConfigManager
+from typing import Optional
+
+from ..core.database import DatabaseManager
 from ..core.docker_manager import DockerManager
 from ..core.environment import EnvironmentManager
 from ..core.password_manager import PasswordManager
@@ -10,40 +12,71 @@ from ..exceptions import ServerStateError
 from ..utils.logging import log_info, log_success
 
 
-def restart_server(force_ssl: bool) -> None:
-    """Restart the FrankenPHP server.
+# Map friendly names to actual container names
+CONTAINER_MAP = {
+    "caddy": "webserver-and-caddy",
+    "database": "franken_mariadb",
+    "cache": "franken_redis",
+    "phpmyadmin": "franken_phpmyadmin",
+}
+
+
+def restart_server(force_ssl: bool, containers: Optional[list[str]] = None) -> None:
+    """Restart the FrankenPHP server or specific containers.
 
     Args:
         force_ssl: Whether to force SSL certificate regeneration.
+        containers: List of container names to restart (None = restart all).
+                   Valid values: "caddy", "database", "cache", "phpmyadmin"
     """
     project_dir = get_project_dir()
 
-    config = ConfigManager(project_dir / ".config")
     env = EnvironmentManager(project_dir / ".env", project_dir / ".env.example")
     env.load()
 
     docker = DockerManager(project_dir)
+    db = DatabaseManager(project_dir / "db.sqlite", docker)
     certs_dir = project_dir / (env.get("CERTS_DIR") or "./caddy/certs")
     ssl = SSLManager(certs_dir)
     password_manager = PasswordManager(project_dir, docker)
 
     # Check state
-    if not config.is_running:
+    if not db.is_running:
         raise ServerStateError("The server is not running.")
 
-    log_info("Restarting web server...")
+    # Determine if we're restarting all or specific containers
+    restart_all = containers is None or len(containers) == 0
+    restart_caddy = restart_all or "caddy" in containers
+    restart_db = restart_all or "database" in containers
 
-    # Regenerate SSL if requested
-    domains = config.get_domains()
-    print()
-    log_info("Generating SSL certificates...")
-    ssl.generate_all(domains, force_ssl, env.is_production())
+    if restart_all:
+        log_info("Restarting web server...")
+    else:
+        container_names = ", ".join(containers)
+        log_info(f"Restarting {container_names}...")
+
+    # Regenerate SSL if requested and restarting Caddy
+    if restart_caddy:
+        domains = db.get_domains()
+        print()
+        log_info("Generating SSL certificates...")
+        ssl.generate_all(domains, force_ssl, env.is_production())
 
     # Restart containers
-    docker.restart_all()
+    if restart_all:
+        docker.restart_all()
+    else:
+        for container_name in containers:
+            actual_name = CONTAINER_MAP.get(container_name)
+            if actual_name:
+                docker.restart_container(actual_name)
 
-    # Sync password
-    password_manager.sync_password(env.require("MARIADB_ROOT_PASSWORD"))
+    # Sync password if restarting database
+    if restart_db:
+        password_manager.sync_password(env.require("MARIADB_ROOT_PASSWORD"))
 
     print()
-    log_success("Web server restarted!")
+    if restart_all:
+        log_success("Web server restarted!")
+    else:
+        log_success(f"Container(s) restarted: {', '.join(containers)}")
