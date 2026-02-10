@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..core.caddyfile import CaddyfileGenerator
-from ..core.config import ConfigManager
+from ..core.database import DatabaseManager
 from ..core.docker_manager import DockerManager
 from ..core.environment import EnvironmentManager
 from ..core.hosts_manager import HostsManager
@@ -35,18 +35,19 @@ def _resolve_path(env_value: Optional[str], default: str, project_dir: Path) -> 
     return path
 
 
-def start_server(domains: list[str], custom_path: Optional[Path], force_ssl: bool) -> None:
+def start_server(
+    domains: Optional[list[str]], custom_path: Optional[Path], force_ssl: bool
+) -> None:
     """Start the FrankenPHP server.
 
     Args:
-        domains: List of domain names to serve.
+        domains: List of domain names to serve (None to use registered domains from database).
         custom_path: Path to the project root (None to use DEFAULT_PROJECT_PATH).
         force_ssl: Whether to force SSL certificate regeneration.
     """
     project_dir = get_project_dir()
 
     # Initialize managers
-    config = ConfigManager(project_dir / ".config")
     env = EnvironmentManager(project_dir / ".env", project_dir / ".env.example")
 
     # Ensure .env exists
@@ -88,21 +89,43 @@ def start_server(domains: list[str], custom_path: Optional[Path], force_ssl: boo
     database_dir = _resolve_path(env.get("DATABASE_DIR"), "./database", project_dir)
 
     docker = DockerManager(project_dir)
+    db = DatabaseManager(project_dir / "db.sqlite", docker)
     ssl = SSLManager(certs_dir)
     hosts = HostsManager()
     caddyfile = CaddyfileGenerator(project_dir, sites_dir)
     password_manager = PasswordManager(project_dir, docker)
 
     # Check state
-    if config.is_running:
+    if db.is_running:
         raise ServerStateError("The server is already running.")
+
+    # Load and merge domains
+    registered_domains = db.get_domains()
+
+    if domains is None:
+        # No domains provided, use registered ones
+        domains = registered_domains
+        if not domains:
+            log_error("No domains provided and no domains registered in database.")
+            log_error("Please provide domains: frankenmanager start \"myapp.test\"")
+            sys.exit(1)
+        log_info(f"Using registered domains: {', '.join(domains)}")
+    else:
+        # Merge provided domains with registered ones
+        if registered_domains:
+            # Combine both lists, removing duplicates while preserving order
+            all_domains = registered_domains + [d for d in domains if d not in registered_domains]
+            log_info(f"Registered domains: {', '.join(registered_domains)}")
+            log_info(f"New domains: {', '.join([d for d in domains if d not in registered_domains])}")
+            domains = all_domains
+        # If no registered domains, just use the provided ones
 
     # Validate inputs
     validate_directory(custom_path)
     for domain in domains:
         validate_domain(domain)
 
-    # Remove duplicates while preserving order
+    # Remove duplicates while preserving order (in case there were any)
     domains = list(dict.fromkeys(domains))
 
     hosts_added: list[str] = []
@@ -119,8 +142,8 @@ def start_server(domains: list[str], custom_path: Optional[Path], force_ssl: boo
         # Generate Caddyfiles
         caddyfile.generate(domains)
 
-        # Update config to running
-        config.set_running(domains)
+        # Save domains to database
+        db.set_domains(domains)
 
         # Build and start containers
         log_info("Starting web server...")
@@ -173,6 +196,6 @@ def start_server(domains: list[str], custom_path: Optional[Path], force_ssl: boo
             except Exception:
                 pass
 
-        config.reset()
+        db.reset()
         log_error("Cleanup complete. The server did not start.")
         raise

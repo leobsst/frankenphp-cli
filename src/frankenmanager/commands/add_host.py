@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..core.caddyfile import CaddyfileGenerator
-from ..core.config import ConfigManager
+from ..core.database import DatabaseManager
 from ..core.docker_manager import DockerManager
 from ..core.environment import EnvironmentManager
 from ..core.hosts_manager import HostsManager
@@ -43,18 +43,18 @@ def add_host(domains: list[str], force_ssl: bool) -> None:
     project_dir = get_project_dir()
 
     # Initialize managers
-    config = ConfigManager(project_dir / ".config")
     env = EnvironmentManager(project_dir / ".env", project_dir / ".env.example")
     env.load()
 
     docker = DockerManager(project_dir)
+    db = DatabaseManager(project_dir / "db.sqlite", docker)
 
     # Check state - server must be running
-    if not config.is_running:
+    if not db.is_running:
         raise ServerStateError("The server is not running. Use 'start' command instead.")
 
     # Get existing domains
-    existing_domains = config.get_domains()
+    existing_domains = db.get_domains()
 
     # Validate new domains and filter out duplicates
     new_domains: list[str] = []
@@ -97,8 +97,8 @@ def add_host(domains: list[str], force_ssl: bool) -> None:
         log_info("Generating Caddyfiles...")
         caddyfile.generate(new_domains)
 
-        # Update config with new domains
-        config.add_domains(new_domains)
+        # Update database with new domains
+        db.add_domains(new_domains)
 
         # Restart only the webserver container to apply changes
         log_info("Restarting FrankenPHP container...")
