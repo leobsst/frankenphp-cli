@@ -99,16 +99,42 @@ frankenmanager setup --status
 - Docker & Docker Compose v2
 - mkcert (installed automatically with `--install-mkcert`)
 
+## Quick Command Reference
+
+| Command | Description |
+|---------|-------------|
+| `frankenmanager start [domains] [--path <path>]` | Start the development server with optional domains |
+| `frankenmanager stop` | Stop the development server |
+| `frankenmanager restart [options]` | Restart all or specific containers |
+| `frankenmanager status` | Show current server and container status |
+| `frankenmanager add-host <domains>` | Add new domains while server is running |
+| `frankenmanager remove-host <domains>` | Remove domains while server is running |
+| `frankenmanager restore-host [domains]` | Restore archived domains |
+| `frankenmanager reset --db \| --caddyfiles` | Reset configuration and/or Caddyfiles (requires stopped server) |
+| `frankenmanager setup` | Configure passwordless operation |
+| `frankenmanager update` | Update FrankenManager to latest version |
+| `frankenmanager --help` | Show help for all commands |
+
 ## Usage
 
 ### Start the server
 
 ```bash
+# Start with specific domains
 frankenmanager start "domain1.test domain2.test" /path/to/projects
+
+# Start with registered domains from database (after first run)
+frankenmanager start
+
+# Start with new domains + registered domains (merges both)
+frankenmanager start "newdomain.test"
 ```
 
-- **domains**: Space-separated list of local domains (quoted)
-- **path**: Path to the directory containing your project folders
+- **domains** (optional): Space-separated list of local domains (quoted)
+  - If omitted, uses domains registered in the database from previous runs
+  - If provided, merges with registered domains (adds new ones to existing)
+- **path** (optional): Path to the directory containing your project folders
+  - Uses `DEFAULT_PROJECT_PATH` from `.env` if not specified
 
 ### Multi-Domain Setup
 
@@ -121,19 +147,41 @@ FrankenManager allows you to serve multiple PHP/Laravel projects simultaneously,
 3. SSL certificates are automatically generated for each domain
 4. All domains are added to `/etc/hosts` pointing to `127.0.0.1`
 
-**Example:**
+**Example 1: Initial start with domains**
 
 ```bash
 frankenmanager start "shop.test blog.test api.test" /home/dev/projects
 ```
 
-This creates the following mapping:
+This creates the following mapping and saves the domains to the database:
 
 | Domain | Project Path |
 |--------|--------------|
 | `https://shop.test` | `/home/dev/projects/shop/public/` |
 | `https://blog.test` | `/home/dev/projects/blog/public/` |
 | `https://api.test` | `/home/dev/projects/api/public/` |
+
+**Example 2: Restart with registered domains**
+
+After stopping the server, you can restart with the same domains without specifying them:
+
+```bash
+frankenmanager start
+# Uses: shop.test, blog.test, api.test (from database)
+```
+
+**Example 3: Add new domains while keeping existing ones**
+
+```bash
+frankenmanager start "admin.test"
+# Result: shop.test, blog.test, api.test, admin.test (merged)
+```
+
+The server automatically:
+- Loads registered domains from the database
+- Merges with newly provided domains
+- Removes duplicates
+- Updates the database with the complete list
 
 **Directory structure required:**
 
@@ -167,9 +215,48 @@ frankenmanager stop
 
 ### Restart containers
 
+Restart all containers or specific services:
+
 ```bash
+# Restart all containers
 frankenmanager restart
+
+# Restart only the web server / Caddy
+frankenmanager restart --caddy
+
+# Restart only the database
+frankenmanager restart --database
+# or use the short alias
+frankenmanager restart --db
+
+# Restart only the Redis cache
+frankenmanager restart --cache
+
+# Restart only phpMyAdmin
+frankenmanager restart --phpmyadmin
+# or use the short alias
+frankenmanager restart --pma
+
+# Restart multiple specific containers
+frankenmanager restart --cache --pma
+
+# Restart with forced SSL regeneration (for Caddy)
+frankenmanager restart --caddy --force-ssl
 ```
+
+**Available container options:**
+
+| Option | Alias | Container | Description |
+|--------|-------|-----------|-------------|
+| `--caddy` | - | webserver-and-caddy | Web server with Caddy and FrankenPHP |
+| `--database` | `--db` | franken_mariadb | MariaDB database server |
+| `--cache` | - | franken_redis | Redis cache server |
+| `--phpmyadmin` | `--pma` | franken_phpmyadmin | phpMyAdmin database UI |
+
+**Notes:**
+- When restarting `--caddy`, SSL certificates are regenerated (use `--force-ssl` to force full regeneration)
+- When restarting `--database`, the MariaDB password is automatically synced
+- Multiple containers can be restarted simultaneously by combining options
 
 ### Check status
 
@@ -255,8 +342,48 @@ frankenmanager start --help
 frankenmanager add-host --help
 frankenmanager remove-host --help
 frankenmanager restore-host --help
+frankenmanager reset --help
 frankenmanager setup --help
 ```
+
+### Reset configuration and/or Caddyfiles
+
+Reset specific FrankenManager components to their default state. This is useful when you want to start fresh or clean up your configuration.
+
+⚠️ **IMPORTANT**:
+- The server must be stopped before running this command
+- This action cannot be undone
+- You will be prompted for confirmation before proceeding
+- **This does NOT affect your MariaDB database data** (your application data is safe)
+
+```bash
+# Reset only FrankenManager configuration (domain list)
+frankenmanager reset --db
+
+# Reset only custom Caddyfiles
+frankenmanager reset --caddyfiles
+
+# Reset both configuration and Caddyfiles
+frankenmanager reset --db --caddyfiles
+```
+
+**What gets reset:**
+
+| Option | Alias | What it does |
+|--------|-------|--------------|
+| `--db` | `--database` | Clears the registered domain list in FrankenManager's configuration (`db.sqlite`) |
+| `--caddyfiles` | `--caddy` | Deletes all custom Caddyfile configurations in `caddy/sites/custom/` |
+
+**Use cases:**
+- Clean up after testing multiple domains
+- Remove all custom Caddyfiles before rebuilding configurations
+- Reset to a clean state when troubleshooting issues
+- Prepare for a fresh start without reinstalling FrankenManager
+
+**Notes**:
+- Archived Caddyfiles (in `caddy/sites/archive/`) are not affected by the reset command
+- Your MariaDB database data remains untouched - this only resets FrankenManager's own configuration
+- If you need to reset MariaDB data, you must manually delete the Docker volume
 
 ### Update to latest version
 
@@ -292,7 +419,7 @@ You can override this location with the `FRANKENMANAGER_DATA_DIR` environment va
 
 ```
 ~/.frankenmanager/
-├── .config                 # Server state (running/stopped, domains)
+├── db.sqlite               # Server state database (domains, status, timestamps)
 ├── .env                    # Environment configuration
 ├── docker-compose.yml      # Docker Compose configuration
 ├── Dockerfile              # Custom FrankenPHP image
@@ -317,6 +444,38 @@ Check your data directory location:
 
 ```bash
 frankenmanager setup --status
+```
+
+### Server State Database
+
+FrankenManager uses a SQLite database (`db.sqlite`) to store server state and domain configurations. This provides:
+
+- **Real-time status checking**: Server status reflects actual Docker container states
+- **Reliable state management**: ACID-compliant database transactions
+- **Timestamps**: Track when domains were added and when status changed
+- **Data integrity**: Unique constraints prevent duplicate domains
+- **Future-proof**: Easy schema evolution for new features
+
+**Automatic Migration:**
+
+If you're upgrading from an older version that used `.config` (JSON), your data will be automatically migrated to the database on the next command run. The old `.config` file will be backed up to `.config.backup`.
+
+**Database Schema:**
+
+```sql
+-- Server state table
+CREATE TABLE server_state (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    status TEXT NOT NULL DEFAULT 'stopped',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Domains table
+CREATE TABLE domains (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    domain TEXT NOT NULL UNIQUE,
+    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 ```
 
 ### Environment Variables (.env)
@@ -375,7 +534,9 @@ frankenphp-cli/
 │   │   ├── remove_host.py      Remove host(s) and archive
 │   │   └── restore_host.py     Restore archived host(s)
 │   ├── core/                   Core functionality
-│   │   ├── config.py           JSON config management
+│   │   ├── database.py         SQLite database management
+│   │   ├── migration.py        Config to database migration
+│   │   ├── config.py           Legacy JSON config (deprecated)
 │   │   ├── environment.py      .env file handling
 │   │   ├── docker_manager.py   Docker SDK integration
 │   │   ├── ssl_manager.py      mkcert wrapper
