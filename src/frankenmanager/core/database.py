@@ -11,9 +11,7 @@ if TYPE_CHECKING:
 class DatabaseManager:
     """Manages server state in SQLite database."""
 
-    def __init__(
-        self, db_path: Path, docker_manager: Optional["DockerManager"] = None
-    ) -> None:
+    def __init__(self, db_path: Path, docker_manager: Optional["DockerManager"] = None) -> None:
         """Initialize the database manager.
 
         Args:
@@ -78,9 +76,12 @@ class DatabaseManager:
             # Clear existing domains and insert new ones
             cursor.execute("DELETE FROM domains")
             for domain in domains:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT INTO domains (domain) VALUES (?)
-                """, (domain,))
+                """,
+                    (domain,),
+                )
 
             conn.commit()
 
@@ -112,9 +113,12 @@ class DatabaseManager:
             cursor = conn.cursor()
 
             for domain in new_domains:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT OR IGNORE INTO domains (domain) VALUES (?)
-                """, (domain,))
+                """,
+                    (domain,),
+                )
 
             conn.commit()
 
@@ -128,9 +132,12 @@ class DatabaseManager:
             cursor = conn.cursor()
 
             for domain in domains_to_remove:
-                cursor.execute("""
+                cursor.execute(
+                    """
                     DELETE FROM domains WHERE domain = ?
-                """, (domain,))
+                """,
+                    (domain,),
+                )
 
             conn.commit()
 

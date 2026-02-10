@@ -88,18 +88,14 @@ def stop() -> None:
 
 @app.command()
 def restart(
-    force_ssl: bool = typer.Option(
-        False, "--force-ssl", help="Force SSL certificate regeneration"
-    ),
+    force_ssl: bool = typer.Option(False, "--force-ssl", help="Force SSL certificate regeneration"),
     caddy: bool = typer.Option(
         False, "--caddy", help="Restart only the web server / Caddy container"
     ),
     database: bool = typer.Option(
         False, "--database", "--db", help="Restart only the database container"
     ),
-    cache: bool = typer.Option(
-        False, "--cache", help="Restart only the Redis cache container"
-    ),
+    cache: bool = typer.Option(False, "--cache", help="Restart only the Redis cache container"),
     phpmyadmin: bool = typer.Option(
         False, "--phpmyadmin", "--pma", help="Restart only the phpMyAdmin container"
     ),
