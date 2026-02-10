@@ -6,6 +6,8 @@ caddy/sites/custom/*
 caddy/sites/archive/*
 database/*
 .config
+.config.backup
+db.sqlite
 .db_password_history
 .DS_Store
 .env
