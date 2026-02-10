@@ -107,7 +107,7 @@ def start_server(
         domains = registered_domains
         if not domains:
             log_error("No domains provided and no domains registered in database.")
-            log_error("Please provide domains: frankenmanager start \"myapp.test\"")
+            log_error('Please provide domains: frankenmanager start "myapp.test"')
             sys.exit(1)
         log_info(f"Using registered domains: {', '.join(domains)}")
     else:

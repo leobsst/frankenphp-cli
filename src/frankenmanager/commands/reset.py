@@ -77,15 +77,11 @@ def reset_data(reset_db: bool, reset_caddyfiles: bool) -> None:
         console.print(
             "\n[dim]Configuration reset will clear all registered domains from db.sqlite[/dim]"
         )
-        console.print(
-            "[dim]Note: This does NOT affect your MariaDB database data[/dim]"
-        )
+        console.print("[dim]Note: This does NOT affect your MariaDB database data[/dim]")
     if reset_caddyfiles:
         caddy_dir = _resolve_path(env.get("CADDY_DIR"), "./caddy", project_dir)
         custom_dir = caddy_dir / "sites" / "custom"
-        console.print(
-            f"\n[dim]Caddyfiles reset will delete all files in: {custom_dir}[/dim]"
-        )
+        console.print(f"\n[dim]Caddyfiles reset will delete all files in: {custom_dir}[/dim]")
 
     console.print("\n[bold red]This action cannot be undone![/bold red]\n")
 
