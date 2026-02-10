@@ -58,7 +58,8 @@ def reset_data(reset_db: bool, reset_caddyfiles: bool) -> None:
     # Check if server is running
     if db.is_running:
         raise ServerStateError(
-            "The server is currently running. Please stop the server first with 'frankenmanager stop'."
+            "The server is currently running. "
+            "Please stop the server first with 'frankenmanager stop'."
         )
 
     # Build confirmation message

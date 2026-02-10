@@ -11,7 +11,6 @@ from ..core.ssl_manager import SSLManager
 from ..exceptions import ServerStateError
 from ..utils.logging import log_info, log_success
 
-
 # Map friendly names to actual container names
 CONTAINER_MAP = {
     "caddy": "webserver-and-caddy",
@@ -46,13 +45,13 @@ def restart_server(force_ssl: bool, containers: Optional[list[str]] = None) -> N
 
     # Determine if we're restarting all or specific containers
     restart_all = containers is None or len(containers) == 0
-    restart_caddy = restart_all or "caddy" in containers
-    restart_db = restart_all or "database" in containers
+    restart_caddy = restart_all or (containers is not None and "caddy" in containers)
+    restart_db = restart_all or (containers is not None and "database" in containers)
 
     if restart_all:
         log_info("Restarting web server...")
     else:
-        container_names = ", ".join(containers)
+        container_names = ", ".join(containers) if containers else ""
         log_info(f"Restarting {container_names}...")
 
     # Regenerate SSL if requested and restarting Caddy
@@ -66,10 +65,11 @@ def restart_server(force_ssl: bool, containers: Optional[list[str]] = None) -> N
     if restart_all:
         docker.restart_all()
     else:
-        for container_name in containers:
-            actual_name = CONTAINER_MAP.get(container_name)
-            if actual_name:
-                docker.restart_container(actual_name)
+        if containers:
+            for container_name in containers:
+                actual_name = CONTAINER_MAP.get(container_name)
+                if actual_name:
+                    docker.restart_container(actual_name)
 
     # Sync password if restarting database
     if restart_db:
@@ -79,4 +79,5 @@ def restart_server(force_ssl: bool, containers: Optional[list[str]] = None) -> N
     if restart_all:
         log_success("Web server restarted!")
     else:
-        log_success(f"Container(s) restarted: {', '.join(containers)}")
+        container_list = ", ".join(containers) if containers else ""
+        log_success(f"Container(s) restarted: {container_list}")
