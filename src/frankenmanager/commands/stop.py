@@ -38,8 +38,5 @@ def stop_server() -> None:
         except Exception:
             pass  # Ignore errors when removing hosts entries
 
-    # Reset database
-    db.reset()
-
     print()
     log_success("Web server stopped!")
