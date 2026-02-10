@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..core.caddyfile import CaddyfileGenerator
-from ..core.config import ConfigManager
+from ..core.database import DatabaseManager
 from ..core.docker_manager import DockerManager
 from ..core.environment import EnvironmentManager
 from ..core.hosts_manager import HostsManager
@@ -40,18 +40,18 @@ def remove_host(domains: list[str]) -> None:
     project_dir = get_project_dir()
 
     # Initialize managers
-    config = ConfigManager(project_dir / ".config")
     env = EnvironmentManager(project_dir / ".env", project_dir / ".env.example")
     env.load()
 
     docker = DockerManager(project_dir)
+    db = DatabaseManager(project_dir / "db.sqlite", docker)
 
     # Check state - server must be running
-    if not config.is_running:
+    if not db.is_running:
         raise ServerStateError("The server is not running.")
 
     # Get existing domains
-    existing_domains = config.get_domains()
+    existing_domains = db.get_domains()
 
     # Validate domains to remove
     domains_to_remove: list[str] = []
@@ -94,8 +94,8 @@ def remove_host(domains: list[str]) -> None:
         log_info("Archiving Caddyfiles...")
         caddyfile.archive(domains_to_remove)
 
-        # Update config to remove domains
-        config.remove_domains(domains_to_remove)
+        # Update database to remove domains
+        db.remove_domains(domains_to_remove)
 
         # Restart only the webserver container to apply changes
         log_info("Restarting FrankenPHP container...")

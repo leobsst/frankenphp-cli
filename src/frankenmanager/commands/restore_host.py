@@ -7,7 +7,7 @@ from rich.console import Console
 from rich.table import Table
 
 from ..core.caddyfile import CaddyfileGenerator
-from ..core.config import ConfigManager
+from ..core.database import DatabaseManager
 from ..core.docker_manager import DockerManager
 from ..core.environment import EnvironmentManager
 from ..core.hosts_manager import HostsManager
@@ -78,18 +78,18 @@ def restore_host(domains: list[str], force_ssl: bool) -> None:
     project_dir = get_project_dir()
 
     # Initialize managers
-    config = ConfigManager(project_dir / ".config")
     env = EnvironmentManager(project_dir / ".env", project_dir / ".env.example")
     env.load()
 
     docker = DockerManager(project_dir)
+    db = DatabaseManager(project_dir / "db.sqlite", docker)
 
     # Check state - server must be running
-    if not config.is_running:
+    if not db.is_running:
         raise ServerStateError("The server is not running. Use 'start' command instead.")
 
     # Get existing domains
-    existing_domains = config.get_domains()
+    existing_domains = db.get_domains()
 
     # Resolve storage paths from environment
     caddy_dir = _resolve_path(env.get("CADDY_DIR"), "./caddy", project_dir)
@@ -139,8 +139,8 @@ def restore_host(domains: list[str], force_ssl: bool) -> None:
             hosts.add_entry("127.0.0.1", domain)
             hosts_added.append(domain)
 
-        # Update config with restored domains
-        config.add_domains(restored_domains)
+        # Update database with restored domains
+        db.add_domains(restored_domains)
 
         # Restart only the webserver container to apply changes
         log_info("Restarting FrankenPHP container...")
