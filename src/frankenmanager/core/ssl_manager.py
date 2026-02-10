@@ -39,6 +39,23 @@ class SSLManager:
     def install_ca(self) -> None:
         """Install the mkcert CA (requires elevated privileges on Unix)."""
         mkcert = self._find_mkcert()
+
+        # Check if CA is already installed by checking for CA root files
+        ca_check = subprocess.run(
+            [mkcert, "-CAROOT"],
+            capture_output=True,
+            text=True,
+        )
+
+        if ca_check.returncode == 0:
+            ca_root = Path(ca_check.stdout.strip())
+            ca_cert = ca_root / "rootCA.pem"
+            ca_key = ca_root / "rootCA-key.pem"
+
+            # If both CA files exist, skip installation
+            if ca_cert.exists() and ca_key.exists():
+                return
+
         log_info("Installing mkcert CA...")
 
         if get_platform() != Platform.WINDOWS:
