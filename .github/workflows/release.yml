@@ -146,6 +146,103 @@ jobs:
             echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
           fi
 
+      - name: Extract CHANGELOG for version
+        id: changelog
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          # Extract the section for this version from CHANGELOG.md
+          if [ -f CHANGELOG.md ]; then
+            echo "Extracting changelog for version $VERSION"
+
+            # Use awk to extract content between version headers
+            CHANGELOG_CONTENT=$(awk "/## \[$VERSION\]/,/## \[/" CHANGELOG.md | sed '$d' | tail -n +2)
+
+            # Check if we extracted anything meaningful
+            if [ -n "$CHANGELOG_CONTENT" ]; then
+              # Save to file for use in release body
+              echo "$CHANGELOG_CONTENT" > changelog_extract.md
+              echo "has_content=true" >> $GITHUB_OUTPUT
+            else
+              echo "No content found for version $VERSION in CHANGELOG.md"
+              echo "has_content=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "CHANGELOG.md not found"
+            echo "has_content=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Prepare release body
+        run: |
+          cat > release_body.md << 'EOF'
+          ## What's Changed
+
+          EOF
+
+          # Add changelog content if available
+          if [ -f changelog_extract.md ] && [ "${{ steps.changelog.outputs.has_content }}" == "true" ]; then
+            cat changelog_extract.md >> release_body.md
+            echo "" >> release_body.md
+          else
+            echo "See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for full release notes." >> release_body.md
+            echo "" >> release_body.md
+          fi
+
+          cat >> release_body.md << 'EOF'
+
+          ## Installation
+
+          ### Pre-built Binaries (Recommended)
+
+          Download the appropriate binary for your platform:
+
+          | Platform | Architecture | Download |
+          |----------|--------------|----------|
+          | macOS | Apple Silicon | `frankenmanager-macos-arm64` |
+          | macOS | Intel | `frankenmanager-macos-x86_64` |
+          | Linux | x86_64 | `frankenmanager-linux-x86_64` |
+          | Windows | x86_64 | `frankenmanager-windows-x86_64.exe` |
+
+          #### Quick Install (macOS/Linux)
+
+          ```bash
+          # macOS (Apple Silicon)
+          curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/frankenmanager-macos-arm64 -o /usr/local/bin/frankenmanager
+          chmod +x /usr/local/bin/frankenmanager
+
+          # Linux
+          curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/frankenmanager-linux-x86_64 -o /usr/local/bin/frankenmanager
+          chmod +x /usr/local/bin/frankenmanager
+          ```
+
+          ### Python Package (pip)
+
+          ```bash
+          pip install frankenmanager
+          # or
+          pipx install frankenmanager
+          ```
+
+          ## First-time Setup
+
+          After installation, run the setup command to configure passwordless privilege escalation and install dependencies:
+
+          ```bash
+          sudo frankenmanager setup --install-mkcert
+          ```
+
+          This will:
+          - Configure passwordless `/etc/hosts` modifications
+          - Install mkcert for SSL certificate generation
+
+          ## Verify Installation
+
+          ```bash
+          frankenmanager --version
+          frankenmanager setup --status
+          ```
+          EOF
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
@@ -153,61 +250,10 @@ jobs:
           name: FrankenManager v${{ steps.version.outputs.version }}
           draft: false
           prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
-          generate_release_notes: true
+          generate_release_notes: false
           files: |
             release-assets/*
-          body: |
-            ## Installation
-
-            ### Pre-built Binaries (Recommended)
-
-            Download the appropriate binary for your platform:
-
-            | Platform | Architecture | Download |
-            |----------|--------------|----------|
-            | macOS | Apple Silicon | `frankenmanager-macos-arm64` |
-            | macOS | Intel | `frankenmanager-macos-x86_64` |
-            | Linux | x86_64 | `frankenmanager-linux-x86_64` |
-            | Windows | x86_64 | `frankenmanager-windows-x86_64.exe` |
-
-            #### Quick Install (macOS/Linux)
-
-            ```bash
-            # macOS (Apple Silicon)
-            curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/frankenmanager-macos-arm64 -o /usr/local/bin/frankenmanager
-            chmod +x /usr/local/bin/frankenmanager
-
-            # Linux
-            curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/frankenmanager-linux-x86_64 -o /usr/local/bin/frankenmanager
-            chmod +x /usr/local/bin/frankenmanager
-            ```
-
-            ### Python Package (pip)
-
-            ```bash
-            pip install frankenmanager
-            # or
-            pipx install frankenmanager
-            ```
-
-            ## First-time Setup
-
-            After installation, run the setup command to configure passwordless privilege escalation and install dependencies:
-
-            ```bash
-            sudo frankenmanager setup --install-mkcert
-            ```
-
-            This will:
-            - Configure passwordless `/etc/hosts` modifications
-            - Install mkcert for SSL certificate generation
-
-            ## Verify Installation
-
-            ```bash
-            frankenmanager --version
-            frankenmanager setup --status
-            ```
+          body_path: release_body.md
 
   # publish-pypi:
   #   name: Publish to PyPI
