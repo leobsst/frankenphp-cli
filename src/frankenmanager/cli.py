@@ -50,7 +50,7 @@ def main(
 
 @app.command()
 def start(
-    domains: str = typer.Argument(..., help="Space-separated domain names"),
+    domains: Optional[str] = typer.Argument(None, help="Space-separated domain names (uses registered domains if not provided)"),
     path: Optional[str] = typer.Option(
         None,
         "--path",
@@ -61,15 +61,17 @@ def start(
 ) -> None:
     """Start the FrankenPHP development server.
 
+    If domains are not provided, uses domains registered in the database.
     If --path is not specified, uses DEFAULT_PROJECT_PATH from .env file.
 
     Examples:
         frankenmanager start "myapp.test"
         frankenmanager start "myapp.test api.test" --path /home/projects
+        frankenmanager start  # Uses registered domains from database
     """
     from .commands.start import start_server
 
-    domain_list = domains.split()
+    domain_list = domains.split() if domains else None
     custom_path = Path(path) if path else None
     start_server(domain_list, custom_path, force_ssl)
 
@@ -85,11 +87,33 @@ def stop() -> None:
 @app.command()
 def restart(
     force_ssl: bool = typer.Option(False, "--force-ssl", help="Force SSL certificate regeneration"),
+    caddy: bool = typer.Option(False, "--caddy", help="Restart only the web server / Caddy container"),
+    database: bool = typer.Option(False, "--database", "--db", help="Restart only the database container"),
+    cache: bool = typer.Option(False, "--cache", help="Restart only the Redis cache container"),
+    phpmyadmin: bool = typer.Option(False, "--phpmyadmin", "--pma", help="Restart only the phpMyAdmin container"),
 ) -> None:
-    """Restart the FrankenPHP development server."""
+    """Restart the FrankenPHP development server or specific containers.
+
+    Examples:
+        frankenmanager restart                    # Restart all containers
+        frankenmanager restart --caddy            # Restart only web server/Caddy
+        frankenmanager restart --database         # Restart only database
+        frankenmanager restart --cache --pma      # Restart Redis and phpMyAdmin
+    """
     from .commands.restart import restart_server
 
-    restart_server(force_ssl)
+    # Collect which containers to restart
+    containers = []
+    if caddy:
+        containers.append("caddy")
+    if database:
+        containers.append("database")
+    if cache:
+        containers.append("cache")
+    if phpmyadmin:
+        containers.append("phpmyadmin")
+
+    restart_server(force_ssl, containers if containers else None)
 
 
 @app.command(name="add-host")
@@ -240,6 +264,32 @@ def update(
         success = update_binary(force=force)
         if not success:
             raise typer.Exit(1)
+
+
+@app.command()
+def reset(
+    db: bool = typer.Option(False, "--db", "--database", help="Reset FrankenManager configuration (domain list)"),
+    caddyfiles: bool = typer.Option(
+        False, "--caddyfiles", "--caddy", help="Reset custom Caddyfiles"
+    ),
+) -> None:
+    """Reset FrankenManager configuration and/or custom Caddyfiles.
+
+    This command allows you to reset specific components of FrankenManager.
+    The server must be stopped before running this command.
+
+    NOTE: This does NOT affect your MariaDB database data.
+
+    ⚠️  WARNING: This action cannot be undone!
+
+    Examples:
+        frankenmanager reset --db                 # Reset domain list configuration
+        frankenmanager reset --caddyfiles         # Reset only custom Caddyfiles
+        frankenmanager reset --db --caddyfiles    # Reset both
+    """
+    from .commands.reset import reset_data
+
+    reset_data(db, caddyfiles)
 
 
 if __name__ == "__main__":
