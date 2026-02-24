@@ -206,13 +206,13 @@ jobs:
           #### Quick Install (macOS/Linux)
 
           ```bash
-          # macOS (Apple Silicon)
-          curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/frankenmanager-macos-arm64 -o /usr/local/bin/frankenmanager
-          chmod +x /usr/local/bin/frankenmanager
+          curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | bash
+          ```
 
-          # Linux
-          curl -L https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/frankenmanager-linux-x86_64 -o /usr/local/bin/frankenmanager
-          chmod +x /usr/local/bin/frankenmanager
+          Or pin to this specific version:
+
+          ```bash
+          VERSION=${{ steps.version.outputs.version }} curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | bash
           ```
 
           ### Python Package (pip)
