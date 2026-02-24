@@ -55,7 +55,7 @@ frankenmanager = "frankenmanager.cli:app"
 [project.urls]
 Homepage = "https://blam-prod.fr"
 Documentation = "https://github.com/leobsst/frankenphp-cli/blob/python/README.md"
-Repository = "https://github.com/leobsst/frankenphp-cli/tree/python"
+Repository = "https://github.com/leobsst/frankenphp-cli"
 
 [tool.hatch.version]
 source = "vcs"
