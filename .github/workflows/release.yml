@@ -206,13 +206,13 @@ jobs:
           #### Quick Install (macOS/Linux)
 
           ```bash
-          curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | bash
+          curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/refs/heads/main/install.sh | bash
           ```
 
           Or pin to this specific version:
 
           ```bash
-          VERSION=${{ steps.version.outputs.version }} curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/install.sh | bash
+          VERSION=${{ steps.version.outputs.version }} curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/refs/heads/main/install.sh | bash
           ```
 
           ### Python Package (pip)
