@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # FrankenManager installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/leobsst/frankenphp-cli/main/install.sh | bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/leobsst/frankenphp-cli/refs/heads/main/install.sh | bash
 
 set -e
 
