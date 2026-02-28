@@ -148,6 +148,12 @@ def start_server(
 
         # Build and start containers
         log_info("Starting web server...")
+
+        # Fix .my-healthcheck.cnf permissions if world-writable (MySQL ignores such files)
+        healthcheck_cnf = database_dir / ".my-healthcheck.cnf"
+        if healthcheck_cnf.exists() and (healthcheck_cnf.stat().st_mode & 0o022):
+            healthcheck_cnf.chmod(0o640)
+
         docker.build_image(str(custom_path), env.get("WWWGROUP") or "")
         docker.compose_down(env.is_production())
 
