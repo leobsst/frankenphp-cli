@@ -8,7 +8,7 @@ from ..core.database import DatabaseManager
 from ..core.docker_manager import DockerManager
 from ..core.environment import EnvironmentManager
 from ..core.hosts_manager import HostsManager
-from ..core.php_versions import DEFAULT_PHP_VERSION, get_container_name, validate_php_version
+from ..core.php_versions import get_container_name, resolve_default_php_version, validate_php_version
 from ..core.resources import ensure_php_version_config, get_project_dir
 from ..core.ssl_manager import SSLManager
 from ..exceptions import ServerStateError
@@ -34,21 +34,23 @@ def _resolve_path(env_value: Optional[str], default: str, project_dir: Path) -> 
     return path
 
 
-def add_host(domains: list[str], force_ssl: bool, php_version: str = DEFAULT_PHP_VERSION) -> None:
+def add_host(domains: list[str], force_ssl: bool, php_version: str | None = None) -> None:
     """Add new host(s) to the running server.
 
     Args:
         domains: List of new domain names to add.
         force_ssl: Whether to force SSL certificate regeneration.
-        php_version: PHP version for the new domains.
+        php_version: PHP version for the new domains (None = use .env or fallback).
     """
-    validate_php_version(php_version)
-
     project_dir = get_project_dir()
 
     # Initialize managers
     env = EnvironmentManager(project_dir / ".env", project_dir / ".env.example")
     env.load()
+
+    # Resolve PHP version from --php flag, .env, or fallback
+    php_version = resolve_default_php_version(env.get("DEFAULT_PHP_VERSION")) if php_version is None else php_version
+    validate_php_version(php_version)
 
     docker = DockerManager(project_dir)
     db = DatabaseManager(project_dir / "db.sqlite", docker)

@@ -11,7 +11,7 @@ from ..core.database import DatabaseManager
 from ..core.docker_manager import DockerManager
 from ..core.environment import EnvironmentManager
 from ..core.hosts_manager import HostsManager
-from ..core.php_versions import DEFAULT_PHP_VERSION, get_container_name, validate_php_version
+from ..core.php_versions import get_container_name, resolve_default_php_version, validate_php_version
 from ..core.resources import ensure_php_version_config, get_project_dir
 from ..core.ssl_manager import SSLManager
 from ..exceptions import ServerStateError
@@ -70,22 +70,24 @@ def list_archived_hosts() -> None:
 
 
 def restore_host(
-    domains: list[str], force_ssl: bool, php_version: str = DEFAULT_PHP_VERSION
+    domains: list[str], force_ssl: bool, php_version: str | None = None
 ) -> None:
     """Restore host(s) from archive to the running server.
 
     Args:
         domains: List of domain names to restore.
         force_ssl: Whether to force SSL certificate regeneration.
-        php_version: PHP version for the restored domains.
+        php_version: PHP version for the restored domains (None = use .env or fallback).
     """
-    validate_php_version(php_version)
-
     project_dir = get_project_dir()
 
     # Initialize managers
     env = EnvironmentManager(project_dir / ".env", project_dir / ".env.example")
     env.load()
+
+    # Resolve PHP version from --php flag, .env, or fallback
+    php_version = resolve_default_php_version(env.get("DEFAULT_PHP_VERSION")) if php_version is None else php_version
+    validate_php_version(php_version)
 
     docker = DockerManager(project_dir)
     db = DatabaseManager(project_dir / "db.sqlite", docker)
