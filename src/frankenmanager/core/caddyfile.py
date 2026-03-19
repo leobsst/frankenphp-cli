@@ -1,5 +1,6 @@
 """Caddyfile generation from templates."""
 
+import re
 import shutil
 from pathlib import Path
 from typing import Optional
@@ -35,6 +36,8 @@ class CaddyfileGenerator:
     def generate_for_version(self, domains: list[str], php_version: str) -> None:
         """Generate Caddyfile configurations for domains into the version-specific directory.
 
+        Worker sites use HTTP only (TLS is handled by the reverse proxy).
+
         Args:
             domains: List of domain names.
             php_version: PHP version these domains belong to.
@@ -42,25 +45,49 @@ class CaddyfileGenerator:
         version_dir = self._version_dir(php_version)
         self._ensure_dir(version_dir)
 
-        if not self.template_path.exists():
-            log_info(f"Template not found at {self.template_path}, skipping Caddyfile generation")
-            return
-
-        template = self.template_path.read_text()
-
         for domain in domains:
             simple_domain = domain.rsplit(".", 1)[0]
             caddyfile_path = version_dir / f"{simple_domain}_Caddyfile"
 
             if not caddyfile_path.exists():
                 log_info(f"Creating {simple_domain}_Caddyfile (PHP {php_version})...")
-
-                content = template.replace("full_domain", domain)
-                content = content.replace("custom_domain", simple_domain)
-
+                content = self._build_worker_site(domain, simple_domain)
                 caddyfile_path.write_text(content)
 
         log_success("Caddyfile configurations generated")
+
+    def _build_worker_site(self, domain: str, simple_domain: str) -> str:
+        """Build a worker Caddyfile site block (HTTP only, no TLS).
+
+        Args:
+            domain: Full domain name (e.g., "myapp.test").
+            simple_domain: Domain without TLD (e.g., "myapp").
+
+        Returns:
+            Caddyfile content string.
+        """
+        lines = [
+            f"http://{domain} {{",
+            f"\troot * /{{$CUSTOM_PATH}}/{simple_domain}/public/",
+            "",
+            "\tencode br gzip",
+            "",
+            "\tlog {",
+            f"\t\toutput file /var/log/caddy/{simple_domain}_access.log {{",
+            "\t\t\troll_size 10mb",
+            "\t\t\troll_keep 5",
+            "\t\t\troll_keep_for 720h",
+            "\t\t}",
+            "\t\tformat console",
+            "\t}",
+            "",
+            "\tphp_server {",
+            "\t\tindex index.php",
+            "\t\tresolve_root_symlink",
+            "\t}",
+            "}",
+        ]
+        return "\n".join(lines) + "\n"
 
     def generate(self, domains: list[str]) -> None:
         """Generate Caddyfile configurations into the legacy custom directory.
@@ -273,6 +300,77 @@ class CaddyfileGenerator:
                 log_warning(f"Archived Caddyfile for '{domain}' not found, skipping")
 
         return restored_domains
+
+    def migrate_worker_caddyfiles(self) -> int:
+        """Migrate existing Caddyfiles from TLS format to HTTP-only worker format.
+
+        Converts sites that use `domain.test { tls ... }` to `http://domain.test {`
+        and removes the tls directive, preserving all other customizations.
+
+        Returns:
+            Number of files migrated.
+        """
+        migrated = 0
+
+        # Search in all version directories and legacy custom dir
+        search_dirs = []
+        if self.sites_base.exists():
+            for d in self.sites_base.iterdir():
+                if d.is_dir() and (d.name == "custom" or d.name.startswith("php-")):
+                    search_dirs.append(d)
+
+        for site_dir in search_dirs:
+            for caddyfile_path in site_dir.glob("*_Caddyfile"):
+                if self._migrate_single_caddyfile(caddyfile_path):
+                    migrated += 1
+
+        if migrated:
+            log_info(f"Migrated {migrated} Caddyfile(s) to HTTP-only worker format")
+
+        return migrated
+
+    def _migrate_single_caddyfile(self, path: Path) -> bool:
+        """Migrate a single Caddyfile from TLS to HTTP-only format.
+
+        Args:
+            path: Path to the Caddyfile.
+
+        Returns:
+            True if the file was migrated, False if already in correct format.
+        """
+        content = path.read_text()
+
+        # Already migrated (starts with http://)
+        if content.lstrip().startswith("http://"):
+            return False
+
+        # Not a TLS site (no tls directive) — skip
+        if "tls /certs/" not in content:
+            return False
+
+        # 1. Replace "domain.test {" with "http://domain.test {"
+        content = re.sub(
+            r"^(\S+\.test)\s*\{",
+            r"http://\1 {",
+            content,
+            count=1,
+        )
+
+        # 2. Remove the tls directive line (and surrounding comments/blank lines)
+        content = re.sub(
+            r"\n\t# TLS\n\ttls /certs/[^\n]+\n",
+            "\n",
+            content,
+        )
+        # Also handle tls without comment
+        content = re.sub(
+            r"\n\ttls /certs/[^\n]+\n",
+            "\n",
+            content,
+        )
+
+        path.write_text(content)
+        return True
 
     def generate_main_caddyfile(
         self,
