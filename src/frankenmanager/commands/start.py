@@ -10,7 +10,8 @@ from ..core.docker_manager import DockerManager
 from ..core.environment import EnvironmentManager
 from ..core.hosts_manager import HostsManager
 from ..core.password_manager import PasswordManager
-from ..core.resources import get_project_dir
+from ..core.php_versions import DEFAULT_PHP_VERSION, validate_php_version
+from ..core.resources import ensure_php_version_config, get_project_dir
 from ..core.ssl_manager import SSLManager
 from ..exceptions import ServerStateError
 from ..utils.logging import log_error, log_info, log_success
@@ -36,7 +37,10 @@ def _resolve_path(env_value: Optional[str], default: str, project_dir: Path) -> 
 
 
 def start_server(
-    domains: Optional[list[str]], custom_path: Optional[Path], force_ssl: bool
+    domains: Optional[list[str]],
+    custom_path: Optional[Path],
+    force_ssl: bool,
+    php_version: str = DEFAULT_PHP_VERSION,
 ) -> None:
     """Start the FrankenPHP server.
 
@@ -44,7 +48,11 @@ def start_server(
         domains: List of domain names to serve (None to use registered domains from database).
         custom_path: Path to the project root (None to use DEFAULT_PROJECT_PATH).
         force_ssl: Whether to force SSL certificate regeneration.
+        php_version: Default PHP version for new domains.
     """
+    # Validate PHP version
+    validate_php_version(php_version)
+
     project_dir = get_project_dir()
 
     # Initialize managers
@@ -85,7 +93,7 @@ def start_server(
     # Resolve storage paths from environment
     caddy_dir = _resolve_path(env.get("CADDY_DIR"), "./caddy", project_dir)
     certs_dir = caddy_dir / "certs"
-    sites_dir = caddy_dir / "sites" / "custom"
+    sites_dir = caddy_dir / "sites"
     database_dir = _resolve_path(env.get("DATABASE_DIR"), "./database", project_dir)
 
     docker = DockerManager(project_dir)
@@ -100,62 +108,94 @@ def start_server(
         raise ServerStateError("The server is already running.")
 
     # Load and merge domains
-    registered_domains = db.get_domains()
+    registered = db.get_domains_with_versions()
+    registered_domains = [d for d, _ in registered]
+    registered_map = {d: v for d, v in registered}
 
     if domains is None:
         # No domains provided, use registered ones
-        domains = registered_domains
-        if not domains:
+        if not registered:
             log_error("No domains provided and no domains registered in database.")
             log_error('Please provide domains: frankenmanager start "myapp.test"')
             sys.exit(1)
-        log_info(f"Using registered domains: {', '.join(domains)}")
+        domains_with_versions = list(registered)
+        log_info(f"Using registered domains: {', '.join(registered_domains)}")
     else:
         # Merge provided domains with registered ones
-        if registered_domains:
-            # Combine both lists, removing duplicates while preserving order
-            new_domains_list = [d for d in domains if d not in registered_domains]
-            all_domains = registered_domains + new_domains_list
+        domains_with_versions: list[tuple[str, str]] = []
+
+        # Keep registered domains with their existing versions
+        for d, v in registered:
+            domains_with_versions.append((d, v))
+
+        # Add new domains with the specified PHP version
+        new_domains_list = [d for d in domains if d not in registered_map]
+        for d in new_domains_list:
+            domains_with_versions.append((d, php_version))
+
+        if registered:
             log_info(f"Registered domains: {', '.join(registered_domains)}")
-            log_info(f"New domains: {', '.join(new_domains_list)}")
-            domains = all_domains
-        # If no registered domains, just use the provided ones
+            if new_domains_list:
+                log_info(f"New domains (PHP {php_version}): {', '.join(new_domains_list)}")
+
+    # Extract flat domain list for validation
+    all_domains = [d for d, _ in domains_with_versions]
 
     # Validate inputs
     validate_directory(custom_path)
-    for domain in domains:
+    for domain in all_domains:
         validate_domain(domain)
 
-    # Remove duplicates while preserving order (in case there were any)
-    domains = list(dict.fromkeys(domains))
+    # Remove duplicates while preserving order
+    seen: set[str] = set()
+    unique_domains_versions: list[tuple[str, str]] = []
+    for d, v in domains_with_versions:
+        if d not in seen:
+            seen.add(d)
+            unique_domains_versions.append((d, v))
+    domains_with_versions = unique_domains_versions
+    all_domains = [d for d, _ in domains_with_versions]
+
+    # Determine which PHP versions are needed
+    active_versions = {v for _, v in domains_with_versions}
+
+    # Ensure php.ini exists for each version
+    for version in active_versions:
+        ensure_php_version_config(project_dir, version)
 
     hosts_added: list[str] = []
 
     try:
         # Generate SSL certificates
-        ssl.generate_all(domains, force_ssl, env.is_production())
+        ssl.generate_all(all_domains, force_ssl, env.is_production())
 
         # Add hosts entries
-        for domain in domains:
+        for domain in all_domains:
             hosts.add_entry("127.0.0.1", domain)
             hosts_added.append(domain)
 
-        # Generate Caddyfiles
-        caddyfile.generate(domains)
+        # Generate per-version Caddyfiles
+        caddyfile.generate_all_for_versions(domains_with_versions)
 
-        # Save domains to database
-        db.set_domains(domains)
+        # Generate main reverse proxy Caddyfile
+        caddyfile.generate_main_caddyfile(domains_with_versions, caddy_dir, env.is_production())
+
+        # Save domains to database with versions
+        db.set_domains_with_versions(domains_with_versions)
 
         # Build and start containers
-        log_info("Starting web server...")
+        log_info("Building Docker images...")
 
         # Fix .my-healthcheck.cnf permissions if world-writable (MySQL ignores such files)
         healthcheck_cnf = database_dir / ".my-healthcheck.cnf"
         if healthcheck_cnf.exists() and (healthcheck_cnf.stat().st_mode & 0o022):
             healthcheck_cnf.chmod(0o640)
 
-        docker.build_image(str(custom_path), env.get("WWWGROUP") or "")
+        docker.build_images(str(custom_path), active_versions, env.get("WWWGROUP") or "")
         docker.compose_down(env.is_production())
+
+        # Generate docker-compose file
+        docker.generate_compose_file(active_versions, {}, env.is_production())
 
         # Prepare environment variables for docker-compose
         expose = env.get("EXPOSE_SERVICES") == "true"
@@ -191,6 +231,11 @@ def start_server(
 
         print()
         log_success("Web server started!")
+
+        # Show PHP version summary
+        for version in sorted(active_versions):
+            version_domains = [d for d, v in domains_with_versions if v == version]
+            log_info(f"  PHP {version}: {', '.join(version_domains)}")
 
     except Exception as e:
         # Cleanup on failure

@@ -28,7 +28,7 @@ def stop_server() -> None:
 
     log_info("Stopping web server...")
 
-    # Stop containers
+    # Stop containers (compose down handles all containers defined in the generated file)
     docker.compose_down(env.is_production() if env.env_path.exists() else False)
 
     # Remove hosts entries
