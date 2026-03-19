@@ -87,6 +87,8 @@ def ensure_resources_extracted() -> Path:
     # Check if already initialized (resources copied)
     marker_file = app_dir / ".initialized"
     if marker_file.exists():
+        # Ensure new files added in later versions are present
+        _ensure_missing_files(app_dir)
         return app_dir
 
     # Get bundled resources
@@ -170,6 +172,30 @@ def _ensure_directory_structure(app_dir: Path) -> None:
 
     # Database directory (MariaDB data)
     (app_dir / "database").mkdir(parents=True, exist_ok=True)
+
+
+def _ensure_missing_files(app_dir: Path) -> None:
+    """Copy files added in newer versions that may be missing from existing installs.
+
+    Args:
+        app_dir: The application data directory.
+    """
+    resources_dir = get_bundled_resources_dir()
+    if resources_dir is None:
+        return
+
+    # Files that must exist (added after initial release)
+    required_files = [
+        Path("caddy") / "Caddyfile.worker",
+    ]
+
+    for rel_path in required_files:
+        dst = app_dir / rel_path
+        if not dst.exists():
+            src = resources_dir / rel_path
+            if src.exists():
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dst)
 
 
 def _cleanup_incorrect_directories(app_dir: Path) -> None:
