@@ -4,6 +4,11 @@ caddy/data/*
 caddy/log/*
 caddy/sites/custom/*
 caddy/sites/archive/*
+caddy/sites/php-*/*
+
+# Runtime generated files
+docker-compose-generated.yml
+php/8.*/
 database/*
 .config
 .config.backup
