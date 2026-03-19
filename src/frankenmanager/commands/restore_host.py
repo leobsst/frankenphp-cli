@@ -73,9 +73,7 @@ def list_archived_hosts() -> None:
     log_info("Use 'frankenmanager restore-host \"domain.test\"' to restore a host.")
 
 
-def restore_host(
-    domains: list[str], force_ssl: bool, php_version: Optional[str] = None
-) -> None:
+def restore_host(domains: list[str], force_ssl: bool, php_version: Optional[str] = None) -> None:
     """Restore host(s) from archive to the running server.
 
     Args:

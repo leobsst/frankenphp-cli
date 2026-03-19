@@ -18,8 +18,7 @@ app = typer.Typer(
 console = Console()
 
 _php_version_help = (
-    f"PHP version ({', '.join(SUPPORTED_VERSIONS)}). "
-    "Defaults to DEFAULT_PHP_VERSION in .env"
+    f"PHP version ({', '.join(SUPPORTED_VERSIONS)}). Defaults to DEFAULT_PHP_VERSION in .env"
 )
 
 
