@@ -332,6 +332,9 @@ class CaddyfileGenerator:
     def _migrate_single_caddyfile(self, path: Path) -> bool:
         """Migrate a single Caddyfile from TLS to HTTP-only format.
 
+        Only changes what is strictly necessary: forces http:// and comments
+        out the tls directive. All other content is preserved as-is.
+
         Args:
             path: Path to the Caddyfile.
 
@@ -344,33 +347,33 @@ class CaddyfileGenerator:
         if content.lstrip().startswith("http://"):
             return False
 
-        # Not a TLS site (no tls directive) — skip
-        if "tls /certs/" not in content:
-            return False
+        changed = False
 
         # 1. Replace "domain.test {" with "http://domain.test {"
-        content = re.sub(
+        new_content = re.sub(
             r"^(\S+\.test)\s*\{",
             r"http://\1 {",
             content,
             count=1,
         )
+        if new_content != content:
+            changed = True
+            content = new_content
 
-        # 2. Remove the tls directive line (and surrounding comments/blank lines)
-        content = re.sub(
-            r"\n\t# TLS\n\ttls /certs/[^\n]+\n",
-            "\n",
+        # 2. Comment out the tls directive line (preserve it for reference)
+        new_content = re.sub(
+            r"(\t)(tls /certs/[^\n]+)",
+            r"\1# \2",
             content,
         )
-        # Also handle tls without comment
-        content = re.sub(
-            r"\n\ttls /certs/[^\n]+\n",
-            "\n",
-            content,
-        )
+        if new_content != content:
+            changed = True
+            content = new_content
 
-        path.write_text(content)
-        return True
+        if changed:
+            path.write_text(content)
+
+        return changed
 
     def generate_main_caddyfile(
         self,
