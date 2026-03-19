@@ -10,7 +10,7 @@ from ..core.docker_manager import DockerManager
 from ..core.environment import EnvironmentManager
 from ..core.hosts_manager import HostsManager
 from ..core.password_manager import PasswordManager
-from ..core.php_versions import DEFAULT_PHP_VERSION, validate_php_version
+from ..core.php_versions import resolve_default_php_version, validate_php_version
 from ..core.resources import ensure_php_version_config, get_project_dir
 from ..core.ssl_manager import SSLManager
 from ..exceptions import ServerStateError
@@ -40,7 +40,7 @@ def start_server(
     domains: Optional[list[str]],
     custom_path: Optional[Path],
     force_ssl: bool,
-    php_version: str = DEFAULT_PHP_VERSION,
+    php_version: Optional[str] = None,
 ) -> None:
     """Start the FrankenPHP server.
 
@@ -48,11 +48,8 @@ def start_server(
         domains: List of domain names to serve (None to use registered domains from database).
         custom_path: Path to the project root (None to use DEFAULT_PROJECT_PATH).
         force_ssl: Whether to force SSL certificate regeneration.
-        php_version: Default PHP version for new domains.
+        php_version: Default PHP version for new domains (None = use .env or fallback).
     """
-    # Validate PHP version
-    validate_php_version(php_version)
-
     project_dir = get_project_dir()
 
     # Initialize managers
@@ -65,6 +62,10 @@ def start_server(
         sys.exit(1)
 
     env.load()
+
+    # Resolve PHP version from --php flag, .env, or fallback
+    php_version = resolve_default_php_version(env.get("DEFAULT_PHP_VERSION")) if php_version is None else php_version
+    validate_php_version(php_version)
 
     # Check required environment variables
     try:

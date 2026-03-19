@@ -20,8 +20,22 @@ PHP_INTERNAL_PORTS: dict[str, tuple[int, int]] = {
     "8.5": (8580, 8543),
 }
 
-# Default PHP version for new domains
+# Fallback PHP version when not configured in .env
 DEFAULT_PHP_VERSION = "8.3"
+
+
+def resolve_default_php_version(env_value: str | None) -> str:
+    """Resolve the default PHP version from .env or fallback.
+
+    Args:
+        env_value: Value of DEFAULT_PHP_VERSION from .env (may be None/empty).
+
+    Returns:
+        A valid PHP version string.
+    """
+    if env_value and env_value in PHP_IMAGE_TAGS:
+        return env_value
+    return DEFAULT_PHP_VERSION
 
 
 def get_image_tag(php_version: str) -> str:

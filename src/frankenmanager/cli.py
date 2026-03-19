@@ -7,7 +7,7 @@ import typer
 from rich.console import Console
 
 from . import __version__
-from .core.php_versions import DEFAULT_PHP_VERSION, SUPPORTED_VERSIONS
+from .core.php_versions import SUPPORTED_VERSIONS
 
 app = typer.Typer(
     name="frankenmanager",
@@ -17,7 +17,7 @@ app = typer.Typer(
 
 console = Console()
 
-_php_version_help = f"PHP version to use ({', '.join(SUPPORTED_VERSIONS)})"
+_php_version_help = f"PHP version to use ({', '.join(SUPPORTED_VERSIONS)}). Defaults to DEFAULT_PHP_VERSION in .env"
 
 
 def version_callback(value: bool) -> None:
@@ -63,8 +63,8 @@ def start(
         help="Project root path (uses DEFAULT_PROJECT_PATH from .env if not set)",
     ),
     force_ssl: bool = typer.Option(False, "--force-ssl", help="Force SSL certificate regeneration"),
-    php: str = typer.Option(
-        DEFAULT_PHP_VERSION,
+    php: Optional[str] = typer.Option(
+        None,
         "--php",
         help=_php_version_help,
     ),
@@ -137,8 +137,8 @@ def restart(
 def add_host_cmd(
     domains: str = typer.Argument(..., help="Space-separated domain names to add"),
     force_ssl: bool = typer.Option(False, "--force-ssl", help="Force SSL certificate regeneration"),
-    php: str = typer.Option(
-        DEFAULT_PHP_VERSION,
+    php: Optional[str] = typer.Option(
+        None,
         "--php",
         help=_php_version_help,
     ),
@@ -186,8 +186,8 @@ def restore_host_cmd(
     domains: Optional[str] = typer.Argument(None, help="Space-separated domain names to restore"),
     list_archived: bool = typer.Option(False, "--list", "-l", help="List all archived hosts"),
     force_ssl: bool = typer.Option(False, "--force-ssl", help="Force SSL certificate regeneration"),
-    php: str = typer.Option(
-        DEFAULT_PHP_VERSION,
+    php: Optional[str] = typer.Option(
+        None,
         "--php",
         help=_php_version_help,
     ),
