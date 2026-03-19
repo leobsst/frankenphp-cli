@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..utils.logging import log_info, log_warning
+from .php_versions import SUPPORTED_VERSIONS
 
 
 def get_app_data_dir() -> Path:
@@ -130,6 +131,9 @@ def ensure_resources_extracted() -> Path:
     # Ensure directory structure again after copying (in case caddy wasn't in resources)
     _ensure_directory_structure(app_dir)
 
+    # Distribute php.ini files to versioned directories
+    _distribute_php_configs(app_dir)
+
     # Create marker file
     marker_file.write_text("1")
 
@@ -150,14 +154,19 @@ def _ensure_directory_structure(app_dir: Path) -> None:
     (app_dir / "caddy" / "sites" / "custom").mkdir(parents=True, exist_ok=True)
     (app_dir / "caddy" / "sites" / "default").mkdir(parents=True, exist_ok=True)
     (app_dir / "caddy" / "sites" / "archive").mkdir(parents=True, exist_ok=True)
+
+    # Per-version site directories
+    for version in SUPPORTED_VERSIONS:
+        (app_dir / "caddy" / "sites" / f"php-{version}").mkdir(parents=True, exist_ok=True)
     (app_dir / "caddy" / "certs").mkdir(parents=True, exist_ok=True)
     (app_dir / "caddy" / "log" / "caddy").mkdir(parents=True, exist_ok=True)
     (app_dir / "caddy" / "log" / "php").mkdir(parents=True, exist_ok=True)
     (app_dir / "caddy" / "data").mkdir(parents=True, exist_ok=True)
     (app_dir / "caddy" / "config").mkdir(parents=True, exist_ok=True)
 
-    # PHP config directory
-    (app_dir / "php").mkdir(parents=True, exist_ok=True)
+    # PHP config directories (one per supported version)
+    for version in SUPPORTED_VERSIONS:
+        (app_dir / "php" / version).mkdir(parents=True, exist_ok=True)
 
     # Database directory (MariaDB data)
     (app_dir / "database").mkdir(parents=True, exist_ok=True)
@@ -180,11 +189,67 @@ def _cleanup_incorrect_directories(app_dir: Path) -> None:
         app_dir / "php" / "php-prod.ini",
     ]
 
+    # Also check versioned php directories
+    for version in SUPPORTED_VERSIONS:
+        should_be_files.append(app_dir / "php" / version / "php.ini")
+        should_be_files.append(app_dir / "php" / version / "php-prod.ini")
+
     for path in should_be_files:
         if path.exists() and path.is_dir():
             # This is a directory but should be a file - remove it
             shutil.rmtree(path)
             log_warning(f"Removed incorrectly created directory: {path}")
+
+
+def _distribute_php_configs(app_dir: Path) -> None:
+    """Copy base php.ini and php-prod.ini into each versioned php directory.
+
+    If php/php.ini exists at the root level (legacy layout), it is used as the source.
+    Otherwise, the files from the bundled resources are used.
+
+    Args:
+        app_dir: The application data directory.
+    """
+    base_php_ini = app_dir / "php" / "php.ini"
+    base_php_prod_ini = app_dir / "php" / "php-prod.ini"
+
+    for version in SUPPORTED_VERSIONS:
+        version_dir = app_dir / "php" / version
+        version_dir.mkdir(parents=True, exist_ok=True)
+
+        target_ini = version_dir / "php.ini"
+        target_prod_ini = version_dir / "php-prod.ini"
+
+        if not target_ini.exists() and base_php_ini.exists() and base_php_ini.is_file():
+            shutil.copy2(base_php_ini, target_ini)
+
+        if not target_prod_ini.exists() and base_php_prod_ini.exists() and base_php_prod_ini.is_file():
+            shutil.copy2(base_php_prod_ini, target_prod_ini)
+
+
+def ensure_php_version_config(app_dir: Path, php_version: str) -> None:
+    """Ensure php.ini files exist for a specific PHP version.
+
+    If the versioned directory doesn't have config files, copies from base php/ directory.
+
+    Args:
+        app_dir: The application data directory.
+        php_version: The PHP version string (e.g., "8.4").
+    """
+    version_dir = app_dir / "php" / php_version
+    version_dir.mkdir(parents=True, exist_ok=True)
+
+    base_php_ini = app_dir / "php" / "php.ini"
+    base_php_prod_ini = app_dir / "php" / "php-prod.ini"
+
+    target_ini = version_dir / "php.ini"
+    target_prod_ini = version_dir / "php-prod.ini"
+
+    if not target_ini.exists() and base_php_ini.exists() and base_php_ini.is_file():
+        shutil.copy2(base_php_ini, target_ini)
+
+    if not target_prod_ini.exists() and base_php_prod_ini.exists() and base_php_prod_ini.is_file():
+        shutil.copy2(base_php_prod_ini, target_prod_ini)
 
 
 def get_project_dir() -> Path:
