@@ -51,6 +51,81 @@ jobs:
       - name: Build binary
         run: python scripts/build.py --clean --release
 
+      - name: Warn about missing Apple signing secrets
+        if: runner.os == 'macOS' && env.APPLE_CERTIFICATE_BASE64 == ''
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+        run: |
+          echo "::warning::macOS binary will NOT be signed or notarized. Users will need to manually allow it in System Settings."
+          echo ""
+          echo "To enable code signing, add the following secrets in Settings > Secrets and variables > Actions:"
+          echo ""
+          echo "1. APPLE_CERTIFICATE_BASE64"
+          echo "   - Open Keychain Access, export your 'Developer ID Application' certificate as .p12"
+          echo "   - Encode it: base64 -i YourCertificate.p12 | pbcopy"
+          echo "   - Paste the result as the secret value"
+          echo ""
+          echo "2. APPLE_CERTIFICATE_PASSWORD"
+          echo "   - The password you chose when exporting the .p12 file"
+          echo ""
+          echo "3. APPLE_NOTARY_CREDENTIALS"
+          echo '   - A JSON object: {"apple_id": "your@email.com", "team_id": "XXXXXXXXXX", "app_specific_password": "xxxx-xxxx-xxxx-xxxx"}'
+          echo "   - Generate an app-specific password at https://appleid.apple.com/account/manage"
+          echo "   - Find your Team ID at https://developer.apple.com/account#MembershipDetailsCard"
+
+      - name: Sign and Notarize macOS binary
+        if: runner.os == 'macOS' && env.APPLE_CERTIFICATE_BASE64 != ''
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_NOTARY_CREDENTIALS: ${{ secrets.APPLE_NOTARY_CREDENTIALS }}
+        run: |
+          # Create temporary keychain
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Import certificate
+          CERT_PATH=$RUNNER_TEMP/certificate.p12
+          echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
+          security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain
+
+          # Find signing identity
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
+          echo "Signing with identity: $IDENTITY"
+
+          # Sign the binary
+          BINARY_PATH=$(ls dist/frankenmanager-*)
+          codesign --sign "$IDENTITY" --timestamp --options runtime --force "$BINARY_PATH"
+          codesign --verify --verbose "$BINARY_PATH"
+
+          # Notarize
+          NOTARY_CREDS=$(echo "$APPLE_NOTARY_CREDENTIALS" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['apple_id']); print(d['team_id']); print(d['app_specific_password'])")
+          APPLE_ID=$(echo "$NOTARY_CREDS" | sed -n '1p')
+          TEAM_ID=$(echo "$NOTARY_CREDS" | sed -n '2p')
+          APP_PASSWORD=$(echo "$NOTARY_CREDS" | sed -n '3p')
+
+          # Create zip for notarization
+          ZIP_PATH=$RUNNER_TEMP/frankenmanager.zip
+          ditto -c -k --keepParent "$BINARY_PATH" "$ZIP_PATH"
+
+          # Submit for notarization and wait
+          xcrun notarytool submit "$ZIP_PATH" \
+            --apple-id "$APPLE_ID" \
+            --team-id "$TEAM_ID" \
+            --password "$APP_PASSWORD" \
+            --wait --timeout 10m
+
+          echo "macOS binary signed and notarized successfully"
+
+          # Cleanup keychain
+          security delete-keychain "$KEYCHAIN_PATH"
+
       - name: Test binary (Unix)
         if: runner.os != 'Windows'
         run: |
