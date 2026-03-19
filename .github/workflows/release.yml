@@ -48,9 +48,6 @@ jobs:
           pip install -e .
           pip install pyinstaller
 
-      - name: Build binary
-        run: python scripts/build.py --clean --release
-
       - name: Warn about missing Apple signing secrets
         if: runner.os == 'macOS' && env.APPLE_CERTIFICATE_BASE64 == ''
         env:
@@ -73,12 +70,12 @@ jobs:
           echo "   - Generate an app-specific password at https://appleid.apple.com/account/manage"
           echo "   - Find your Team ID at https://developer.apple.com/account#MembershipDetailsCard"
 
-      - name: Sign and Notarize macOS binary
+      - name: Setup macOS code signing keychain
+        id: macos-keychain
         if: runner.os == 'macOS' && env.APPLE_CERTIFICATE_BASE64 != ''
         env:
           APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_NOTARY_CREDENTIALS: ${{ secrets.APPLE_NOTARY_CREDENTIALS }}
         run: |
           # Create temporary keychain
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
@@ -95,20 +92,39 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain
 
-          # Find signing identity
+          # Find signing identity and export for next steps
           IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
           echo "Signing with identity: $IDENTITY"
+          echo "identity=$IDENTITY" >> $GITHUB_OUTPUT
+          echo "keychain_path=$KEYCHAIN_PATH" >> $GITHUB_OUTPUT
+          echo "keychain_password=$KEYCHAIN_PASSWORD" >> $GITHUB_OUTPUT
 
-          # Sign the binary
+      - name: Build binary (macOS signed)
+        if: runner.os == 'macOS' && steps.macos-keychain.outputs.identity != ''
+        env:
+          CODESIGN_IDENTITY: ${{ steps.macos-keychain.outputs.identity }}
+          ENTITLEMENTS_FILE: entitlements.plist
+        run: python scripts/build.py --clean --release
+
+      - name: Build binary (unsigned)
+        if: runner.os != 'macOS' || steps.macos-keychain.outputs.identity == ''
+        run: python scripts/build.py --clean --release
+
+      - name: Notarize macOS binary
+        if: runner.os == 'macOS' && steps.macos-keychain.outputs.identity != ''
+        env:
+          APPLE_NOTARY_CREDENTIALS: ${{ secrets.APPLE_NOTARY_CREDENTIALS }}
+        run: |
           BINARY_PATH=$(ls dist/frankenmanager-*)
-          codesign --sign "$IDENTITY" --timestamp --options runtime --force "$BINARY_PATH"
-          codesign --verify --verbose "$BINARY_PATH"
 
-          # Notarize
-          NOTARY_CREDS=$(echo "$APPLE_NOTARY_CREDENTIALS" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['apple_id']); print(d['team_id']); print(d['app_specific_password'])")
-          APPLE_ID=$(echo "$NOTARY_CREDS" | sed -n '1p')
-          TEAM_ID=$(echo "$NOTARY_CREDS" | sed -n '2p')
-          APP_PASSWORD=$(echo "$NOTARY_CREDS" | sed -n '3p')
+          # Verify signature
+          codesign --verify --verbose "$BINARY_PATH"
+          echo "Binary signature verified"
+
+          # Parse notary credentials
+          APPLE_ID=$(echo "$APPLE_NOTARY_CREDENTIALS" | python3 -c "import sys,json; print(json.load(sys.stdin)['apple_id'])")
+          TEAM_ID=$(echo "$APPLE_NOTARY_CREDENTIALS" | python3 -c "import sys,json; print(json.load(sys.stdin)['team_id'])")
+          APP_PASSWORD=$(echo "$APPLE_NOTARY_CREDENTIALS" | python3 -c "import sys,json; print(json.load(sys.stdin)['app_specific_password'])")
 
           # Create zip for notarization
           ZIP_PATH=$RUNNER_TEMP/frankenmanager.zip
@@ -123,8 +139,9 @@ jobs:
 
           echo "macOS binary signed and notarized successfully"
 
-          # Cleanup keychain
-          security delete-keychain "$KEYCHAIN_PATH"
+      - name: Cleanup macOS keychain
+        if: always() && steps.macos-keychain.outputs.keychain_path != ''
+        run: security delete-keychain "${{ steps.macos-keychain.outputs.keychain_path }}"
 
       - name: Test binary (Unix)
         if: runner.os != 'Windows'
