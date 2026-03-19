@@ -75,6 +75,7 @@ def restart_server(force_ssl: bool, containers: Optional[list[str]] = None) -> N
                     for version in sorted(active_versions):
                         docker.restart_container(get_container_name(version))
                     from ..core.docker_manager import REVERSE_PROXY_CONTAINER  # noqa: PLC0415
+
                     docker.restart_container(REVERSE_PROXY_CONTAINER)
                 else:
                     actual_name = CONTAINER_MAP.get(container_name)

@@ -32,9 +32,7 @@ class CaddyfileGenerator:
         """Create a directory if it doesn't exist."""
         path.mkdir(parents=True, exist_ok=True)
 
-    def generate_for_version(
-        self, domains: list[str], php_version: str
-    ) -> None:
+    def generate_for_version(self, domains: list[str], php_version: str) -> None:
         """Generate Caddyfile configurations for domains into the version-specific directory.
 
         Args:
@@ -45,10 +43,7 @@ class CaddyfileGenerator:
         self._ensure_dir(version_dir)
 
         if not self.template_path.exists():
-            log_info(
-                f"Template not found at {self.template_path}, "
-                "skipping Caddyfile generation"
-            )
+            log_info(f"Template not found at {self.template_path}, skipping Caddyfile generation")
             return
 
         template = self.template_path.read_text()
@@ -76,10 +71,7 @@ class CaddyfileGenerator:
         self._ensure_dir(self.custom_dir)
 
         if not self.template_path.exists():
-            log_info(
-                f"Template not found at {self.template_path}, "
-                "skipping Caddyfile generation"
-            )
+            log_info(f"Template not found at {self.template_path}, skipping Caddyfile generation")
             return
 
         template = self.template_path.read_text()
@@ -98,9 +90,7 @@ class CaddyfileGenerator:
 
         log_success("Caddyfile configurations generated")
 
-    def generate_all_for_versions(
-        self, domains_versions: list[tuple[str, str]]
-    ) -> None:
+    def generate_all_for_versions(self, domains_versions: list[tuple[str, str]]) -> None:
         """Generate Caddyfile configs for all domains, grouped by PHP version.
 
         Args:
@@ -114,9 +104,7 @@ class CaddyfileGenerator:
         for version, domains in by_version.items():
             self.generate_for_version(domains, version)
 
-    def move_to_version(
-        self, domain: str, from_version: str, to_version: str
-    ) -> None:
+    def move_to_version(self, domain: str, from_version: str, to_version: str) -> None:
         """Move a domain's Caddyfile from one version directory to another.
 
         Args:
@@ -138,9 +126,7 @@ class CaddyfileGenerator:
             if dst_path.exists():
                 dst_path.unlink()
             shutil.move(str(src_path), str(dst_path))
-            log_info(
-                f"Moved {filename} from PHP {from_version} to PHP {to_version}"
-            )
+            log_info(f"Moved {filename} from PHP {from_version} to PHP {to_version}")
         else:
             # File might be in legacy custom dir
             legacy_path = self.custom_dir / filename
@@ -152,9 +138,7 @@ class CaddyfileGenerator:
             else:
                 log_warning(f"Caddyfile for {domain} not found")
 
-    def archive_from_version(
-        self, domains: list[str], php_version: str
-    ) -> None:
+    def archive_from_version(self, domains: list[str], php_version: str) -> None:
         """Archive Caddyfile configurations from a version directory.
 
         Args:
@@ -220,13 +204,9 @@ class CaddyfileGenerator:
                     shutil.move(str(caddyfile_path), str(archive_path))
                     log_info(f"Archived {filename}")
                 else:
-                    log_warning(
-                        f"Caddyfile for {domain} not found, skipping archive"
-                    )
+                    log_warning(f"Caddyfile for {domain} not found, skipping archive")
 
-    def restore_to_version(
-        self, domains: list[str], php_version: str
-    ) -> list[str]:
+    def restore_to_version(self, domains: list[str], php_version: str) -> list[str]:
         """Restore Caddyfile configurations from archive into a version directory.
 
         Args:
@@ -257,9 +237,7 @@ class CaddyfileGenerator:
                 log_info(f"Restored {simple_domain}_Caddyfile (PHP {php_version})")
                 restored_domains.append(full_domain)
             else:
-                log_warning(
-                    f"Archived Caddyfile for '{domain}' not found, skipping"
-                )
+                log_warning(f"Archived Caddyfile for '{domain}' not found, skipping")
 
         return restored_domains
 
@@ -292,9 +270,7 @@ class CaddyfileGenerator:
                 log_info(f"Restored {simple_domain}_Caddyfile")
                 restored_domains.append(full_domain)
             else:
-                log_warning(
-                    f"Archived Caddyfile for '{domain}' not found, skipping"
-                )
+                log_warning(f"Archived Caddyfile for '{domain}' not found, skipping")
 
         return restored_domains
 
@@ -328,26 +304,28 @@ class CaddyfileGenerator:
             # All containers use host network, so 127.0.0.1 works in both dev and prod
             upstream = f"127.0.0.1:{https_port}"
 
-            lines.extend([
-                f"{domain} {{",
-                f"\ttls /certs/{domain}.pem /certs/{domain}-key.pem",
-                f"\treverse_proxy https://{upstream} {{",
-                "\t\ttransport http {",
-                "\t\t\ttls_insecure_skip_verify",
-                "\t\t}",
-                f'\t\theader_up Host "{domain}"',
-                "\t}",
-                "\tlog {",
-                f"\t\toutput file /var/log/caddy/{simple_domain}_access.log {{",
-                "\t\t\troll_size 10mb",
-                "\t\t\troll_keep 5",
-                "\t\t\troll_keep_for 720h",
-                "\t\t}",
-                "\t\tformat console",
-                "\t}",
-                "}",
-                "",
-            ])
+            lines.extend(
+                [
+                    f"{domain} {{",
+                    f"\ttls /certs/{domain}.pem /certs/{domain}-key.pem",
+                    f"\treverse_proxy https://{upstream} {{",
+                    "\t\ttransport http {",
+                    "\t\t\ttls_insecure_skip_verify",
+                    "\t\t}",
+                    f'\t\theader_up Host "{domain}"',
+                    "\t}",
+                    "\tlog {",
+                    f"\t\toutput file /var/log/caddy/{simple_domain}_access.log {{",
+                    "\t\t\troll_size 10mb",
+                    "\t\t\troll_keep 5",
+                    "\t\t\troll_keep_for 720h",
+                    "\t\t}",
+                    "\t\tformat console",
+                    "\t}",
+                    "}",
+                    "",
+                ]
+            )
 
         main_caddyfile = caddy_dir / "Caddyfile"
         main_caddyfile.write_text("\n".join(lines) + "\n")
@@ -375,9 +353,7 @@ class CaddyfileGenerator:
 
         return archived
 
-    def _extract_domain_from_caddyfile(
-        self, caddyfile_path: Path
-    ) -> Optional[str]:
+    def _extract_domain_from_caddyfile(self, caddyfile_path: Path) -> Optional[str]:
         """Extract the full domain from a Caddyfile.
 
         Args:

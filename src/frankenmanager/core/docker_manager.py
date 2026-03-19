@@ -146,112 +146,122 @@ class DockerManager:
 
         # Database service
         if production:
-            lines.extend([
-                "  db:",
-                "    container_name: franken_mariadb",
-                "    image: mariadb:10.11.9",
-                "    restart: always",
-                "    command: --max-allowed-packet=${MYSQL_MAX_ALLOWED_PACKET:-512M}",
-                "    network_mode: host",
-                "    user: ${UID}:${GID}",
-                "    env_file: .env",
-                "    volumes:",
-                "      - ${DATABASE_DIR:-${PWD}/database}:/var/lib/mysql",
-                "    environment:",
-                "      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}",
-                "    healthcheck:",
-                '      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]',
-                "      interval: 10s",
-                "      timeout: 5s",
-                "      retries: 5",
-                "      start_period: 30s",
-                "",
-            ])
+            lines.extend(
+                [
+                    "  db:",
+                    "    container_name: franken_mariadb",
+                    "    image: mariadb:10.11.9",
+                    "    restart: always",
+                    "    command: --max-allowed-packet=${MYSQL_MAX_ALLOWED_PACKET:-512M}",
+                    "    network_mode: host",
+                    "    user: ${UID}:${GID}",
+                    "    env_file: .env",
+                    "    volumes:",
+                    "      - ${DATABASE_DIR:-${PWD}/database}:/var/lib/mysql",
+                    "    environment:",
+                    "      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}",
+                    "    healthcheck:",
+                    '      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]',
+                    "      interval: 10s",
+                    "      timeout: 5s",
+                    "      retries: 5",
+                    "      start_period: 30s",
+                    "",
+                ]
+            )
         else:
-            lines.extend([
-                "  db:",
-                "    container_name: franken_mariadb",
-                "    image: mariadb:10.11.9",
-                "    restart: always",
-                "    command: --max-allowed-packet=${MYSQL_MAX_ALLOWED_PACKET:-512M}",
-                "    user: ${UID}:${GID}",
-                "    env_file: .env",
-                "    volumes:",
-                "      - ${DATABASE_DIR:-./database}:/var/lib/mysql",
-                "    ports:",
-                "      - ${DB_PORT:-127.0.0.1:3306:3306}",
-                "    environment:",
-                "      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}",
-                "    networks:",
-                "      - franken_network",
-                "    healthcheck:",
-                '      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]',
-                "      interval: 10s",
-                "      timeout: 5s",
-                "      retries: 5",
-                "      start_period: 30s",
-                "",
-            ])
+            lines.extend(
+                [
+                    "  db:",
+                    "    container_name: franken_mariadb",
+                    "    image: mariadb:10.11.9",
+                    "    restart: always",
+                    "    command: --max-allowed-packet=${MYSQL_MAX_ALLOWED_PACKET:-512M}",
+                    "    user: ${UID}:${GID}",
+                    "    env_file: .env",
+                    "    volumes:",
+                    "      - ${DATABASE_DIR:-./database}:/var/lib/mysql",
+                    "    ports:",
+                    "      - ${DB_PORT:-127.0.0.1:3306:3306}",
+                    "    environment:",
+                    "      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}",
+                    "    networks:",
+                    "      - franken_network",
+                    "    healthcheck:",
+                    '      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]',
+                    "      interval: 10s",
+                    "      timeout: 5s",
+                    "      retries: 5",
+                    "      start_period: 30s",
+                    "",
+                ]
+            )
 
         # PhpMyAdmin (dev only)
         if not production:
-            lines.extend([
-                "  phpmyadmin:",
-                "    container_name: franken_phpmyadmin",
-                "    image: phpmyadmin:latest",
-                "    restart: always",
-                "    env_file: .env",
-                "    environment:",
-                "      PMA_HOST: franken_mariadb",
-                "      PMA_PORT: ${SIMPLE_DB_PORT:-3306}",
-                "      PMA_USER: root",
-                "      PMA_PASSWORD: ${MARIADB_ROOT_PASSWORD}",
-                "    ports:",
-                "      - ${PMA_PORT:-127.0.0.1:8080:80}",
-                "    depends_on:",
-                "      db:",
-                "        condition: service_healthy",
-                "    networks:",
-                "      - franken_network",
-                "",
-            ])
+            lines.extend(
+                [
+                    "  phpmyadmin:",
+                    "    container_name: franken_phpmyadmin",
+                    "    image: phpmyadmin:latest",
+                    "    restart: always",
+                    "    env_file: .env",
+                    "    environment:",
+                    "      PMA_HOST: franken_mariadb",
+                    "      PMA_PORT: ${SIMPLE_DB_PORT:-3306}",
+                    "      PMA_USER: root",
+                    "      PMA_PASSWORD: ${MARIADB_ROOT_PASSWORD}",
+                    "    ports:",
+                    "      - ${PMA_PORT:-127.0.0.1:8080:80}",
+                    "    depends_on:",
+                    "      db:",
+                    "        condition: service_healthy",
+                    "    networks:",
+                    "      - franken_network",
+                    "",
+                ]
+            )
 
         # Redis
         if production:
-            lines.extend([
-                "  cache:",
-                "    container_name: franken_redis",
-                "    image: redis:alpine",
-                "    restart: always",
-                "    network_mode: host",
-                "    command: redis-server",
-                "    healthcheck:",
-                '      test: ["CMD", "redis-cli", "ping"]',
-                "      interval: 10s",
-                "      timeout: 5s",
-                "      retries: 5",
-                "      start_period: 10s",
-                "",
-            ])
+            lines.extend(
+                [
+                    "  cache:",
+                    "    container_name: franken_redis",
+                    "    image: redis:alpine",
+                    "    restart: always",
+                    "    network_mode: host",
+                    "    command: redis-server",
+                    "    healthcheck:",
+                    '      test: ["CMD", "redis-cli", "ping"]',
+                    "      interval: 10s",
+                    "      timeout: 5s",
+                    "      retries: 5",
+                    "      start_period: 10s",
+                    "",
+                ]
+            )
         else:
-            lines.extend([
-                "  cache:",
-                "    container_name: franken_redis",
-                "    image: redis:alpine",
-                "    restart: always",
-                "    command: redis-server",
-                "    ports:",
-                "      - ${REDIS_PORT:-127.0.0.1:6379:6379}",
-                "    networks:",
-                "      - franken_network",
-                "    healthcheck:",
-                '      test: ["CMD", "redis-cli", "ping"]',
-                "      interval: 10s",
-                "      timeout: 5s",
-                "      retries: 5",
-                "      start_period: 10s",
-                "",
-            ])
+            lines.extend(
+                [
+                    "  cache:",
+                    "    container_name: franken_redis",
+                    "    image: redis:alpine",
+                    "    restart: always",
+                    "    command: redis-server",
+                    "    ports:",
+                    "      - ${REDIS_PORT:-127.0.0.1:6379:6379}",
+                    "    networks:",
+                    "      - franken_network",
+                    "    healthcheck:",
+                    '      test: ["CMD", "redis-cli", "ping"]',
+                    "      interval: 10s",
+                    "      timeout: 5s",
+                    "      retries: 5",
+                    "      start_period: 10s",
+                    "",
+                ]
+            )
 
         # Caddy reverse proxy container (listens on 80/443, proxies to FrankenPHP containers)
         depends_on_php = []
@@ -263,34 +273,38 @@ class DockerManager:
         # Host network ensures PHP containers can reach other domains via /etc/hosts
         # and access DB at 127.0.0.1:3306 (inter-project calls)
         if production:
-            lines.extend([
-                "  caddy-proxy:",
-                f"    container_name: {REVERSE_PROXY_CONTAINER}",
-                "    image: caddy:2-alpine",
-                "    restart: always",
-                "    network_mode: host",
-                "    volumes:",
-                "      - ${CADDY_DIR:-${PWD}/caddy}/Caddyfile:/etc/caddy/Caddyfile",
-                "      - ${CADDY_DIR:-${PWD}/caddy}/certs:/certs",
-                "      - ${CADDY_DIR:-${PWD}/caddy}/data:/data",
-                "      - ${CADDY_DIR:-${PWD}/caddy}/config:/config",
-                "      - ${CADDY_DIR:-${PWD}/caddy}/log:/var/log",
-                "      - /etc/letsencrypt:/etc/letsencrypt",
-            ])
+            lines.extend(
+                [
+                    "  caddy-proxy:",
+                    f"    container_name: {REVERSE_PROXY_CONTAINER}",
+                    "    image: caddy:2-alpine",
+                    "    restart: always",
+                    "    network_mode: host",
+                    "    volumes:",
+                    "      - ${CADDY_DIR:-${PWD}/caddy}/Caddyfile:/etc/caddy/Caddyfile",
+                    "      - ${CADDY_DIR:-${PWD}/caddy}/certs:/certs",
+                    "      - ${CADDY_DIR:-${PWD}/caddy}/data:/data",
+                    "      - ${CADDY_DIR:-${PWD}/caddy}/config:/config",
+                    "      - ${CADDY_DIR:-${PWD}/caddy}/log:/var/log",
+                    "      - /etc/letsencrypt:/etc/letsencrypt",
+                ]
+            )
         else:
-            lines.extend([
-                "  caddy-proxy:",
-                f"    container_name: {REVERSE_PROXY_CONTAINER}",
-                "    image: caddy:2-alpine",
-                "    restart: always",
-                "    network_mode: host",
-                "    volumes:",
-                "      - ${CADDY_DIR:-./caddy}/Caddyfile:/etc/caddy/Caddyfile",
-                "      - ${CADDY_DIR:-./caddy}/certs:/certs",
-                "      - ${CADDY_DIR:-./caddy}/data:/data",
-                "      - ${CADDY_DIR:-./caddy}/config:/config",
-                "      - ${CADDY_DIR:-./caddy}/log:/var/log",
-            ])
+            lines.extend(
+                [
+                    "  caddy-proxy:",
+                    f"    container_name: {REVERSE_PROXY_CONTAINER}",
+                    "    image: caddy:2-alpine",
+                    "    restart: always",
+                    "    network_mode: host",
+                    "    volumes:",
+                    "      - ${CADDY_DIR:-./caddy}/Caddyfile:/etc/caddy/Caddyfile",
+                    "      - ${CADDY_DIR:-./caddy}/certs:/certs",
+                    "      - ${CADDY_DIR:-./caddy}/data:/data",
+                    "      - ${CADDY_DIR:-./caddy}/config:/config",
+                    "      - ${CADDY_DIR:-./caddy}/log:/var/log",
+                ]
+            )
 
         if depends_on_php:
             lines.append("    depends_on:")
@@ -309,66 +323,72 @@ class DockerManager:
 
             if production:
                 # Production: host network
-                lines.extend([
-                    f"  {service_name}:",
-                    f"    container_name: {container_name}",
-                    f"    image: {image_name}",
-                    "    restart: always",
-                    "    network_mode: host",
-                    "    user: ${UID}:${GID}",
-                    "    environment:",
-                    f"      WEB_HTTP_PORT: '{http_port}'",
-                    f"      WEB_HTTPS_PORT: '{https_port}'",
-                    "    volumes:",
-                    "      - ${CUSTOM_PATH}:/${CUSTOM_PATH}",
-                    f"      - ${{CADDY_DIR:-${{PWD}}/caddy}}/sites/php-{version}"
-                    ":/etc/caddy/sites/custom",
-                    "      - ${CADDY_DIR:-${PWD}/caddy}/certs:/certs",
-                    "      - ${CADDY_DIR:-${PWD}/caddy}/log:/var/log",
-                    f"      - ${{PWD}}/{php_ini_dir}/php.ini"
-                    ":/usr/local/etc/php/php.ini",
-                    f"      - ${{PWD}}/{php_ini_dir}/php-prod.ini"
-                    ":/usr/local/etc/php/conf.d/99-production.ini",
-                    "    depends_on:",
-                    "      db:",
-                    "        condition: service_healthy",
-                    "      cache:",
-                    "        condition: service_healthy",
-                    "",
-                ])
+                lines.extend(
+                    [
+                        f"  {service_name}:",
+                        f"    container_name: {container_name}",
+                        f"    image: {image_name}",
+                        "    restart: always",
+                        "    network_mode: host",
+                        "    user: ${UID}:${GID}",
+                        "    environment:",
+                        f"      WEB_HTTP_PORT: '{http_port}'",
+                        f"      WEB_HTTPS_PORT: '{https_port}'",
+                        "    volumes:",
+                        "      - ${CUSTOM_PATH}:/${CUSTOM_PATH}",
+                        f"      - ${{CADDY_DIR:-${{PWD}}/caddy}}/sites/php-{version}"
+                        ":/etc/caddy/sites/custom",
+                        "      - ${CADDY_DIR:-${PWD}/caddy}/certs:/certs",
+                        "      - ${CADDY_DIR:-${PWD}/caddy}/log:/var/log",
+                        f"      - ${{PWD}}/{php_ini_dir}/php.ini:/usr/local/etc/php/php.ini",
+                        f"      - ${{PWD}}/{php_ini_dir}/php-prod.ini"
+                        ":/usr/local/etc/php/conf.d/99-production.ini",
+                        "    depends_on:",
+                        "      db:",
+                        "        condition: service_healthy",
+                        "      cache:",
+                        "        condition: service_healthy",
+                        "",
+                    ]
+                )
             else:
                 # Dev: host network so PHP apps can reach other domains
                 # via /etc/hosts and access DB at 127.0.0.1:3306
-                lines.extend([
-                    f"  {service_name}:",
-                    f"    container_name: {container_name}",
-                    f"    image: {image_name}",
-                    "    restart: always",
-                    "    network_mode: host",
-                    "    environment:",
-                    f"      WEB_HTTP_PORT: '{http_port}'",
-                    f"      WEB_HTTPS_PORT: '{https_port}'",
-                    "    volumes:",
-                    "      - ${CUSTOM_PATH}:/${CUSTOM_PATH}",
-                    f"      - ${{CADDY_DIR:-./caddy}}/sites/php-{version}:/etc/caddy/sites/custom",
-                    "      - ${CADDY_DIR:-./caddy}/certs:/certs",
-                    "      - ${CADDY_DIR:-./caddy}/log:/var/log",
-                    f"      - ./{php_ini_dir}/php.ini:/usr/local/etc/php/php.ini",
-                    "    depends_on:",
-                    "      db:",
-                    "        condition: service_healthy",
-                    "      cache:",
-                    "        condition: service_healthy",
-                    "",
-                ])
+                lines.extend(
+                    [
+                        f"  {service_name}:",
+                        f"    container_name: {container_name}",
+                        f"    image: {image_name}",
+                        "    restart: always",
+                        "    network_mode: host",
+                        "    environment:",
+                        f"      WEB_HTTP_PORT: '{http_port}'",
+                        f"      WEB_HTTPS_PORT: '{https_port}'",
+                        "    volumes:",
+                        "      - ${CUSTOM_PATH}:/${CUSTOM_PATH}",
+                        f"      - ${{CADDY_DIR:-./caddy}}/sites/php-{version}"
+                        ":/etc/caddy/sites/custom",
+                        "      - ${CADDY_DIR:-./caddy}/certs:/certs",
+                        "      - ${CADDY_DIR:-./caddy}/log:/var/log",
+                        f"      - ./{php_ini_dir}/php.ini:/usr/local/etc/php/php.ini",
+                        "    depends_on:",
+                        "      db:",
+                        "        condition: service_healthy",
+                        "      cache:",
+                        "        condition: service_healthy",
+                        "",
+                    ]
+                )
 
         # Networks (dev only)
         if not production:
-            lines.extend([
-                "networks:",
-                "  franken_network:",
-                "    driver: bridge",
-            ])
+            lines.extend(
+                [
+                    "networks:",
+                    "  franken_network:",
+                    "    driver: bridge",
+                ]
+            )
 
         return "\n".join(lines) + "\n"
 
