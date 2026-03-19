@@ -32,7 +32,6 @@ RUN install-php-extensions \
     mysqli \
     imagick \
     imap \
-    opcache \
     bcmath \
     exif \
     gmp \
