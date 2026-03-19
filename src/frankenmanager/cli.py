@@ -7,6 +7,7 @@ import typer
 from rich.console import Console
 
 from . import __version__
+from .core.php_versions import DEFAULT_PHP_VERSION, SUPPORTED_VERSIONS
 
 app = typer.Typer(
     name="frankenmanager",
@@ -15,6 +16,8 @@ app = typer.Typer(
 )
 
 console = Console()
+
+_php_version_help = f"PHP version to use ({', '.join(SUPPORTED_VERSIONS)})"
 
 
 def version_callback(value: bool) -> None:
@@ -60,6 +63,11 @@ def start(
         help="Project root path (uses DEFAULT_PROJECT_PATH from .env if not set)",
     ),
     force_ssl: bool = typer.Option(False, "--force-ssl", help="Force SSL certificate regeneration"),
+    php: str = typer.Option(
+        DEFAULT_PHP_VERSION,
+        "--php",
+        help=_php_version_help,
+    ),
 ) -> None:
     """Start the FrankenPHP development server.
 
@@ -69,13 +77,14 @@ def start(
     Examples:
         frankenmanager start "myapp.test"
         frankenmanager start "myapp.test api.test" --path /home/projects
+        frankenmanager start "myapp.test" --php 8.4
         frankenmanager start  # Uses registered domains from database
     """
     from .commands.start import start_server
 
     domain_list = domains.split() if domains else None
     custom_path = Path(path) if path else None
-    start_server(domain_list, custom_path, force_ssl)
+    start_server(domain_list, custom_path, force_ssl, php)
 
 
 @app.command()
@@ -128,6 +137,11 @@ def restart(
 def add_host_cmd(
     domains: str = typer.Argument(..., help="Space-separated domain names to add"),
     force_ssl: bool = typer.Option(False, "--force-ssl", help="Force SSL certificate regeneration"),
+    php: str = typer.Option(
+        DEFAULT_PHP_VERSION,
+        "--php",
+        help=_php_version_help,
+    ),
 ) -> None:
     """Add new host(s) to the running server.
 
@@ -136,12 +150,13 @@ def add_host_cmd(
 
     Examples:
         frankenmanager add-host "newapp.test"
-        frankenmanager add-host "app1.test app2.test" --force-ssl
+        frankenmanager add-host "app1.test app2.test" --php 8.4
+        frankenmanager add-host "legacy.test" --php 8.2 --force-ssl
     """
     from .commands.add_host import add_host
 
     domain_list = domains.split()
-    add_host(domain_list, force_ssl)
+    add_host(domain_list, force_ssl, php)
 
 
 @app.command(name="remove-host")
@@ -171,6 +186,11 @@ def restore_host_cmd(
     domains: Optional[str] = typer.Argument(None, help="Space-separated domain names to restore"),
     list_archived: bool = typer.Option(False, "--list", "-l", help="List all archived hosts"),
     force_ssl: bool = typer.Option(False, "--force-ssl", help="Force SSL certificate regeneration"),
+    php: str = typer.Option(
+        DEFAULT_PHP_VERSION,
+        "--php",
+        help=_php_version_help,
+    ),
 ) -> None:
     """Restore archived host(s) to the running server.
 
@@ -180,7 +200,7 @@ def restore_host_cmd(
     Examples:
         frankenmanager restore-host --list
         frankenmanager restore-host "myapp.test"
-        frankenmanager restore-host "app1.test app2.test" --force-ssl
+        frankenmanager restore-host "app1.test" --php 8.5
     """
     from .commands.restore_host import list_archived_hosts, restore_host
 
@@ -195,7 +215,41 @@ def restore_host_cmd(
         raise typer.Exit(1)
 
     domain_list = domains.split()
-    restore_host(domain_list, force_ssl)
+    restore_host(domain_list, force_ssl, php)
+
+
+@app.command(name="switch-php")
+def switch_php_cmd(
+    domain: str = typer.Argument(..., help="Domain name to switch"),
+    php: str = typer.Option(
+        ...,
+        "--php",
+        help=_php_version_help,
+    ),
+) -> None:
+    """Switch the PHP version for a domain without restarting unrelated containers.
+
+    Examples:
+        frankenmanager switch-php "myapp.test" --php 8.5
+        frankenmanager switch-php "legacy.test" --php 8.2
+    """
+    from .commands.switch_php import switch_php
+
+    switch_php(domain, php)
+
+
+@app.command(name="list")
+def list_cmd() -> None:
+    """List all registered domains with their PHP versions.
+
+    Works whether the server is running or stopped.
+
+    Examples:
+        frankenmanager list
+    """
+    from .commands.list_hosts import list_hosts
+
+    list_hosts()
 
 
 @app.command()
@@ -289,8 +343,6 @@ def reset(
     The server must be stopped before running this command.
 
     NOTE: This does NOT affect your MariaDB database data.
-
-    ⚠️  WARNING: This action cannot be undone!
 
     Examples:
         frankenmanager reset --db                 # Reset domain list configuration

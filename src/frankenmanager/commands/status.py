@@ -5,6 +5,7 @@ from rich.table import Table
 
 from ..core.database import DatabaseManager
 from ..core.docker_manager import DockerManager
+from ..core.php_versions import get_container_name
 from ..core.resources import get_project_dir
 
 console = Console()
@@ -19,7 +20,8 @@ def show_status() -> None:
 
     # Get real-time status from Docker containers
     is_running = db.is_running
-    domains = db.get_domains()
+    domains_with_versions = db.get_domains_with_versions()
+    active_versions = db.get_active_php_versions()
 
     console.print("\n[bold]=== FrankenPHP Server Status ===[/bold]\n")
 
@@ -27,41 +29,56 @@ def show_status() -> None:
     status_color = "green" if is_running else "red"
     console.print(f"Status: [{status_color}]{status}[/]")
 
-    # Show domains if configured
-    if domains:
+    # Show domains with PHP versions
+    if domains_with_versions:
         console.print("\n[bold]Domains:[/bold]")
-        for domain in domains:
-            console.print(f"  - https://{domain}")
+        domain_table = Table(show_header=True, header_style="bold")
+        domain_table.add_column("Domain", width=30)
+        domain_table.add_column("PHP Version", width=12)
 
-    # Always show container status
+        for domain, php_version in domains_with_versions:
+            domain_table.add_row(f"https://{domain}", f"PHP {php_version}")
+
+        console.print(domain_table)
+
+    # Show container status
     console.print("\n[bold]Containers:[/bold]")
     table = Table(show_header=True, header_style="bold")
     table.add_column("Container", width=25)
     table.add_column("Status", width=12)
     table.add_column("Health", width=12)
 
-    for container in DockerManager.CONTAINERS:
-        status_info = docker.get_container_status(container)
-        status = status_info["status"]
-        health = status_info["health"]
+    # FrankenPHP containers (one per active version)
+    for version in sorted(active_versions):
+        container_name = get_container_name(version)
+        _add_container_row(table, docker, container_name)
 
-        # Color coding
-        if status == "running":
-            status_str = f"[green]{status}[/]"
-        elif status == "not found":
-            status_str = f"[dim]{status}[/]"
-        else:
-            status_str = f"[red]{status}[/]"
-
-        if health == "healthy":
-            health_str = f"[green]{health}[/]"
-        elif health == "N/A":
-            health_str = f"[dim]{health}[/]"
-        else:
-            health_str = f"[yellow]{health}[/]"
-
-        table.add_row(container, status_str, health_str)
+    # Infrastructure containers
+    for container in DockerManager.INFRA_CONTAINERS:
+        _add_container_row(table, docker, container)
 
     console.print(table)
-
     console.print()
+
+
+def _add_container_row(table: Table, docker: DockerManager, container: str) -> None:
+    """Add a container status row to the table."""
+    status_info = docker.get_container_status(container)
+    status = status_info["status"]
+    health = status_info["health"]
+
+    if status == "running":
+        status_str = f"[green]{status}[/]"
+    elif status == "not found":
+        status_str = f"[dim]{status}[/]"
+    else:
+        status_str = f"[red]{status}[/]"
+
+    if health == "healthy":
+        health_str = f"[green]{health}[/]"
+    elif health == "N/A":
+        health_str = f"[dim]{health}[/]"
+    else:
+        health_str = f"[yellow]{health}[/]"
+
+    table.add_row(container, status_str, health_str)
