@@ -336,6 +336,7 @@ class DockerManager:
                         f"      WEB_HTTPS_PORT: '{https_port}'",
                         "    volumes:",
                         "      - ${CUSTOM_PATH}:/${CUSTOM_PATH}",
+                        "      - ${CADDY_DIR:-${PWD}/caddy}/Caddyfile.worker:/etc/caddy/Caddyfile",
                         f"      - ${{CADDY_DIR:-${{PWD}}/caddy}}/sites/php-{version}"
                         ":/etc/caddy/sites/custom",
                         "      - ${CADDY_DIR:-${PWD}/caddy}/certs:/certs",
@@ -366,6 +367,7 @@ class DockerManager:
                         f"      WEB_HTTPS_PORT: '{https_port}'",
                         "    volumes:",
                         "      - ${CUSTOM_PATH}:/${CUSTOM_PATH}",
+                        "      - ${CADDY_DIR:-./caddy}/Caddyfile.worker:/etc/caddy/Caddyfile",
                         f"      - ${{CADDY_DIR:-./caddy}}/sites/php-{version}"
                         ":/etc/caddy/sites/custom",
                         "      - ${CADDY_DIR:-./caddy}/certs:/certs",

@@ -1,0 +1,11 @@
+{
+	http_port {$WEB_HTTP_PORT:80}
+	https_port {$WEB_HTTPS_PORT:443}
+	frankenphp {
+		num_threads 64
+	}
+	order php_server before file_server
+}
+
+#import /etc/caddy/sites/default/*
+import /etc/caddy/sites/custom/*

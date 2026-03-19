@@ -184,6 +184,7 @@ def _cleanup_incorrect_directories(app_dir: Path) -> None:
     # List of paths that should be files, not directories
     should_be_files = [
         app_dir / "caddy" / "Caddyfile",
+        app_dir / "caddy" / "Caddyfile.worker",
         app_dir / "caddy" / "Caddyfile.template",
         app_dir / "php" / "php.ini",
         app_dir / "php" / "php-prod.ini",
