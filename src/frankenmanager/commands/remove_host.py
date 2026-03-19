@@ -8,6 +8,7 @@ from ..core.database import DatabaseManager
 from ..core.docker_manager import DockerManager
 from ..core.environment import EnvironmentManager
 from ..core.hosts_manager import HostsManager
+from ..core.php_versions import get_container_name
 from ..core.resources import get_project_dir
 from ..exceptions import ServerStateError
 from ..utils.logging import log_error, log_info, log_success, log_warning
@@ -50,8 +51,10 @@ def remove_host(domains: list[str]) -> None:
     if not db.is_running:
         raise ServerStateError("The server is not running.")
 
-    # Get existing domains
-    existing_domains = db.get_domains()
+    # Get existing domains with versions
+    existing = db.get_domains_with_versions()
+    existing_domains = [d for d, _ in existing]
+    domain_version_map = {d: v for d, v in existing}
 
     # Validate domains to remove
     domains_to_remove: list[str] = []
@@ -77,7 +80,14 @@ def remove_host(domains: list[str]) -> None:
     caddy_dir = _resolve_path(env.get("CADDY_DIR"), "./caddy", project_dir)
 
     hosts = HostsManager()
-    caddyfile = CaddyfileGenerator(project_dir, caddy_dir / "sites" / "custom")
+    caddyfile = CaddyfileGenerator(project_dir, caddy_dir / "sites")
+
+    # Determine which PHP versions will lose all their domains
+    versions_before = db.get_active_php_versions()
+    versions_to_remove_from: dict[str, list[str]] = {}
+    for domain in domains_to_remove:
+        version = domain_version_map[domain]
+        versions_to_remove_from.setdefault(version, []).append(domain)
 
     try:
         log_info(f"Removing {len(domains_to_remove)} domain(s)...")
@@ -97,17 +107,43 @@ def remove_host(domains: list[str]) -> None:
         # Update database to remove domains
         db.remove_domains(domains_to_remove)
 
-        # Restart only the webserver container to apply changes
-        log_info("Restarting FrankenPHP container...")
-        if docker.restart_container("webserver-and-caddy"):
-            print()
-            log_success("Host(s) removed successfully!")
-            log_info("Removed domains:")
-            for domain in domains_to_remove:
-                log_info(f"  - {domain}")
-            log_info(f"\nCaddyfiles archived to: {caddyfile.archive_dir}")
-        else:
-            raise ServerStateError("Failed to restart webserver container.")
+        # Check which versions still have domains after removal
+        versions_after = db.get_active_php_versions()
+        orphaned_versions = versions_before - versions_after
+
+        # Stop containers for versions that have no more domains
+        for version in orphaned_versions:
+            container_name = get_container_name(version)
+            log_info(f"Stopping {container_name} (no more domains)...")
+            docker.stop_container(container_name)
+
+        # Restart remaining FrankenPHP containers to apply Caddyfile changes
+        affected_versions = {v for v in versions_to_remove_from if v in versions_after}
+        for version in affected_versions:
+            container_name = get_container_name(version)
+            log_info(f"Restarting {container_name}...")
+            docker.restart_container(container_name)
+
+        # Regenerate compose file without orphaned versions
+        if orphaned_versions:
+            docker.generate_compose_file(versions_after, {}, env.is_production())
+
+        # Regenerate main reverse proxy Caddyfile
+        remaining_domains_versions = db.get_domains_with_versions()
+        caddyfile.generate_main_caddyfile(remaining_domains_versions, caddy_dir, env.is_production())
+
+        # Restart the reverse proxy
+        from ..core.docker_manager import REVERSE_PROXY_CONTAINER  # noqa: PLC0415
+
+        log_info("Restarting reverse proxy...")
+        docker.restart_container(REVERSE_PROXY_CONTAINER)
+
+        print()
+        log_success("Host(s) removed successfully!")
+        log_info("Removed domains:")
+        for domain in domains_to_remove:
+            log_info(f"  - {domain} (PHP {domain_version_map[domain]})")
+        log_info(f"\nCaddyfiles archived to: {caddyfile.archive_dir}")
 
     except Exception as e:
         log_error(f"An error occurred: {e}")

@@ -6,6 +6,7 @@ from ..core.database import DatabaseManager
 from ..core.docker_manager import DockerManager
 from ..core.environment import EnvironmentManager
 from ..core.password_manager import PasswordManager
+from ..core.php_versions import get_container_name
 from ..core.resources import get_project_dir
 from ..core.ssl_manager import SSLManager
 from ..exceptions import ServerStateError
@@ -13,7 +14,6 @@ from ..utils.logging import log_info, log_success
 
 # Map friendly names to actual container names
 CONTAINER_MAP = {
-    "caddy": "webserver-and-caddy",
     "database": "franken_mariadb",
     "cache": "franken_redis",
     "phpmyadmin": "franken_phpmyadmin",
@@ -43,6 +43,9 @@ def restart_server(force_ssl: bool, containers: Optional[list[str]] = None) -> N
     if not db.is_running:
         raise ServerStateError("The server is not running.")
 
+    # Get active PHP versions
+    active_versions = db.get_active_php_versions()
+
     # Determine if we're restarting all or specific containers
     restart_all = containers is None or len(containers) == 0
     restart_caddy = restart_all or (containers is not None and "caddy" in containers)
@@ -63,13 +66,20 @@ def restart_server(force_ssl: bool, containers: Optional[list[str]] = None) -> N
 
     # Restart containers
     if restart_all:
-        docker.restart_all()
+        docker.restart_all(active_versions)
     else:
         if containers:
             for container_name in containers:
-                actual_name = CONTAINER_MAP.get(container_name)
-                if actual_name:
-                    docker.restart_container(actual_name)
+                if container_name == "caddy":
+                    # Restart all FrankenPHP containers and the reverse proxy
+                    for version in sorted(active_versions):
+                        docker.restart_container(get_container_name(version))
+                    from ..core.docker_manager import REVERSE_PROXY_CONTAINER  # noqa: PLC0415
+                    docker.restart_container(REVERSE_PROXY_CONTAINER)
+                else:
+                    actual_name = CONTAINER_MAP.get(container_name)
+                    if actual_name:
+                        docker.restart_container(actual_name)
 
     # Sync password if restarting database
     if restart_db:

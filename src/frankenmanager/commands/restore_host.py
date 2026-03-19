@@ -11,7 +11,8 @@ from ..core.database import DatabaseManager
 from ..core.docker_manager import DockerManager
 from ..core.environment import EnvironmentManager
 from ..core.hosts_manager import HostsManager
-from ..core.resources import get_project_dir
+from ..core.php_versions import DEFAULT_PHP_VERSION, get_container_name, validate_php_version
+from ..core.resources import ensure_php_version_config, get_project_dir
 from ..core.ssl_manager import SSLManager
 from ..exceptions import ServerStateError
 from ..utils.logging import log_error, log_info, log_success
@@ -44,7 +45,7 @@ def list_archived_hosts() -> None:
     env.load()
 
     caddy_dir = _resolve_path(env.get("CADDY_DIR"), "./caddy", project_dir)
-    caddyfile = CaddyfileGenerator(project_dir, caddy_dir / "sites" / "custom")
+    caddyfile = CaddyfileGenerator(project_dir, caddy_dir / "sites")
 
     archived = caddyfile.list_archived()
 
@@ -68,13 +69,18 @@ def list_archived_hosts() -> None:
     log_info("Use 'frankenmanager restore-host \"domain.test\"' to restore a host.")
 
 
-def restore_host(domains: list[str], force_ssl: bool) -> None:
+def restore_host(
+    domains: list[str], force_ssl: bool, php_version: str = DEFAULT_PHP_VERSION
+) -> None:
     """Restore host(s) from archive to the running server.
 
     Args:
         domains: List of domain names to restore.
         force_ssl: Whether to force SSL certificate regeneration.
+        php_version: PHP version for the restored domains.
     """
+    validate_php_version(php_version)
+
     project_dir = get_project_dir()
 
     # Initialize managers
@@ -96,7 +102,7 @@ def restore_host(domains: list[str], force_ssl: bool) -> None:
 
     ssl = SSLManager(caddy_dir / "certs")
     hosts = HostsManager()
-    caddyfile = CaddyfileGenerator(project_dir, caddy_dir / "sites" / "custom")
+    caddyfile = CaddyfileGenerator(project_dir, caddy_dir / "sites")
 
     # Filter out domains that are already active
     domains_to_restore: list[str] = []
@@ -116,14 +122,21 @@ def restore_host(domains: list[str], force_ssl: bool) -> None:
         log_info("No domains to restore.")
         return
 
+    # Check if we need a new PHP version container
+    active_versions = db.get_active_php_versions()
+    need_new_container = php_version not in active_versions
+
+    # Ensure php.ini exists for this version
+    ensure_php_version_config(project_dir, php_version)
+
     hosts_added: list[str] = []
 
     try:
-        log_info(f"Restoring {len(domains_to_restore)} domain(s)...")
+        log_info(f"Restoring {len(domains_to_restore)} domain(s) with PHP {php_version}...")
 
-        # Restore Caddyfiles from archive
+        # Restore Caddyfiles from archive into version directory
         log_info("Restoring Caddyfiles...")
-        restored_domains = caddyfile.restore(domains_to_restore)
+        restored_domains = caddyfile.restore_to_version(domains_to_restore, php_version)
 
         if not restored_domains:
             log_info("No Caddyfiles were restored.")
@@ -140,18 +153,63 @@ def restore_host(domains: list[str], force_ssl: bool) -> None:
             hosts_added.append(domain)
 
         # Update database with restored domains
-        db.add_domains(restored_domains)
+        db.add_domains(restored_domains, php_version)
 
-        # Restart only the webserver container to apply changes
-        log_info("Restarting FrankenPHP container...")
-        if docker.restart_container("webserver-and-caddy"):
-            print()
-            log_success("Host(s) restored successfully!")
-            log_info("Restored domains:")
-            for domain in restored_domains:
-                log_info(f"  - https://{domain}")
+        if need_new_container:
+            # Build and start a new container for this PHP version
+            log_info(f"Building Docker image for PHP {php_version}...")
+            custom_path = env.get("DEFAULT_PROJECT_PATH") or ""
+            docker.build_image(custom_path, php_version, env.get("WWWGROUP") or "")
+
+            # Regenerate compose file with the new version
+            all_versions = active_versions | {php_version}
+            docker.generate_compose_file(all_versions, {}, env.is_production())
+
+            log_info(f"Starting PHP {php_version} container...")
+            expose = env.get("EXPOSE_SERVICES") == "true"
+            localhost = "" if expose else "127.0.0.1:"
+            db_port = env.get("DB_PORT") or "3306"
+            pma_port = env.get("PMA_PORT") or "8080"
+            redis_port = env.get("REDIS_PORT") or "6379"
+            database_dir = _resolve_path(env.get("DATABASE_DIR"), "./database", project_dir)
+
+            env_vars = {
+                "CUSTOM_PATH": custom_path,
+                "UID": env.require("UID"),
+                "GID": env.require("GID"),
+                "SIMPLE_DB_PORT": db_port,
+                "DB_PORT": f"{localhost}{db_port}:3306",
+                "PMA_PORT": f"{localhost}{pma_port}:80",
+                "REDIS_PORT": f"{localhost}{redis_port}:6379",
+                "WEB_HTTP_PORT": env.get("WEB_HTTP_PORT") or "80",
+                "WEB_HTTPS_PORT": env.get("WEB_HTTPS_PORT") or "443",
+                "MARIADB_ROOT_PASSWORD": env.require("MARIADB_ROOT_PASSWORD"),
+                "MYSQL_MAX_ALLOWED_PACKET": env.get("MYSQL_MAX_ALLOWED_PACKET") or "512M",
+                "PWD": str(project_dir),
+                "CADDY_DIR": str(caddy_dir),
+                "DATABASE_DIR": str(database_dir),
+            }
+            docker.compose_up(env_vars, env.is_production())
         else:
-            raise ServerStateError("Failed to restart webserver container.")
+            # Just restart the existing container
+            container_name = get_container_name(php_version)
+            log_info(f"Restarting {container_name}...")
+            docker.restart_container(container_name)
+
+        # Regenerate main reverse proxy Caddyfile and restart proxy
+        all_domains_versions = db.get_domains_with_versions()
+        caddyfile.generate_main_caddyfile(all_domains_versions, caddy_dir, env.is_production())
+
+        from ..core.docker_manager import REVERSE_PROXY_CONTAINER  # noqa: PLC0415
+
+        log_info("Restarting reverse proxy...")
+        docker.restart_container(REVERSE_PROXY_CONTAINER)
+
+        print()
+        log_success("Host(s) restored successfully!")
+        log_info("Restored domains:")
+        for domain in restored_domains:
+            log_info(f"  - https://{domain} (PHP {php_version})")
 
     except Exception as e:
         # Cleanup on failure
