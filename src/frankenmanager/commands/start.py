@@ -177,8 +177,11 @@ def start_server(
             hosts.add_entry("127.0.0.1", domain)
             hosts_added.append(domain)
 
-        # Generate per-version Caddyfiles
+        # Generate per-version Caddyfiles (new domains only)
         caddyfile.generate_all_for_versions(domains_with_versions)
+
+        # Migrate existing Caddyfiles from TLS to HTTP-only worker format
+        caddyfile.migrate_worker_caddyfiles()
 
         # Generate main reverse proxy Caddyfile
         caddyfile.generate_main_caddyfile(domains_with_versions, caddy_dir, env.is_production())
