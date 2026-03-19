@@ -298,20 +298,17 @@ class CaddyfileGenerator:
         ]
 
         for domain, php_version in domains_versions:
-            _, https_port = get_internal_ports(php_version)
+            http_port, _ = get_internal_ports(php_version)
             simple_domain = domain.rsplit(".", 1)[0]
 
-            # All containers use host network, so 127.0.0.1 works in both dev and prod
-            upstream = f"127.0.0.1:{https_port}"
+            # Use HTTP internally — no need for TLS between proxy and workers
+            upstream = f"127.0.0.1:{http_port}"
 
             lines.extend(
                 [
                     f"{domain} {{",
                     f"\ttls /certs/{domain}.pem /certs/{domain}-key.pem",
-                    f"\treverse_proxy https://{upstream} {{",
-                    "\t\ttransport http {",
-                    "\t\t\ttls_insecure_skip_verify",
-                    "\t\t}",
+                    f"\treverse_proxy {upstream} {{",
                     f'\t\theader_up Host "{domain}"',
                     "\t}",
                     "\tlog {",
