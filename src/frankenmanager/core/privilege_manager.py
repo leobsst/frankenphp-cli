@@ -8,11 +8,16 @@ sudo for every command.
 from __future__ import annotations
 
 import os
+import platform
 import shutil
 import subprocess
 import tempfile
+import urllib.request
 from pathlib import Path
 from typing import Union
+
+if platform.system() != "Windows":
+    import pwd
 
 from ..exceptions import ConfigurationError
 from ..utils.logging import log_error, log_info, log_success, log_warning
@@ -220,8 +225,6 @@ elseif ($Action -eq "remove") {{
         Returns:
             Sudoers configuration content.
         """
-        import pwd
-
         helper_path = self.get_helper_script_path()
         # When running under sudo, os.getuid() returns 0 (root).
         # Use SUDO_USER to get the real user who invoked sudo.
@@ -644,9 +647,6 @@ Or download from: https://github.com/FiloSottile/mkcert/releases"""
 
     def _install_linux(self) -> bool:
         """Install mkcert on Linux."""
-        import platform
-        import urllib.request
-
         # Determine architecture
         machine = platform.machine().lower()
         if machine in ("x86_64", "amd64"):
