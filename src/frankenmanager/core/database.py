@@ -44,7 +44,8 @@ class DatabaseManager:
             columns = [row[1] for row in cursor.fetchall()]
             if "php_version" not in columns:
                 cursor.execute(
-                    f"ALTER TABLE domains ADD COLUMN php_version TEXT NOT NULL DEFAULT '{DEFAULT_PHP_VERSION}'"
+                    "ALTER TABLE domains ADD COLUMN "
+                    f"php_version TEXT NOT NULL DEFAULT '{DEFAULT_PHP_VERSION}'"
                 )
 
             conn.commit()

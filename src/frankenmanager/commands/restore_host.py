@@ -11,7 +11,11 @@ from ..core.database import DatabaseManager
 from ..core.docker_manager import DockerManager
 from ..core.environment import EnvironmentManager
 from ..core.hosts_manager import HostsManager
-from ..core.php_versions import get_container_name, resolve_default_php_version, validate_php_version
+from ..core.php_versions import (
+    get_container_name,
+    resolve_default_php_version,
+    validate_php_version,
+)
 from ..core.resources import ensure_php_version_config, get_project_dir
 from ..core.ssl_manager import SSLManager
 from ..exceptions import ServerStateError
@@ -70,7 +74,7 @@ def list_archived_hosts() -> None:
 
 
 def restore_host(
-    domains: list[str], force_ssl: bool, php_version: str | None = None
+    domains: list[str], force_ssl: bool, php_version: Optional[str] = None
 ) -> None:
     """Restore host(s) from archive to the running server.
 
@@ -86,7 +90,8 @@ def restore_host(
     env.load()
 
     # Resolve PHP version from --php flag, .env, or fallback
-    php_version = resolve_default_php_version(env.get("DEFAULT_PHP_VERSION")) if php_version is None else php_version
+    if php_version is None:
+        php_version = resolve_default_php_version(env.get("DEFAULT_PHP_VERSION"))
     validate_php_version(php_version)
 
     docker = DockerManager(project_dir)

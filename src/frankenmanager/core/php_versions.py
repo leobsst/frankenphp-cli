@@ -1,5 +1,7 @@
 """PHP version management and Docker image tag mapping."""
 
+from typing import Optional
+
 # Mapping of PHP versions to their FrankenPHP Docker image tags
 PHP_IMAGE_TAGS: dict[str, str] = {
     "8.2": "latest-php8.2",
@@ -24,7 +26,7 @@ PHP_INTERNAL_PORTS: dict[str, tuple[int, int]] = {
 DEFAULT_PHP_VERSION = "8.3"
 
 
-def resolve_default_php_version(env_value: str | None) -> str:
+def resolve_default_php_version(env_value: Optional[str]) -> str:
     """Resolve the default PHP version from .env or fallback.
 
     Args:

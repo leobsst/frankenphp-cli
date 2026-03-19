@@ -54,7 +54,7 @@ class DockerManager:
                 raise DockerError(f"Cannot connect to Docker: {e}")
         return self._client
 
-    def get_all_containers(self, php_versions: set[str] | None = None) -> list[str]:
+    def get_all_containers(self, php_versions: Optional[set[str]] = None) -> list[str]:
         """Get the list of all container names including PHP version containers.
 
         Args:
@@ -321,11 +321,14 @@ class DockerManager:
                     f"      WEB_HTTPS_PORT: '{https_port}'",
                     "    volumes:",
                     "      - ${CUSTOM_PATH}:/${CUSTOM_PATH}",
-                    f"      - ${{CADDY_DIR:-${{PWD}}/caddy}}/sites/php-{version}:/etc/caddy/sites/custom",
+                    f"      - ${{CADDY_DIR:-${{PWD}}/caddy}}/sites/php-{version}"
+                    ":/etc/caddy/sites/custom",
                     "      - ${CADDY_DIR:-${PWD}/caddy}/certs:/certs",
                     "      - ${CADDY_DIR:-${PWD}/caddy}/log:/var/log",
-                    f"      - ${{PWD}}/{php_ini_dir}/php.ini:/usr/local/etc/php/php.ini",
-                    f"      - ${{PWD}}/{php_ini_dir}/php-prod.ini:/usr/local/etc/php/conf.d/99-production.ini",
+                    f"      - ${{PWD}}/{php_ini_dir}/php.ini"
+                    ":/usr/local/etc/php/php.ini",
+                    f"      - ${{PWD}}/{php_ini_dir}/php-prod.ini"
+                    ":/usr/local/etc/php/conf.d/99-production.ini",
                     "    depends_on:",
                     "      db:",
                     "        condition: service_healthy",
@@ -433,7 +436,7 @@ class DockerManager:
         except Exception:
             return False
 
-    def restart_all(self, php_versions: set[str] | None = None) -> None:
+    def restart_all(self, php_versions: Optional[set[str]] = None) -> None:
         """Restart all containers.
 
         Args:

@@ -64,7 +64,8 @@ def start_server(
     env.load()
 
     # Resolve PHP version from --php flag, .env, or fallback
-    php_version = resolve_default_php_version(env.get("DEFAULT_PHP_VERSION")) if php_version is None else php_version
+    if php_version is None:
+        php_version = resolve_default_php_version(env.get("DEFAULT_PHP_VERSION"))
     validate_php_version(php_version)
 
     # Check required environment variables
@@ -113,6 +114,8 @@ def start_server(
     registered_domains = [d for d, _ in registered]
     registered_map = {d: v for d, v in registered}
 
+    domains_with_versions: list[tuple[str, str]] = []
+
     if domains is None:
         # No domains provided, use registered ones
         if not registered:
@@ -123,7 +126,6 @@ def start_server(
         log_info(f"Using registered domains: {', '.join(registered_domains)}")
     else:
         # Merge provided domains with registered ones
-        domains_with_versions: list[tuple[str, str]] = []
 
         # Keep registered domains with their existing versions
         for d, v in registered:

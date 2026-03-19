@@ -17,7 +17,10 @@ app = typer.Typer(
 
 console = Console()
 
-_php_version_help = f"PHP version to use ({', '.join(SUPPORTED_VERSIONS)}). Defaults to DEFAULT_PHP_VERSION in .env"
+_php_version_help = (
+    f"PHP version ({', '.join(SUPPORTED_VERSIONS)}). "
+    "Defaults to DEFAULT_PHP_VERSION in .env"
+)
 
 
 def version_callback(value: bool) -> None:
