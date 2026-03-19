@@ -101,19 +101,24 @@ def reset_data(reset_db: bool, reset_caddyfiles: bool) -> None:
         if reset_caddyfiles:
             log_info("Resetting custom Caddyfiles...")
             caddy_dir = _resolve_path(env.get("CADDY_DIR"), "./caddy", project_dir)
-            custom_dir = caddy_dir / "sites" / "custom"
+            sites_dir = caddy_dir / "sites"
+            total_deleted = 0
 
-            if custom_dir.exists():
-                # Count files before deletion
-                caddyfiles = list(custom_dir.glob("*_Caddyfile"))
-                if caddyfiles:
-                    for caddyfile in caddyfiles:
-                        caddyfile.unlink()
-                    log_success(f"Deleted {len(caddyfiles)} custom Caddyfile(s)")
-                else:
-                    log_info("No custom Caddyfiles found to delete")
+            if sites_dir.exists():
+                # Delete from legacy custom dir and all version dirs
+                for subdir in sites_dir.iterdir():
+                    if subdir.is_dir() and (
+                        subdir.name == "custom" or subdir.name.startswith("php-")
+                    ):
+                        caddyfiles = list(subdir.glob("*_Caddyfile"))
+                        for cf in caddyfiles:
+                            cf.unlink()
+                            total_deleted += 1
+
+            if total_deleted > 0:
+                log_success(f"Deleted {total_deleted} Caddyfile(s)")
             else:
-                log_warning(f"Custom directory not found: {custom_dir}")
+                log_info("No custom Caddyfiles found to delete")
 
         print()
         log_success("Reset completed successfully!")
