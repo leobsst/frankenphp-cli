@@ -36,7 +36,10 @@ class CaddyfileGenerator:
     def generate_for_version(self, domains: list[str], php_version: str) -> None:
         """Generate Caddyfile configurations for domains into the version-specific directory.
 
-        Worker sites use HTTP only (TLS is handled by the reverse proxy).
+        If a Caddyfile already exists in the legacy custom/ directory, it is
+        moved as-is to the version directory (preserving all customizations)
+        and then migrated to HTTP-only format. A new minimal file is only
+        created when no existing Caddyfile can be found.
 
         Args:
             domains: List of domain names.
@@ -49,15 +52,36 @@ class CaddyfileGenerator:
             simple_domain = domain.rsplit(".", 1)[0]
             caddyfile_path = version_dir / f"{simple_domain}_Caddyfile"
 
-            if not caddyfile_path.exists():
+            if caddyfile_path.exists():
+                continue
+
+            # Check if a Caddyfile exists in the legacy custom/ directory
+            legacy_path = self.custom_dir / f"{simple_domain}_Caddyfile"
+            if legacy_path.exists():
+                log_info(f"Moving {simple_domain}_Caddyfile from custom/ to php-{php_version}/...")
+                shutil.move(str(legacy_path), str(caddyfile_path))
+                self._migrate_single_caddyfile(caddyfile_path)
+            else:
                 log_info(f"Creating {simple_domain}_Caddyfile (PHP {php_version})...")
                 content = self._build_worker_site(domain, simple_domain)
                 caddyfile_path.write_text(content)
 
+        # Also move any remaining non-domain files (e.g. localhost_Caddyfile)
+        if self.custom_dir.exists():
+            for legacy_file in self.custom_dir.glob("*_Caddyfile"):
+                target = version_dir / legacy_file.name
+                if not target.exists():
+                    log_info(f"Moving {legacy_file.name} from custom/ to php-{php_version}/...")
+                    shutil.move(str(legacy_file), str(target))
+                    self._migrate_single_caddyfile(target)
+
         log_success("Caddyfile configurations generated")
 
     def _build_worker_site(self, domain: str, simple_domain: str) -> str:
-        """Build a worker Caddyfile site block (HTTP only, no TLS).
+        """Build a worker Caddyfile site block from the template.
+
+        Uses Caddyfile.template as the base, applies domain substitutions,
+        then migrates to HTTP-only format (http:// prefix + TLS commented out).
 
         Args:
             domain: Full domain name (e.g., "myapp.test").
@@ -66,26 +90,33 @@ class CaddyfileGenerator:
         Returns:
             Caddyfile content string.
         """
+        if self.template_path.exists():
+            content = self.template_path.read_text()
+            content = content.replace("full_domain", domain)
+            content = content.replace("custom_domain", simple_domain)
+
+            # Apply HTTP-only migration (same as existing files)
+            content = re.sub(r"^(\S+)\s*\{", r"http://\1 {", content, count=1)
+            content = re.sub(r"(\t)(tls /certs/[^\n]+)", r"\1# \2", content)
+            return content
+
+        # Fallback if template is missing
         lines = [
             f"http://{domain} {{",
             f"\troot * /{{$CUSTOM_PATH}}/{simple_domain}/public/",
             "",
             "\tencode br gzip",
             "",
-            "\tlog {",
-            f"\t\toutput file /var/log/caddy/{simple_domain}_access.log {{",
-            "\t\t\troll_size 10mb",
-            "\t\t\troll_keep 5",
-            "\t\t\troll_keep_for 720h",
-            "\t\t}",
+            "\tlog {{",
+            f"\t\toutput file /var/log/caddy/{simple_domain}_access.log",
             "\t\tformat console",
-            "\t}",
+            "\t}}",
             "",
-            "\tphp_server {",
+            "\tphp_server {{",
             "\t\tindex index.php",
             "\t\tresolve_root_symlink",
-            "\t}",
-            "}",
+            "\t}}",
+            "}}",
         ]
         return "\n".join(lines) + "\n"
 
@@ -349,9 +380,9 @@ class CaddyfileGenerator:
 
         changed = False
 
-        # 1. Replace "domain.test {" with "http://domain.test {"
+        # 1. Replace "domain {" with "http://domain {"
         new_content = re.sub(
-            r"^(\S+\.test)\s*\{",
+            r"^(\S+)\s*\{",
             r"http://\1 {",
             content,
             count=1,
@@ -464,7 +495,10 @@ class CaddyfileGenerator:
             content = caddyfile_path.read_text()
             first_line = content.split("\n")[0].strip()
             if first_line.endswith("{"):
-                return first_line[:-1].strip()
+                domain = first_line[:-1].strip()
+                # Strip http:// or https:// prefix if present
+                domain = re.sub(r"^https?://", "", domain)
+                return domain
         except Exception:
             pass
         return None
