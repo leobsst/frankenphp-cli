@@ -223,7 +223,8 @@ def _distribute_php_configs(app_dir: Path) -> None:
         if not target_ini.exists() and base_php_ini.exists() and base_php_ini.is_file():
             shutil.copy2(base_php_ini, target_ini)
 
-        if not target_prod_ini.exists() and base_php_prod_ini.exists() and base_php_prod_ini.is_file():
+        has_prod_ini = base_php_prod_ini.exists() and base_php_prod_ini.is_file()
+        if not target_prod_ini.exists() and has_prod_ini:
             shutil.copy2(base_php_prod_ini, target_prod_ini)
 
 

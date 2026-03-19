@@ -130,7 +130,9 @@ def remove_host(domains: list[str]) -> None:
 
         # Regenerate main reverse proxy Caddyfile
         remaining_domains_versions = db.get_domains_with_versions()
-        caddyfile.generate_main_caddyfile(remaining_domains_versions, caddy_dir, env.is_production())
+        caddyfile.generate_main_caddyfile(
+            remaining_domains_versions, caddy_dir, env.is_production()
+        )
 
         # Restart the reverse proxy
         from ..core.docker_manager import REVERSE_PROXY_CONTAINER  # noqa: PLC0415

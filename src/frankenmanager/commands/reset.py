@@ -11,7 +11,7 @@ from ..core.docker_manager import DockerManager
 from ..core.environment import EnvironmentManager
 from ..core.resources import get_project_dir
 from ..exceptions import ServerStateError
-from ..utils.logging import log_error, log_info, log_success, log_warning
+from ..utils.logging import log_error, log_info, log_success
 
 console = Console()
 
