@@ -11,10 +11,15 @@ Or using the build script:
     python scripts/build.py
 """
 
+import os
 import sys
 from pathlib import Path
 
 block_cipher = None
+
+# Read code signing identity from environment variable (set during CI builds)
+codesign_id = os.environ.get("CODESIGN_IDENTITY")
+entitlements = os.environ.get("ENTITLEMENTS_FILE")
 
 # Get the source directory
 src_path = Path("src/frankenmanager")
@@ -121,7 +126,7 @@ exe = EXE(
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
+    codesign_identity=codesign_id,
+    entitlements_file=entitlements,
     icon=None,  # Add icon path here if desired: icon="assets/icon.ico"
 )
