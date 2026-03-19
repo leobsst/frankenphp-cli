@@ -1,4 +1,5 @@
-FROM dunglas/frankenphp:latest-php8.3
+ARG PHP_IMAGE_TAG=latest-php8.3
+FROM dunglas/frankenphp:${PHP_IMAGE_TAG}
 
 # hadolint ignore=DL3008
 RUN apt-get update && apt-get install -qq -y --no-install-recommends \
