@@ -5,8 +5,14 @@ full_domain {
 	# Root project
 	root * /{$CUSTOM_PATH}/custom_domain/public/
 
-	# Compression Brotli and Gzip
+	# Compression Brotli and Gzip (if not using websocket)
 	encode br gzip
+
+	# If using websocket don't use any compression
+	# @notWebsocket {
+	#	 not path /app*
+	# }
+	# encode @notWebsocket br gzip
 
 	# Logging
 	log {
@@ -37,12 +43,12 @@ full_domain {
 		-Server
 	}
 
-	#@websocket {
-	#	path /app
-	#}
-	#handle @websocket {
-	#	reverse_proxy 127.0.0.1:7006
-	#}
+	# @websocket {
+	# 	path /app*
+	# }
+	# handle @websocket {
+	# 	reverse_proxy 127.0.0.1:7006
+	# }
 
 	# Cache for robots.txt file
 	# @robots {
