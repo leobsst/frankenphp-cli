@@ -1,6 +1,6 @@
-full_domain.test {
+full_domain {
 	# TLS
-	tls /certs/full_domain.test.pem /certs/full_domain.test-key.pem
+	tls /certs/full_domain.pem /certs/full_domain-key.pem
 	
 	# Root project
 	root * /{$CUSTOM_PATH}/custom_domain/public/
