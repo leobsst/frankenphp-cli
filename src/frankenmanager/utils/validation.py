@@ -9,16 +9,21 @@ from ..exceptions import ValidationError
 # Domain name regex pattern (e.g., myapp.test, example.com)
 DOMAIN_REGEX = re.compile(r"^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z]{2,})+$")
 
+# Reserved local hostnames allowed without a TLD
+LOCAL_HOSTNAMES = {"localhost"}
+
 
 def validate_domain(domain: str) -> None:
     """Validate a domain name format.
 
     Args:
-        domain: The domain name to validate (e.g., myapp.test).
+        domain: The domain name to validate (e.g., myapp.test, localhost).
 
     Raises:
         ValidationError: If the domain name is invalid.
     """
+    if domain in LOCAL_HOSTNAMES:
+        return
     if not DOMAIN_REGEX.match(domain):
         raise ValidationError(f"Invalid domain name: {domain}")
 
