@@ -18,6 +18,8 @@ jobs:
   build-binaries:
     name: Build ${{ matrix.os }} binary
     runs-on: ${{ matrix.os }}
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     strategy:
       fail-fast: false
       matrix:
@@ -166,6 +168,8 @@ jobs:
   build-python-package:
     name: Build Python package
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - uses: actions/checkout@v4
         with:
@@ -195,6 +199,8 @@ jobs:
     name: Create GitHub Release
     needs: [build-binaries, build-python-package]
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - uses: actions/checkout@v4
 
