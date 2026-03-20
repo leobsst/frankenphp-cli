@@ -124,11 +124,13 @@ def ensure_resources_extracted() -> Path:
         if src.is_file():
             if not dst.exists():
                 shutil.copy2(src, dst)
+                _fix_permissions(dst)
         elif src.is_dir():
             # Use dirs_exist_ok=True to merge contents if directory already exists
             # This ensures files like Caddyfile are copied even if _ensure_directory_structure
             # already created parent directories
             shutil.copytree(src, dst, dirs_exist_ok=True)
+            _fix_permissions(dst)
 
     # Ensure directory structure again after copying (in case caddy wasn't in resources)
     _ensure_directory_structure(app_dir)
@@ -141,6 +143,36 @@ def ensure_resources_extracted() -> Path:
 
     log_info("FrankenManager initialized successfully.")
     return app_dir
+
+
+def _fix_permissions(path: Path) -> None:
+    """Ensure files under path are owned by the real (non-sudo) user.
+
+    When frankenmanager is invoked via sudo, os.getuid() returns 0. sudo sets
+    SUDO_UID / SUDO_GID so we can still chown files back to the actual user.
+    On non-sudo root processes or Windows this is a no-op.
+    """
+    if not hasattr(os, "getuid"):
+        return  # Windows
+
+    import stat
+
+    sudo_uid = os.environ.get("SUDO_UID")
+    sudo_gid = os.environ.get("SUDO_GID")
+    if not sudo_uid:
+        return  # Not running under sudo, nothing to fix
+
+    target_uid = int(sudo_uid)
+    target_gid = int(sudo_gid) if sudo_gid else -1
+
+    targets = [path] if path.is_file() else list(path.rglob("*"))
+    for item in targets:
+        try:
+            os.chown(item, target_uid, target_gid)
+            if item.is_file():
+                item.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
+        except (PermissionError, OSError):
+            pass
 
 
 def _ensure_directory_structure(app_dir: Path) -> None:
@@ -196,6 +228,7 @@ def _ensure_missing_files(app_dir: Path) -> None:
             if src.exists():
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, dst)
+                _fix_permissions(dst)
 
 
 def _cleanup_incorrect_directories(app_dir: Path) -> None:
