@@ -31,6 +31,10 @@ class TestValidateDomain:
         with pytest.raises(ValidationError):
             validate_domain("myapp")
 
+    def test_valid_localhost(self):
+        """localhost should be accepted as a reserved local hostname."""
+        validate_domain("localhost")
+
     def test_invalid_domain_starts_with_hyphen(self):
         """Domain starting with hyphen should fail."""
         with pytest.raises(ValidationError):
