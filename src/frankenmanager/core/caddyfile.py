@@ -91,16 +91,24 @@ class CaddyfileGenerator:
             Caddyfile content string.
         """
         if self.template_path.exists():
-            content = self.template_path.read_text()
-            content = content.replace("full_domain", domain)
-            content = content.replace("custom_domain", simple_domain)
+            try:
+                content = self.template_path.read_text()
+            except PermissionError:
+                log_warning(
+                    f"Cannot read template at {self.template_path} "
+                    "(permission denied), using built-in fallback"
+                )
+                content = None
+            if content is not None:
+                content = content.replace("full_domain", domain)
+                content = content.replace("custom_domain", simple_domain)
 
-            # Apply HTTP-only migration (same as existing files)
-            content = re.sub(r"^(\S+)\s*\{", r"http://\1 {", content, count=1)
-            content = re.sub(r"(\t)(tls /certs/[^\n]+)", r"\1# \2", content)
-            return content
+                # Apply HTTP-only migration (same as existing files)
+                content = re.sub(r"^(\S+)\s*\{", r"http://\1 {", content, count=1)
+                content = re.sub(r"(\t)(tls /certs/[^\n]+)", r"\1# \2", content)
+                return content
 
-        # Fallback if template is missing
+        # Fallback if template is missing or unreadable
         lines = [
             f"http://{domain} {{",
             f"\troot * /{{$CUSTOM_PATH}}/{simple_domain}/public/",
