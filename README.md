@@ -1,25 +1,28 @@
 # FrankenManager
 
 [![Python](https://img.shields.io/badge/Python-3.9+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
-[![PHP](https://img.shields.io/badge/PHP-8.3-777BB4?style=flat-square&logo=php&logoColor=white)](https://php.net)
+[![PHP](https://img.shields.io/badge/PHP-8.2%20|%208.3%20|%208.4%20|%208.5-777BB4?style=flat-square&logo=php&logoColor=white)](https://php.net)
 [![Docker](https://img.shields.io/badge/Docker-Required-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docker.com)
 [![FrankenPHP](https://img.shields.io/badge/FrankenPHP-Caddy-00ADD8?style=flat-square&logo=go&logoColor=white)](https://frankenphp.dev)
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20|%20Linux%20|%20Windows-lightgrey?style=flat-square)]()
 
-A powerful CLI tool for managing local PHP development environments using Docker containers with [FrankenPHP](https://frankenphp.dev) (Caddy + PHP 8.3).
+A powerful CLI tool for managing local PHP development environments using Docker containers with [FrankenPHP](https://frankenphp.dev) (Caddy + PHP 8.2 / 8.3 / 8.4 / 8.5).
 
 **FrankenManager** simplifies the process of running multiple PHP projects locally with:
 - Automatic HTTPS with locally-trusted certificates
 - No manual `/etc/hosts` editing (passwordless after setup)
 - One command to start/stop your entire development stack
+- Multiple PHP versions running side-by-side, switchable per domain
 - Pre-built binaries - no Python installation required
 
 ## Features
 
 - Multi-site management with custom local domains (`.test`)
+- **Multiple PHP versions** (8.2, 8.3, 8.4, 8.5) running simultaneously, per-domain
+- Live PHP version switching per domain (`switch-php`)
 - Automated SSL certificate generation via mkcert
-- FrankenPHP with Caddy web server
+- FrankenPHP with Caddy reverse proxy
 - MariaDB database with health checks
 - Redis cache server
 - phpMyAdmin for database management
@@ -27,7 +30,8 @@ A powerful CLI tool for managing local PHP development environments using Docker
 - Production and development configurations
 - Brotli + Gzip compression
 - Static asset caching
-- Security headers (HSTS, X-Frame-Options, CSP, etc.)
+- Security headers (HSTS, X-Frame-Options, etc.)
+- WebSocket support (pre-configured, opt-in)
 - Cross-platform support (macOS, Linux, Windows)
 - Pre-built binaries (no Python required)
 
@@ -103,13 +107,15 @@ frankenmanager setup --status
 
 | Command | Description |
 |---------|-------------|
-| `frankenmanager start [domains] [--path <path>]` | Start the development server with optional domains |
+| `frankenmanager start [domains] [--path <path>] [--php <version>]` | Start the development server with optional domains |
 | `frankenmanager stop` | Stop the development server |
 | `frankenmanager restart [options]` | Restart all or specific containers |
 | `frankenmanager status` | Show current server and container status |
-| `frankenmanager add-host <domains>` | Add new domains while server is running |
+| `frankenmanager list` | List all registered domains with their PHP versions |
+| `frankenmanager add-host <domains> [--php <version>]` | Add new domains while server is running |
 | `frankenmanager remove-host <domains>` | Remove domains while server is running |
-| `frankenmanager restore-host [domains]` | Restore archived domains |
+| `frankenmanager restore-host [domains] [--php <version>]` | Restore archived domains |
+| `frankenmanager switch-php <domain> --php <version>` | Switch the PHP version for a domain (live, no downtime for other domains) |
 | `frankenmanager reset --db \| --caddyfiles` | Reset configuration and/or Caddyfiles (requires stopped server) |
 | `frankenmanager setup` | Configure passwordless operation |
 | `frankenmanager update` | Update FrankenManager to latest version |
@@ -120,8 +126,11 @@ frankenmanager setup --status
 ### Start the server
 
 ```bash
-# Start with specific domains
+# Start with specific domains (default PHP version from .env)
 frankenmanager start "domain1.test domain2.test" /path/to/projects
+
+# Start with a specific PHP version
+frankenmanager start "myapp.test" --php 8.4
 
 # Start with registered domains from database (after first run)
 frankenmanager start
@@ -133,8 +142,10 @@ frankenmanager start "newdomain.test"
 - **domains** (optional): Space-separated list of local domains (quoted)
   - If omitted, uses domains registered in the database from previous runs
   - If provided, merges with registered domains (adds new ones to existing)
-- **path** (optional): Path to the directory containing your project folders
+- **--path** (optional): Path to the directory containing your project folders
   - Uses `DEFAULT_PROJECT_PATH` from `.env` if not specified
+- **--php** (optional): PHP version for the new domains (`8.2`, `8.3`, `8.4`, `8.5`)
+  - Defaults to `DEFAULT_PHP_VERSION` from `.env`, then `8.3`
 
 ### Multi-Domain Setup
 
@@ -203,9 +214,81 @@ The server automatically:
 1. Validates all domain names format (e.g., `myapp.test`)
 2. Generates SSL certificates for each domain via mkcert
 3. Adds entries to `/etc/hosts` (passwordless if setup was run)
-4. Creates Caddyfile configuration for each domain
-5. Builds and starts Docker containers
-6. Syncs MariaDB password if changed
+4. Creates Caddyfile configuration for each domain (HTTP-only worker sites; TLS is handled by the reverse proxy)
+5. Migrates any existing Caddyfiles to the current HTTP-only format automatically
+6. Builds and starts Docker containers
+7. Syncs MariaDB password if changed
+
+### Multi-PHP Version Support
+
+FrankenManager can run multiple PHP versions simultaneously, each in its own FrankenPHP container. Every domain is assigned a PHP version; the Caddy reverse proxy routes traffic to the correct container automatically.
+
+**Supported versions:** 8.2, 8.3, 8.4, 8.5
+
+#### Assign a PHP version when starting
+
+```bash
+# Start domains on PHP 8.4
+frankenmanager start "api.test shop.test" --php 8.4
+
+# Start another domain on PHP 8.2 (both versions run side-by-side)
+frankenmanager start "legacy.test" --php 8.2
+```
+
+#### List domains and their PHP versions
+
+```bash
+frankenmanager list
+```
+
+#### Switch a domain to a different PHP version
+
+The `switch-php` command moves a domain to another PHP version live — only the affected container is restarted, other domains are not interrupted.
+
+```bash
+frankenmanager switch-php "myapp.test" --php 8.5
+```
+
+What happens:
+1. Moves the domain's Caddyfile to the target version directory
+2. Starts a new container for the target version (if not already running)
+3. Restarts only the impacted containers
+4. Stops any container that no longer serves any domain
+5. Updates the reverse proxy configuration
+
+#### Add a host to a specific PHP version
+
+```bash
+frankenmanager add-host "newapp.test" --php 8.4
+```
+
+#### Default PHP version
+
+Set `DEFAULT_PHP_VERSION` in `.env` to change the default for all commands that accept `--php`. Commands resolve the version in this order: `--php` flag → `DEFAULT_PHP_VERSION` in `.env` → `8.3`.
+
+#### Architecture
+
+Each PHP version gets its own container (`frankenphp-8.2`, `frankenphp-8.3`, etc.) listening on a dedicated internal port. A single Caddy reverse proxy container handles TLS and routes each domain to its version container over plain HTTP.
+
+| PHP Version | Container | Internal HTTP Port |
+|-------------|-----------|-------------------|
+| 8.2 | `frankenphp-8.2` | 8280 |
+| 8.3 | `frankenphp-8.3` | 8380 |
+| 8.4 | `frankenphp-8.4` | 8480 |
+| 8.5 | `frankenphp-8.5` | 8580 |
+
+Per-site Caddyfiles are stored in version-specific subdirectories:
+
+```
+~/.frankenmanager/caddy/sites/custom/
+├── php8.2/
+│   └── legacy_Caddyfile
+├── php8.3/
+│   ├── shop_Caddyfile
+│   └── blog_Caddyfile
+└── php8.4/
+    └── api_Caddyfile
+```
 
 ### Stop the server
 
@@ -271,8 +354,11 @@ You can add, remove, and restore hosts while the server is running without resta
 #### Add a new host
 
 ```bash
-# Add a single domain
+# Add a single domain (default PHP version)
 frankenmanager add-host "newapp.test"
+
+# Add a domain on a specific PHP version
+frankenmanager add-host "newapp.test" --php 8.4
 
 # Add multiple domains
 frankenmanager add-host "app1.test app2.test"
@@ -312,6 +398,9 @@ frankenmanager restore-host --list
 # Restore a single domain
 frankenmanager restore-host "myapp.test"
 
+# Restore on a specific PHP version
+frankenmanager restore-host "myapp.test" --php 8.4
+
 # Restore multiple domains with SSL regeneration
 frankenmanager restore-host "app1.test app2.test" --force-ssl
 ```
@@ -321,6 +410,49 @@ This will:
 2. Generate SSL certificates
 3. Add entries to `/etc/hosts`
 4. Restart only the FrankenPHP container
+
+### Caddyfile Customization
+
+Each domain gets its own Caddyfile generated from `caddy/Caddyfile.template`. You can edit a site's Caddyfile directly at `~/.frankenmanager/caddy/sites/custom/<domain>_Caddyfile` to customize behavior for that site.
+
+If the custom template at `caddy/Caddyfile.template` is unreadable, FrankenManager will automatically fall back to its built-in template.
+
+#### WebSocket support
+
+The generated Caddyfile includes commented-out WebSocket configuration. To enable it for a site:
+
+1. Open the site's Caddyfile (`~/.frankenmanager/caddy/sites/custom/<domain>_Caddyfile`)
+2. Replace the default compression directive:
+
+```caddyfile
+# Switch from blanket compression to websocket-safe compression
+# Comment out:
+#   encode br gzip
+# Uncomment:
+#   @notWebsocket {
+#     not path /app*
+#   }
+#   encode @notWebsocket br gzip
+```
+
+3. Uncomment the WebSocket reverse proxy block:
+
+```caddyfile
+@websocket {
+    path /app*
+}
+handle @websocket {
+    reverse_proxy 127.0.0.1:7006
+}
+```
+
+4. Restart the Caddy container: `frankenmanager restart --caddy`
+
+#### Internal architecture
+
+Worker sites run on plain HTTP internally. TLS termination happens at the reverse proxy layer (Caddy), which forwards requests over HTTP to the FrankenPHP workers. This means:
+- Per-site Caddyfiles do **not** include `tls` directives for worker-to-proxy traffic
+- Existing installs are automatically migrated to this format on the next `frankenmanager start`
 
 ### Force SSL certificate regeneration
 
@@ -342,6 +474,8 @@ frankenmanager start --help
 frankenmanager add-host --help
 frankenmanager remove-host --help
 frankenmanager restore-host --help
+frankenmanager switch-php --help
+frankenmanager list --help
 frankenmanager reset --help
 frankenmanager setup --help
 ```
@@ -485,6 +619,7 @@ The `.env` file is automatically created in the data directory on first run. Edi
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `APP_ENV` | `dev` | Environment (`dev` or `prod`) |
+| `DEFAULT_PHP_VERSION` | `8.3` | Default PHP version for new domains (`8.2`, `8.3`, `8.4`, `8.5`) |
 | `UID` | (auto-filled) | System user ID for file ownership |
 | `GID` | (auto-filled) | System group ID for file ownership |
 | `CERTS_DIR` | `./caddy/certs` | SSL certificates directory |
@@ -512,7 +647,7 @@ Set `APP_ENV=prod` in `.env` to enable:
 ### Source Code Structure
 
 ```
-frankenphp-cli/
+frankenmanager/
 ├── pyproject.toml              Python package configuration
 ├── frankenmanager.spec         PyInstaller build spec
 ├── .env.example                Environment template
@@ -532,16 +667,19 @@ frankenphp-cli/
 │   │   ├── setup.py            Privilege & mkcert setup
 │   │   ├── add_host.py         Add host(s) dynamically
 │   │   ├── remove_host.py      Remove host(s) and archive
-│   │   └── restore_host.py     Restore archived host(s)
+│   │   ├── restore_host.py     Restore archived host(s)
+│   │   ├── switch_php.py       Switch PHP version for a domain
+│   │   └── list_hosts.py       List domains with PHP versions
 │   ├── core/                   Core functionality
 │   │   ├── database.py         SQLite database management
 │   │   ├── migration.py        Config to database migration
 │   │   ├── config.py           Legacy JSON config (deprecated)
 │   │   ├── environment.py      .env file handling
 │   │   ├── docker_manager.py   Docker SDK integration
+│   │   ├── php_versions.py     PHP version map and port assignments
 │   │   ├── ssl_manager.py      mkcert wrapper
 │   │   ├── hosts_manager.py    /etc/hosts management
-│   │   ├── caddyfile.py        Caddyfile generation
+│   │   ├── caddyfile.py        Caddyfile generation and migration
 │   │   ├── password_manager.py MariaDB password sync
 │   │   ├── privilege_manager.py Passwordless sudo setup
 │   │   ├── resources.py        Data directory management
@@ -559,10 +697,16 @@ frankenphp-cli/
 
 | Service | Container | Default Port | Description |
 |---------|-----------|--------------|-------------|
-| FrankenPHP | webserver-and-caddy | 80, 443 | Web server (host network) |
-| MariaDB | franken_mariadb | 3306 | Database |
-| Redis | franken_redis | 6379 | Cache |
-| phpMyAdmin | franken_phpmyadmin | 8080 | Database UI |
+| Caddy (reverse proxy) | `franken-proxy` | 80, 443 | TLS termination and routing |
+| FrankenPHP 8.2 | `frankenphp-8.2` | 8280 (internal) | PHP 8.2 worker |
+| FrankenPHP 8.3 | `frankenphp-8.3` | 8380 (internal) | PHP 8.3 worker |
+| FrankenPHP 8.4 | `frankenphp-8.4` | 8480 (internal) | PHP 8.4 worker |
+| FrankenPHP 8.5 | `frankenphp-8.5` | 8580 (internal) | PHP 8.5 worker |
+| MariaDB | `franken_mariadb` | 3306 | Database |
+| Redis | `franken_redis` | 6379 | Cache |
+| phpMyAdmin | `franken_phpmyadmin` | 8080 | Database UI |
+
+Only containers for PHP versions that have at least one domain are started.
 
 All ports are configurable via the `.env` file. See [Environment Variables](#environment-variables-env) for details.
 
@@ -656,6 +800,12 @@ brew install mkcert
 # Windows
 choco install mkcert
 ```
+
+### Caddyfile format after upgrade
+
+If you upgraded from an older version, your existing per-site Caddyfiles may use the legacy TLS format. Running `frankenmanager start` will automatically migrate them to the current HTTP-only worker format (TLS lines are commented out rather than deleted, so customizations are preserved).
+
+To migrate manually without starting the server, you can edit the Caddyfile directly or run `frankenmanager reset --caddyfiles` to regenerate all from scratch.
 
 ### Container health check failures
 
