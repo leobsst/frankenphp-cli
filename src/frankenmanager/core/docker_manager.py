@@ -186,9 +186,7 @@ class DockerManager:
         compose_path.write_text(content)
         return compose_path
 
-    def _build_db_services(
-        self, db_engines: list[str], production: bool
-    ) -> list[str]:
+    def _build_db_services(self, db_engines: list[str], production: bool) -> list[str]:
         """Build database service definitions for docker-compose.
 
         Args:
@@ -221,7 +219,8 @@ class DockerManager:
                             "    environment:",
                             "      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}",
                             "    healthcheck:",
-                            '      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]',
+                            "      test:"
+                            ' ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]',
                             "      interval: 10s",
                             "      timeout: 5s",
                             "      retries: 5",
@@ -248,7 +247,8 @@ class DockerManager:
                             "    networks:",
                             "      - franken_network",
                             "    healthcheck:",
-                            '      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]',
+                            "      test:"
+                            ' ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]',
                             "      interval: 10s",
                             "      timeout: 5s",
                             "      retries: 5",
@@ -373,7 +373,8 @@ class DockerManager:
                             "    network_mode: host",
                             "    env_file: .env",
                             "    volumes:",
-                            "      - ${DATABASE_DIR:-${PWD}/database}/postgresql:/var/lib/postgresql/data",
+                            "      - ${DATABASE_DIR:-${PWD}/database}"
+                            "/postgresql:/var/lib/postgresql/data",
                             "    environment:",
                             "      POSTGRES_USER: ${POSTGRES_USER:-postgres}",
                             "      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}",
@@ -395,7 +396,8 @@ class DockerManager:
                             "    restart: always",
                             "    env_file: .env",
                             "    volumes:",
-                            "      - ${DATABASE_DIR:-./database}/postgresql:/var/lib/postgresql/data",
+                            "      - ${DATABASE_DIR:-./database}"
+                            "/postgresql:/var/lib/postgresql/data",
                             "    ports:",
                             "      - ${POSTGRES_PORT:-127.0.0.1:5432:5432}",
                             "    environment:",

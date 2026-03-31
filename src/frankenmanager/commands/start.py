@@ -217,9 +217,7 @@ def start_server(
         docker.compose_down(env.is_production())
 
         # Generate docker-compose file
-        docker.generate_compose_file(
-            active_versions, {}, env.is_production(), db_engines
-        )
+        docker.generate_compose_file(active_versions, {}, env.is_production(), db_engines)
 
         # Prepare environment variables for docker-compose
         expose = env.get("EXPOSE_SERVICES") == "true"

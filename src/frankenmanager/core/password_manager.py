@@ -163,9 +163,7 @@ class PasswordManager:
         Returns:
             True if sync succeeded, False otherwise.
         """
-        return self._sync_mariadb_or_mysql(
-            "mariadb", "franken_mariadb", new_password, max_retries
-        )
+        return self._sync_mariadb_or_mysql("mariadb", "franken_mariadb", new_password, max_retries)
 
     def sync_all_passwords(
         self, db_engines: list[str], passwords: dict[str, str], max_retries: int = 30
