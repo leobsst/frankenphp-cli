@@ -64,7 +64,7 @@ class DatabaseManager:
             # Check infrastructure containers (including reverse proxy)
             from .docker_manager import REVERSE_PROXY_CONTAINER  # noqa: PLC0415
 
-            for container in (REVERSE_PROXY_CONTAINER, "franken_mariadb", "franken_redis"):
+            for container in (REVERSE_PROXY_CONTAINER, "franken_redis"):
                 status_info = self.docker_manager.get_container_status(container)
                 if status_info["status"] != "running":
                     return False

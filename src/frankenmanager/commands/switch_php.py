@@ -5,7 +5,7 @@ from typing import Optional
 
 from ..core.caddyfile import CaddyfileGenerator
 from ..core.database import DatabaseManager
-from ..core.docker_manager import REVERSE_PROXY_CONTAINER, DockerManager
+from ..core.docker_manager import REVERSE_PROXY_CONTAINER, DockerManager, parse_db_engines
 from ..core.environment import EnvironmentManager
 from ..core.php_versions import get_container_name, validate_php_version
 from ..core.resources import ensure_php_version_config, get_project_dir
@@ -76,6 +76,8 @@ def switch_php(domain: str, php_version: str) -> None:
     versions_after = db.get_active_php_versions()
     orphaned_versions = versions_before - versions_after
 
+    db_engines = parse_db_engines(env.get("DB_ENGINES") or "mariadb") or ["mariadb"]
+
     try:
         if need_new_container:
             # Build and start a new container for the target PHP version
@@ -84,7 +86,7 @@ def switch_php(domain: str, php_version: str) -> None:
             docker.build_image(custom_path, php_version, env.get("WWWGROUP") or "")
 
             # Regenerate compose file
-            docker.generate_compose_file(versions_after, {}, env.is_production())
+            docker.generate_compose_file(versions_after, {}, env.is_production(), db_engines)
 
             # Start the new container via compose up
             log_info(f"Starting PHP {php_version} container...")
@@ -105,11 +107,11 @@ def switch_php(domain: str, php_version: str) -> None:
                 "REDIS_PORT": f"{localhost}{redis_port}:6379",
                 "WEB_HTTP_PORT": env.get("WEB_HTTP_PORT") or "80",
                 "WEB_HTTPS_PORT": env.get("WEB_HTTPS_PORT") or "443",
-                "MARIADB_ROOT_PASSWORD": env.require("MARIADB_ROOT_PASSWORD"),
                 "MYSQL_MAX_ALLOWED_PACKET": env.get("MYSQL_MAX_ALLOWED_PACKET") or "512M",
                 "PWD": str(project_dir),
                 "CADDY_DIR": str(caddy_dir),
                 "DATABASE_DIR": str(database_dir),
+                **env.build_db_env_vars(db_engines, localhost),
             }
             docker.compose_up(env_vars, env.is_production())
         else:
@@ -132,7 +134,7 @@ def switch_php(domain: str, php_version: str) -> None:
 
         # Update compose file if versions changed
         if orphaned_versions:
-            docker.generate_compose_file(versions_after, {}, env.is_production())
+            docker.generate_compose_file(versions_after, {}, env.is_production(), db_engines)
 
         # Regenerate main reverse proxy Caddyfile and restart proxy
         all_domains_versions = db.get_domains_with_versions()

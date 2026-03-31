@@ -6,7 +6,7 @@ from typing import Optional
 
 from ..core.caddyfile import CaddyfileGenerator
 from ..core.database import DatabaseManager
-from ..core.docker_manager import DockerManager
+from ..core.docker_manager import DockerManager, parse_db_engines
 from ..core.environment import EnvironmentManager
 from ..core.hosts_manager import HostsManager
 from ..core.password_manager import PasswordManager
@@ -85,12 +85,28 @@ def start_server(
             sys.exit(1)
         custom_path = Path(default_path)
 
-    # Generate password if not set
-    if not env.get("MARIADB_ROOT_PASSWORD"):
-        password = env.generate_mariadb_password()
+    # Parse DB engines configuration
+    db_engines = parse_db_engines(env.get("DB_ENGINES") or "mariadb")
+    if not db_engines:
+        db_engines = ["mariadb"]
+
+    # Generate passwords for enabled DB engines
+    if "mariadb" in db_engines and not env.get("MARIADB_ROOT_PASSWORD"):
+        password = env.generate_db_password()
         env.set("MARIADB_ROOT_PASSWORD", password)
         log_info("MariaDB password generated and saved to .env")
-        env.load()  # Reload to get the new password
+
+    if "mysql" in db_engines and not env.get("MYSQL_ROOT_PASSWORD"):
+        password = env.generate_db_password()
+        env.set("MYSQL_ROOT_PASSWORD", password)
+        log_info("MySQL password generated and saved to .env")
+
+    if "postgresql" in db_engines and not env.get("POSTGRES_PASSWORD"):
+        password = env.generate_db_password()
+        env.set("POSTGRES_PASSWORD", password)
+        log_info("PostgreSQL password generated and saved to .env")
+
+    env.load()  # Reload to get any new passwords
 
     # Resolve storage paths from environment
     caddy_dir = _resolve_path(env.get("CADDY_DIR"), "./caddy", project_dir)
@@ -201,7 +217,9 @@ def start_server(
         docker.compose_down(env.is_production())
 
         # Generate docker-compose file
-        docker.generate_compose_file(active_versions, {}, env.is_production())
+        docker.generate_compose_file(
+            active_versions, {}, env.is_production(), db_engines
+        )
 
         # Prepare environment variables for docker-compose
         expose = env.get("EXPOSE_SERVICES") == "true"
@@ -224,16 +242,21 @@ def start_server(
             "REDIS_PORT": f"{localhost}{redis_port}:6379",
             "WEB_HTTP_PORT": web_http_port,
             "WEB_HTTPS_PORT": web_https_port,
-            "MARIADB_ROOT_PASSWORD": env.require("MARIADB_ROOT_PASSWORD"),
             "MYSQL_MAX_ALLOWED_PACKET": env.get("MYSQL_MAX_ALLOWED_PACKET") or "512M",
             "PWD": str(project_dir),
             "CADDY_DIR": str(caddy_dir),
             "DATABASE_DIR": str(database_dir),
+            **env.build_db_env_vars(db_engines, localhost),
         }
         docker.compose_up(env_vars, env.is_production())
 
-        # Sync database password
-        password_manager.sync_password(env.require("MARIADB_ROOT_PASSWORD"))
+        # Sync database passwords
+        db_passwords = {}
+        if "mariadb" in db_engines:
+            db_passwords["mariadb"] = env.require("MARIADB_ROOT_PASSWORD")
+        if "mysql" in db_engines:
+            db_passwords["mysql"] = env.require("MYSQL_ROOT_PASSWORD")
+        password_manager.sync_all_passwords(db_engines, db_passwords)
 
         print()
         log_success("Web server started!")

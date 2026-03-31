@@ -3,7 +3,7 @@
 from typing import Optional
 
 from ..core.database import DatabaseManager
-from ..core.docker_manager import DockerManager
+from ..core.docker_manager import DB_CONTAINERS, DockerManager, parse_db_engines
 from ..core.environment import EnvironmentManager
 from ..core.password_manager import PasswordManager
 from ..core.php_versions import get_container_name
@@ -12,9 +12,8 @@ from ..core.ssl_manager import SSLManager
 from ..exceptions import ServerStateError
 from ..utils.logging import log_info, log_success
 
-# Map friendly names to actual container names
+# Map friendly names to actual container names (static ones)
 CONTAINER_MAP = {
-    "database": "franken_mariadb",
     "cache": "franken_redis",
     "phpmyadmin": "franken_phpmyadmin",
 }
@@ -64,9 +63,14 @@ def restart_server(force_ssl: bool, containers: Optional[list[str]] = None) -> N
         log_info("Generating SSL certificates...")
         ssl.generate_all(domains, force_ssl, env.is_production())
 
+    # Parse DB engines
+    db_engines = parse_db_engines(env.get("DB_ENGINES") or "mariadb")
+    if not db_engines:
+        db_engines = ["mariadb"]
+
     # Restart containers
     if restart_all:
-        docker.restart_all(active_versions)
+        docker.restart_all(active_versions, db_engines, env.is_production())
     else:
         if containers:
             for container_name in containers:
@@ -77,14 +81,25 @@ def restart_server(force_ssl: bool, containers: Optional[list[str]] = None) -> N
                     from ..core.docker_manager import REVERSE_PROXY_CONTAINER  # noqa: PLC0415
 
                     docker.restart_container(REVERSE_PROXY_CONTAINER)
+                elif container_name == "database":
+                    # Restart all DB engine containers
+                    for engine in db_engines:
+                        db_container = DB_CONTAINERS.get(engine)
+                        if db_container:
+                            docker.restart_container(db_container)
                 else:
                     actual_name = CONTAINER_MAP.get(container_name)
                     if actual_name:
                         docker.restart_container(actual_name)
 
-    # Sync password if restarting database
+    # Sync passwords if restarting database
     if restart_db:
-        password_manager.sync_password(env.require("MARIADB_ROOT_PASSWORD"))
+        db_passwords = {}
+        if "mariadb" in db_engines:
+            db_passwords["mariadb"] = env.require("MARIADB_ROOT_PASSWORD")
+        if "mysql" in db_engines:
+            db_passwords["mysql"] = env.require("MYSQL_ROOT_PASSWORD")
+        password_manager.sync_all_passwords(db_engines, db_passwords)
 
     print()
     if restart_all:

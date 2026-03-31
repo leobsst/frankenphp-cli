@@ -5,7 +5,7 @@ from typing import Optional
 
 from ..core.caddyfile import CaddyfileGenerator
 from ..core.database import DatabaseManager
-from ..core.docker_manager import DockerManager
+from ..core.docker_manager import DockerManager, parse_db_engines
 from ..core.environment import EnvironmentManager
 from ..core.hosts_manager import HostsManager
 from ..core.php_versions import (
@@ -129,8 +129,9 @@ def add_host(domains: list[str], force_ssl: bool, php_version: Optional[str] = N
             docker.build_image(custom_path, php_version, env.get("WWWGROUP") or "")
 
             # Regenerate compose file with the new version
+            db_engines = parse_db_engines(env.get("DB_ENGINES") or "mariadb") or ["mariadb"]
             all_versions = active_versions | {php_version}
-            docker.generate_compose_file(all_versions, {}, env.is_production())
+            docker.generate_compose_file(all_versions, {}, env.is_production(), db_engines)
 
             # Restart all via compose to start the new container
             log_info(f"Starting PHP {php_version} container...")
@@ -152,11 +153,11 @@ def add_host(domains: list[str], force_ssl: bool, php_version: Optional[str] = N
                 "REDIS_PORT": f"{localhost}{redis_port}:6379",
                 "WEB_HTTP_PORT": env.get("WEB_HTTP_PORT") or "80",
                 "WEB_HTTPS_PORT": env.get("WEB_HTTPS_PORT") or "443",
-                "MARIADB_ROOT_PASSWORD": env.require("MARIADB_ROOT_PASSWORD"),
                 "MYSQL_MAX_ALLOWED_PACKET": env.get("MYSQL_MAX_ALLOWED_PACKET") or "512M",
                 "PWD": str(project_dir),
                 "CADDY_DIR": str(caddy_dir),
                 "DATABASE_DIR": str(database_dir),
+                **env.build_db_env_vars(db_engines, localhost),
             }
             docker.compose_up(env_vars, env.is_production())
         else:

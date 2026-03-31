@@ -4,7 +4,8 @@ from rich.console import Console
 from rich.table import Table
 
 from ..core.database import DatabaseManager
-from ..core.docker_manager import DockerManager
+from ..core.docker_manager import DockerManager, parse_db_engines
+from ..core.environment import EnvironmentManager
 from ..core.php_versions import get_container_name
 from ..core.resources import get_project_dir
 
@@ -17,6 +18,11 @@ def show_status() -> None:
 
     docker = DockerManager(project_dir)
     db = DatabaseManager(project_dir / "db.sqlite", docker)
+
+    env = EnvironmentManager(project_dir / ".env", project_dir / ".env.example")
+    if env.env_path.exists():
+        env.load()
+    db_engines = parse_db_engines(env.get("DB_ENGINES") or "mariadb") or ["mariadb"]
 
     # Get real-time status from Docker containers
     is_running = db.is_running
@@ -54,7 +60,12 @@ def show_status() -> None:
         _add_container_row(table, docker, container_name)
 
     # Infrastructure containers
-    for container in DockerManager.INFRA_CONTAINERS:
+    for container in docker.get_all_containers(
+        db_engines=db_engines, production=env.is_production()
+    ):
+        # Skip PHP containers (already shown above)
+        if container.startswith("frankenphp-"):
+            continue
         _add_container_row(table, docker, container)
 
     console.print(table)
