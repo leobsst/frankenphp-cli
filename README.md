@@ -21,6 +21,7 @@ A powerful CLI tool for managing local PHP development environments using Docker
 - Multi-site management with custom local domains (`.test`)
 - **Multiple PHP versions** (8.2, 8.3, 8.4, 8.5) running simultaneously, per-domain
 - Live PHP version switching per domain (`switch-php`)
+- Alternate hosts (aliases) that reverse-proxy to an existing domain's site (`add-alias`), with no extra Caddyfile or container
 - Automated SSL certificate generation via mkcert
 - FrankenPHP with Caddy reverse proxy
 - MariaDB database with health checks
@@ -113,7 +114,8 @@ frankenmanager setup --status
 | `frankenmanager status` | Show current server and container status |
 | `frankenmanager list` | List all registered domains with their PHP versions |
 | `frankenmanager add-host <domains> [--php <version>]` | Add new domains while server is running |
-| `frankenmanager remove-host <domains>` | Remove domains while server is running |
+| `frankenmanager add-alias <target> <aliases>` | Add alternate host(s) that reverse-proxy to an existing domain |
+| `frankenmanager remove-host <domains>` | Remove domains (or alternate hosts) while server is running |
 | `frankenmanager restore-host [domains] [--php <version>]` | Restore archived domains |
 | `frankenmanager switch-php <domain> --php <version>` | Switch the PHP version for a domain (live, no downtime for other domains) |
 | `frankenmanager reset --db \| --caddyfiles` | Reset configuration and/or Caddyfiles (requires stopped server) |
@@ -374,6 +376,30 @@ This will:
 4. Generate Caddyfile configuration(s)
 5. Restart only the FrankenPHP container (other services remain untouched)
 
+#### Add an alternate host (alias)
+
+`add-alias` attaches one or more extra domains to a host that's already configured with `add-host`/`start`. Unlike `add-host`, it does **not** create a per-site Caddyfile or a new PHP container: the alias gets its own SSL certificate and `/etc/hosts` entry, and is added to the reverse proxy's Caddyfile only, forwarding to the target domain's existing site.
+
+```bash
+# Add a single alternate host for an existing domain
+frankenmanager add-alias "myapp.test" "myapp-alt.test"
+
+# Add multiple alternate hosts at once
+frankenmanager add-alias "myapp.test" "alt1.test alt2.test"
+
+# Force SSL certificate regeneration
+frankenmanager add-alias "myapp.test" "myapp-alt.test" --force-ssl
+```
+
+This will:
+1. Validate the target domain is already configured
+2. Generate SSL certificates for the alias domain(s)
+3. Add entries to `/etc/hosts`
+4. Add the alias to the reverse proxy Caddyfile (no per-site Caddyfile, no new PHP container)
+5. Restart only the reverse proxy
+
+An alias always follows its target's PHP version — including if the target is later moved with `switch-php`. Aliases are shown alongside registered domains in `frankenmanager list`.
+
 #### Remove a host
 
 ```bash
@@ -382,12 +408,17 @@ frankenmanager remove-host "oldapp.test"
 
 # Remove multiple domains
 frankenmanager remove-host "app1.test app2.test"
+
+# Remove an alternate host (alias) only, leaving the target untouched
+frankenmanager remove-host "myapp-alt.test"
 ```
 
 This will:
 1. Remove entries from `/etc/hosts`
-2. Archive the Caddyfile to `caddy/sites/archive/` (not deleted)
+2. Archive the Caddyfile to `caddy/sites/archive/` (not deleted) — skipped for aliases, which have no Caddyfile of their own
 3. Restart only the FrankenPHP container
+
+Removing a domain also removes any alternate hosts (aliases) pointing to it, since they'd otherwise be left proxying to a domain that no longer exists.
 
 #### Restore an archived host
 
@@ -472,6 +503,7 @@ frankenmanager --version
 frankenmanager --help
 frankenmanager start --help
 frankenmanager add-host --help
+frankenmanager add-alias --help
 frankenmanager remove-host --help
 frankenmanager restore-host --help
 frankenmanager switch-php --help
@@ -610,7 +642,17 @@ CREATE TABLE domains (
     domain TEXT NOT NULL UNIQUE,
     added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Aliases table (alternate hosts added via `add-alias`)
+CREATE TABLE aliases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    alias_domain TEXT NOT NULL UNIQUE,
+    target_domain TEXT NOT NULL,
+    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 ```
+
+The `aliases` table is created automatically the next time you run any `frankenmanager` command after upgrading — no reset or manual migration needed.
 
 ### Environment Variables (.env)
 
@@ -666,7 +708,8 @@ frankenmanager/
 │   │   ├── status.py           Show status
 │   │   ├── setup.py            Privilege & mkcert setup
 │   │   ├── add_host.py         Add host(s) dynamically
-│   │   ├── remove_host.py      Remove host(s) and archive
+│   │   ├── add_alias.py        Add alternate host(s) (aliases) for an existing domain
+│   │   ├── remove_host.py      Remove host(s)/alias(es) and archive
 │   │   ├── restore_host.py     Restore archived host(s)
 │   │   ├── switch_php.py       Switch PHP version for a domain
 │   │   └── list_hosts.py       List domains with PHP versions

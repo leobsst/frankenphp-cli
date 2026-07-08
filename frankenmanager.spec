@@ -72,6 +72,7 @@ a = Analysis(
         "frankenmanager.commands.status",
         "frankenmanager.commands.setup",
         "frankenmanager.commands.add_host",
+        "frankenmanager.commands.add_alias",
         "frankenmanager.commands.remove_host",
         "frankenmanager.commands.restore_host",
         "frankenmanager.commands.reset",

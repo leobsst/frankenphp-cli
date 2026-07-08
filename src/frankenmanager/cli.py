@@ -161,6 +161,29 @@ def add_host_cmd(
     add_host(domain_list, force_ssl, php)
 
 
+@app.command(name="add-alias")
+def add_alias_cmd(
+    target: str = typer.Argument(..., help="Existing domain to attach the alternate host(s) to"),
+    aliases: str = typer.Argument(..., help="Space-separated alternate domain name(s) to add"),
+    force_ssl: bool = typer.Option(False, "--force-ssl", help="Force SSL certificate regeneration"),
+) -> None:
+    """Add alternate host(s) that reverse-proxy to an already-configured domain.
+
+    This is like 'add-host', but instead of creating a new site with its own
+    Caddyfile and PHP container, each alternate host gets its own SSL
+    certificate and hosts entry and is added to the reverse proxy's Caddyfile
+    only, forwarding to the target domain's existing site.
+
+    Examples:
+        frankenmanager add-alias "myapp.test" "myapp-alt.test"
+        frankenmanager add-alias "myapp.test" "alt1.test alt2.test" --force-ssl
+    """
+    from .commands.add_alias import add_alias
+
+    alias_list = aliases.split()
+    add_alias(target, alias_list, force_ssl)
+
+
 @app.command(name="remove-host")
 def remove_host_cmd(
     domains: str = typer.Argument(..., help="Space-separated domain names to remove"),

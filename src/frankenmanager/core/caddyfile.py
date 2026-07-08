@@ -414,11 +414,49 @@ class CaddyfileGenerator:
 
         return changed
 
+    def _build_proxy_block(self, domain: str, php_version: str, upstream_host: str) -> list[str]:
+        """Build one reverse-proxy site block for the main Caddyfile.
+
+        Args:
+            domain: Public-facing domain this block terminates TLS for.
+            php_version: PHP version whose container this block proxies to.
+            upstream_host: Host header sent upstream. Equal to `domain` for a
+                regular site; set to the target domain when `domain` is an
+                alias, so the FrankenPHP container routes to that site.
+
+        Returns:
+            Lines making up the Caddyfile site block.
+        """
+        http_port, _ = get_internal_ports(php_version)
+        simple_domain = domain.rsplit(".", 1)[0]
+
+        # Use HTTP internally — no need for TLS between proxy and workers
+        upstream = f"127.0.0.1:{http_port}"
+
+        return [
+            f"{domain} {{",
+            f"\ttls /certs/{domain}.pem /certs/{domain}-key.pem",
+            f"\treverse_proxy {upstream} {{",
+            f'\t\theader_up Host "{upstream_host}"',
+            "\t}",
+            "\tlog {",
+            f"\t\toutput file /var/log/caddy/{simple_domain}_access.log {{",
+            "\t\t\troll_size 10mb",
+            "\t\t\troll_keep 5",
+            "\t\t\troll_keep_for 720h",
+            "\t\t}",
+            "\t\tformat console",
+            "\t}",
+            "}",
+            "",
+        ]
+
     def generate_main_caddyfile(
         self,
         domains_versions: list[tuple[str, str]],
         caddy_dir: Path,
         production: bool = False,
+        aliases: Optional[list[tuple[str, str, str]]] = None,
     ) -> None:
         """Generate the main Caddyfile that reverse-proxies to FrankenPHP containers.
 
@@ -428,6 +466,9 @@ class CaddyfileGenerator:
             domains_versions: List of (domain, php_version) tuples.
             caddy_dir: Path to the caddy directory.
             production: Kept for API compatibility (unused, all modes use host network).
+            aliases: Optional list of (alias_domain, php_version, target_domain)
+                tuples. Each alias gets its own TLS cert and block but proxies
+                to its target domain's site — no per-site Caddyfile is involved.
         """
         lines: list[str] = [
             "{",
@@ -438,31 +479,10 @@ class CaddyfileGenerator:
         ]
 
         for domain, php_version in domains_versions:
-            http_port, _ = get_internal_ports(php_version)
-            simple_domain = domain.rsplit(".", 1)[0]
+            lines.extend(self._build_proxy_block(domain, php_version, domain))
 
-            # Use HTTP internally — no need for TLS between proxy and workers
-            upstream = f"127.0.0.1:{http_port}"
-
-            lines.extend(
-                [
-                    f"{domain} {{",
-                    f"\ttls /certs/{domain}.pem /certs/{domain}-key.pem",
-                    f"\treverse_proxy {upstream} {{",
-                    f'\t\theader_up Host "{domain}"',
-                    "\t}",
-                    "\tlog {",
-                    f"\t\toutput file /var/log/caddy/{simple_domain}_access.log {{",
-                    "\t\t\troll_size 10mb",
-                    "\t\t\troll_keep 5",
-                    "\t\t\troll_keep_for 720h",
-                    "\t\t}",
-                    "\t\tformat console",
-                    "\t}",
-                    "}",
-                    "",
-                ]
-            )
+        for alias_domain, php_version, target_domain in aliases or []:
+            lines.extend(self._build_proxy_block(alias_domain, php_version, target_domain))
 
         main_caddyfile = caddy_dir / "Caddyfile"
         main_caddyfile.write_text("\n".join(lines) + "\n")

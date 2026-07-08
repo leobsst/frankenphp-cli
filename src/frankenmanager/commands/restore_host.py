@@ -204,7 +204,9 @@ def restore_host(domains: list[str], force_ssl: bool, php_version: Optional[str]
 
         # Regenerate main reverse proxy Caddyfile and restart proxy
         all_domains_versions = db.get_domains_with_versions()
-        caddyfile.generate_main_caddyfile(all_domains_versions, caddy_dir, env.is_production())
+        caddyfile.generate_main_caddyfile(
+            all_domains_versions, caddy_dir, env.is_production(), db.get_alias_entries()
+        )
 
         from ..core.docker_manager import REVERSE_PROXY_CONTAINER  # noqa: PLC0415
 

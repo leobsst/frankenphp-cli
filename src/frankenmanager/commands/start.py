@@ -182,14 +182,18 @@ def start_server(
     for version in active_versions:
         ensure_php_version_config(project_dir, version)
 
+    # Alias (alternate host) domains persist in their own table and don't carry
+    # a PHP version/container of their own, but still need certs + hosts entries
+    alias_domains = [alias for alias, _, _ in db.get_alias_entries()]
+
     hosts_added: list[str] = []
 
     try:
-        # Generate SSL certificates
-        ssl.generate_all(all_domains, force_ssl, env.is_production())
+        # Generate SSL certificates (real domains + aliases)
+        ssl.generate_all(all_domains + alias_domains, force_ssl, env.is_production())
 
-        # Add hosts entries
-        for domain in all_domains:
+        # Add hosts entries (real domains + aliases)
+        for domain in all_domains + alias_domains:
             hosts.add_entry("127.0.0.1", domain)
             hosts_added.append(domain)
 
@@ -200,7 +204,9 @@ def start_server(
         caddyfile.migrate_worker_caddyfiles()
 
         # Generate main reverse proxy Caddyfile
-        caddyfile.generate_main_caddyfile(domains_with_versions, caddy_dir, env.is_production())
+        caddyfile.generate_main_caddyfile(
+            domains_with_versions, caddy_dir, env.is_production(), db.get_alias_entries()
+        )
 
         # Save domains to database with versions
         db.set_domains_with_versions(domains_with_versions)

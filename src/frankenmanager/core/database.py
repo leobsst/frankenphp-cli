@@ -30,14 +30,16 @@ class DatabaseManager:
             cursor = conn.cursor()
 
             # Create domains table
-            cursor.execute("""
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS domains (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     domain TEXT NOT NULL UNIQUE,
                     php_version TEXT NOT NULL DEFAULT '8.3',
                     added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
-            """)
+            """
+            )
 
             # Migration: add php_version column if missing (existing installs)
             cursor.execute("PRAGMA table_info(domains)")
@@ -47,6 +49,19 @@ class DatabaseManager:
                     "ALTER TABLE domains ADD COLUMN "
                     f"php_version TEXT NOT NULL DEFAULT '{DEFAULT_PHP_VERSION}'"
                 )
+
+            # Create aliases table: alternate hosts that reverse-proxy to an
+            # existing domain's site instead of owning their own Caddyfile.
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS aliases (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    alias_domain TEXT NOT NULL UNIQUE,
+                    target_domain TEXT NOT NULL,
+                    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """
+            )
 
             conn.commit()
 
@@ -251,6 +266,125 @@ class DatabaseManager:
             conn.commit()
             return cursor.rowcount > 0
 
+    def add_aliases(self, alias_domains: list[str], target_domain: str) -> None:
+        """Add alternate host(s) that reverse-proxy to an existing domain.
+
+        Args:
+            alias_domains: List of new alias domain names.
+            target_domain: The existing domain these aliases should proxy to.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+
+            for alias_domain in alias_domains:
+                cursor.execute(
+                    "INSERT OR IGNORE INTO aliases (alias_domain, target_domain) VALUES (?, ?)",
+                    (alias_domain, target_domain),
+                )
+
+            conn.commit()
+
+    def remove_aliases(self, alias_domains: list[str]) -> None:
+        """Remove alias domains.
+
+        Args:
+            alias_domains: List of alias domain names to remove.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+
+            for alias_domain in alias_domains:
+                cursor.execute("DELETE FROM aliases WHERE alias_domain = ?", (alias_domain,))
+
+            conn.commit()
+
+    def remove_aliases_for_targets(self, target_domains: list[str]) -> list[str]:
+        """Remove all aliases pointing to any of the given target domains.
+
+        Used when the target domain itself is removed, to avoid leaving
+        aliases that proxy to a domain that no longer exists.
+
+        Args:
+            target_domains: List of target domain names being removed.
+
+        Returns:
+            List of alias domain names that were removed.
+        """
+        if not target_domains:
+            return []
+
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            placeholders = ",".join("?" * len(target_domains))
+            cursor.execute(
+                f"SELECT alias_domain FROM aliases WHERE target_domain IN ({placeholders})",
+                target_domains,
+            )
+            removed = [row[0] for row in cursor.fetchall()]
+            cursor.execute(
+                f"DELETE FROM aliases WHERE target_domain IN ({placeholders})",
+                target_domains,
+            )
+            conn.commit()
+            return removed
+
+    def get_aliases(self) -> list[tuple[str, str]]:
+        """Get all configured aliases.
+
+        Returns:
+            List of (alias_domain, target_domain) tuples.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT alias_domain, target_domain FROM aliases ORDER BY id")
+            return [(row[0], row[1]) for row in cursor.fetchall()]
+
+    def get_alias_target(self, alias_domain: str) -> Optional[str]:
+        """Get the target domain for an alias.
+
+        Args:
+            alias_domain: The alias domain name.
+
+        Returns:
+            The target domain name, or None if the domain is not an alias.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT target_domain FROM aliases WHERE alias_domain = ?", (alias_domain,)
+            )
+            row = cursor.fetchone()
+            return row[0] if row else None
+
+    def get_alias_entries(self) -> list[tuple[str, str, str]]:
+        """Get all aliases together with their target's current PHP version.
+
+        Resolving the PHP version live (rather than storing it on the alias)
+        keeps aliases in sync automatically when the target's version changes.
+
+        Returns:
+            List of (alias_domain, php_version, target_domain) tuples.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT a.alias_domain, d.php_version, a.target_domain
+                FROM aliases a
+                JOIN domains d ON d.domain = a.target_domain
+                ORDER BY a.id
+            """
+            )
+            return [(row[0], row[1], row[2]) for row in cursor.fetchall()]
+
+    def clear_aliases(self) -> None:
+        """Clear all configured aliases."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM aliases")
+            conn.commit()
+
     def reset(self) -> None:
         """Reset database to default state."""
         self.clear_domains()
+        self.clear_aliases()

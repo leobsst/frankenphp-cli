@@ -55,24 +55,32 @@ def remove_host(domains: list[str]) -> None:
     existing = db.get_domains_with_versions()
     existing_domains = [d for d, _ in existing]
     domain_version_map = {d: v for d, v in existing}
+    alias_target_map = {alias: target for alias, target in db.get_aliases()}
 
-    # Validate domains to remove
+    # Validate domains to remove, splitting real hosts from alias-only hosts
     domains_to_remove: list[str] = []
+    aliases_to_remove: list[str] = []
     for domain in domains:
-        if domain not in existing_domains:
-            log_warning(f"Domain '{domain}' is not configured, skipping.")
-        elif domain in domains_to_remove:
-            log_info(f"Domain '{domain}' is duplicated in input, skipping.")
+        if domain in existing_domains:
+            if domain in domains_to_remove:
+                log_info(f"Domain '{domain}' is duplicated in input, skipping.")
+            else:
+                domains_to_remove.append(domain)
+        elif domain in alias_target_map:
+            if domain in aliases_to_remove:
+                log_info(f"Domain '{domain}' is duplicated in input, skipping.")
+            else:
+                aliases_to_remove.append(domain)
         else:
-            domains_to_remove.append(domain)
+            log_warning(f"Domain '{domain}' is not configured, skipping.")
 
-    if not domains_to_remove:
+    if not domains_to_remove and not aliases_to_remove:
         log_info("No domains to remove.")
         return
 
     # Check if we're trying to remove all domains
     remaining_after_removal = [d for d in existing_domains if d not in domains_to_remove]
-    if not remaining_after_removal:
+    if domains_to_remove and not remaining_after_removal:
         log_error("Cannot remove all domains. Use 'stop' command to stop the server entirely.")
         return
 
@@ -90,9 +98,12 @@ def remove_host(domains: list[str]) -> None:
         versions_to_remove_from.setdefault(version, []).append(domain)
 
     try:
-        log_info(f"Removing {len(domains_to_remove)} domain(s)...")
+        log_info(
+            f"Removing {len(domains_to_remove)} domain(s) "
+            f"and {len(aliases_to_remove)} alternate host(s)..."
+        )
 
-        # Remove hosts entries
+        # Remove hosts entries for real domains being removed
         log_info("Removing hosts entries...")
         for domain in domains_to_remove:
             try:
@@ -100,12 +111,31 @@ def remove_host(domains: list[str]) -> None:
             except Exception as e:
                 log_warning(f"Failed to remove hosts entry for {domain}: {e}")
 
-        # Archive Caddyfiles
-        log_info("Archiving Caddyfiles...")
-        caddyfile.archive(domains_to_remove)
+        # Archive Caddyfiles for real domains
+        if domains_to_remove:
+            log_info("Archiving Caddyfiles...")
+            caddyfile.archive(domains_to_remove)
 
         # Update database to remove domains
         db.remove_domains(domains_to_remove)
+
+        # Remove explicitly requested aliases, then cascade-remove any
+        # remaining aliases that pointed to a domain we just removed
+        db.remove_aliases(aliases_to_remove)
+        cascaded_aliases = db.remove_aliases_for_targets(domains_to_remove)
+        all_removed_aliases = aliases_to_remove + cascaded_aliases
+
+        if cascaded_aliases:
+            log_info(
+                "Also removing alternate host(s) pointing to removed domain(s): "
+                f"{', '.join(cascaded_aliases)}"
+            )
+
+        for domain in all_removed_aliases:
+            try:
+                hosts.remove_entry("127.0.0.1", domain)
+            except Exception as e:
+                log_warning(f"Failed to remove hosts entry for {domain}: {e}")
 
         # Check which versions still have domains after removal
         versions_after = db.get_active_php_versions()
@@ -131,7 +161,7 @@ def remove_host(domains: list[str]) -> None:
         # Regenerate main reverse proxy Caddyfile
         remaining_domains_versions = db.get_domains_with_versions()
         caddyfile.generate_main_caddyfile(
-            remaining_domains_versions, caddy_dir, env.is_production()
+            remaining_domains_versions, caddy_dir, env.is_production(), db.get_alias_entries()
         )
 
         # Restart the reverse proxy
@@ -142,10 +172,15 @@ def remove_host(domains: list[str]) -> None:
 
         print()
         log_success("Host(s) removed successfully!")
-        log_info("Removed domains:")
-        for domain in domains_to_remove:
-            log_info(f"  - {domain} (PHP {domain_version_map[domain]})")
-        log_info(f"\nCaddyfiles archived to: {caddyfile.archive_dir}")
+        if domains_to_remove:
+            log_info("Removed domains:")
+            for domain in domains_to_remove:
+                log_info(f"  - {domain} (PHP {domain_version_map[domain]})")
+            log_info(f"\nCaddyfiles archived to: {caddyfile.archive_dir}")
+        if all_removed_aliases:
+            log_info("Removed alternate hosts:")
+            for domain in all_removed_aliases:
+                log_info(f"  - {domain}")
 
     except Exception as e:
         log_error(f"An error occurred: {e}")

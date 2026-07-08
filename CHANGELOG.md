@@ -30,10 +30,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Multiple domain support
   - Optional `--force-ssl` flag
   - Automatic Caddyfile generation and container restart
+- `add-alias` - Add alternate host(s) that reverse-proxy to an already-configured domain
+  - No per-site Caddyfile or new PHP container: only the reverse proxy's Caddyfile is updated
+  - Dedicated SSL certificate and `/etc/hosts` entry per alias
+  - Follows the target domain's PHP version automatically, including after `switch-php`
+  - Shown alongside registered domains in `frankenmanager list`
+  - Multiple alias support and optional `--force-ssl` flag
 - `remove-host` - Remove domains and archive their Caddyfiles
   - Multiple domain support
   - Caddyfiles moved to archive directory (not deleted)
   - Automatic `/etc/hosts` cleanup
+  - Also removes alternate hosts (aliases) that target a removed domain
+  - Can remove an alternate host (alias) directly by name, leaving its target untouched
 - `restore-host` - Restore archived domains
   - `--list` option to view all archived hosts
   - Multiple domain support
@@ -70,6 +78,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - ACID-compliant transactions
   - Timestamp tracking for domains and status changes
   - Automatic migration from legacy JSON config
+  - Dedicated `aliases` table for alternate hosts, auto-created on upgrade (no reset required)
 - `.env` file generation with sensible defaults
   - Auto-generated MariaDB root password
   - Auto-filled UID/GID for file ownership
@@ -95,6 +104,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `default/` - Default site configurations
   - `archive/` - Archived configurations from removed hosts
 - Automatic Caddy reload on configuration changes
+- Alternate host (alias) support in the reverse proxy Caddyfile: dedicated TLS block per alias, proxied to its target domain's site with no separate per-site Caddyfile
 
 #### Developer Experience
 - Rich console output with color-coded messages

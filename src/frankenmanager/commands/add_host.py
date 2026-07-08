@@ -120,7 +120,9 @@ def add_host(domains: list[str], force_ssl: bool, php_version: Optional[str] = N
 
         # Regenerate main reverse proxy Caddyfile
         all_domains_versions = db.get_domains_with_versions()
-        caddyfile.generate_main_caddyfile(all_domains_versions, caddy_dir, env.is_production())
+        caddyfile.generate_main_caddyfile(
+            all_domains_versions, caddy_dir, env.is_production(), db.get_alias_entries()
+        )
 
         if need_new_container:
             # Build and start a new container for this PHP version
