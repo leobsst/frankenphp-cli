@@ -13,8 +13,30 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from .. import __version__
 from ..utils.logging import log_info, log_warning
 from .php_versions import SUPPORTED_VERSIONS
+
+# Plain template files the CLI only ever reads, never rewrites at runtime.
+# Safe to overwrite wholesale when the installed package version changes.
+# Excludes generated/live state such as caddy/Caddyfile (rewritten by
+# generate_main_caddyfile), docker-compose-generated.yml, per-domain site
+# configs under caddy/sites/{custom,php-*}/, and per-version php.ini copies
+# under php/<version>/ (user-editable once distributed).
+STATIC_RESOURCE_FILES = [
+    Path(".env.example"),
+    Path("docker-compose.yml"),
+    Path("docker-compose-prod.yml"),
+    Path("Dockerfile"),
+    Path("docker") / "entrypoint.sh",
+    Path("caddy") / "Caddyfile.worker",
+    Path("caddy") / "Caddyfile.template",
+    Path("caddy") / "sites" / "default" / "localhost_Caddyfile",
+    Path("php") / "php.ini",
+    Path("php") / "php-prod.ini",
+]
+
+RESOURCES_VERSION_MARKER = ".resources_version"
 
 
 def get_app_data_dir() -> Path:
@@ -87,8 +109,8 @@ def ensure_resources_extracted() -> Path:
     # Check if already initialized (resources copied)
     marker_file = app_dir / ".initialized"
     if marker_file.exists():
-        # Ensure new files added in later versions are present
-        _ensure_missing_files(app_dir)
+        # Keep static templates in sync with the installed package version
+        _sync_static_resources(app_dir)
         return app_dir
 
     # Get bundled resources
@@ -110,6 +132,7 @@ def ensure_resources_extracted() -> Path:
         "docker-compose.yml",
         "docker-compose-prod.yml",
         "Dockerfile",
+        "docker",
         "caddy",
         "php",
     ]
@@ -140,6 +163,7 @@ def ensure_resources_extracted() -> Path:
 
     # Create marker file
     marker_file.write_text("1")
+    (app_dir / RESOURCES_VERSION_MARKER).write_text(__version__)
 
     log_info("FrankenManager initialized successfully.")
     return app_dir
@@ -206,29 +230,36 @@ def _ensure_directory_structure(app_dir: Path) -> None:
     (app_dir / "database").mkdir(parents=True, exist_ok=True)
 
 
-def _ensure_missing_files(app_dir: Path) -> None:
-    """Copy files added in newer versions that may be missing from existing installs.
+def _sync_static_resources(app_dir: Path) -> None:
+    """Re-copy static template files when the installed package version changes.
+
+    These files (Dockerfile, docker-compose templates, Caddyfile templates,
+    base php.ini...) are never rewritten by the CLI at runtime, unlike the
+    live Caddyfile/docker-compose-generated.yml/per-domain site configs. A
+    version marker avoids re-copying on every invocation once already synced.
 
     Args:
         app_dir: The application data directory.
     """
+    version_file = app_dir / RESOURCES_VERSION_MARKER
+    installed_version = version_file.read_text().strip() if version_file.exists() else None
+    if installed_version == __version__:
+        return
+
     resources_dir = get_bundled_resources_dir()
     if resources_dir is None:
         return
 
-    # Files that must exist (added after initial release)
-    required_files = [
-        Path("caddy") / "Caddyfile.worker",
-    ]
-
-    for rel_path in required_files:
+    for rel_path in STATIC_RESOURCE_FILES:
+        src = resources_dir / rel_path
+        if not src.exists():
+            continue
         dst = app_dir / rel_path
-        if not dst.exists():
-            src = resources_dir / rel_path
-            if src.exists():
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src, dst)
-                _fix_permissions(dst)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+        _fix_permissions(dst)
+
+    version_file.write_text(__version__)
 
 
 def _cleanup_incorrect_directories(app_dir: Path) -> None:

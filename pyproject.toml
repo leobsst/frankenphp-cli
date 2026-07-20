@@ -78,6 +78,7 @@ packages = ["src/frankenmanager"]
 "docker-compose.yml" = "frankenmanager/resources/docker-compose.yml"
 "docker-compose-prod.yml" = "frankenmanager/resources/docker-compose-prod.yml"
 "Dockerfile" = "frankenmanager/resources/Dockerfile"
+"docker/entrypoint.sh" = "frankenmanager/resources/docker/entrypoint.sh"
 "caddy/Caddyfile" = "frankenmanager/resources/caddy/Caddyfile"
 "caddy/Caddyfile.worker" = "frankenmanager/resources/caddy/Caddyfile.worker"
 "caddy/Caddyfile.template" = "frankenmanager/resources/caddy/Caddyfile.template"

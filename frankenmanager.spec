@@ -30,6 +30,7 @@ resource_files = [
     ("docker-compose.yml", "resources"),
     ("docker-compose-prod.yml", "resources"),
     ("Dockerfile", "resources"),
+    ("docker/entrypoint.sh", "resources/docker"),
     ("caddy/Caddyfile", "resources/caddy"),
     ("caddy/Caddyfile.worker", "resources/caddy"),
     ("caddy/Caddyfile.template", "resources/caddy"),
