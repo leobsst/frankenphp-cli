@@ -36,6 +36,7 @@ dependencies = [
     "packaging>=21.0",
     "certifi>=2024.0.0",
     "cryptography>=42.0.0",
+    "qrcode>=7.4.0",
 ]
 
 [project.optional-dependencies]
