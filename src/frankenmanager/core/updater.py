@@ -4,6 +4,7 @@ import json
 import os
 import platform
 import shutil
+import ssl
 import stat
 import sys
 import tempfile
@@ -12,6 +13,7 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 
+import certifi
 from packaging.version import Version
 
 from .. import __version__
@@ -20,6 +22,21 @@ from ..utils.logging import log_error, log_info, log_success, log_warning
 # GitHub repository for releases
 GITHUB_REPO = "leobsst/frankenphp-cli"
 GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+
+
+class UpdateCheckError(Exception):
+    """Raised when release information cannot be fetched or parsed."""
+
+
+def _ssl_context() -> ssl.SSLContext:
+    """Build an SSL context backed by certifi's CA bundle.
+
+    A frozen PyInstaller binary doesn't reliably inherit the host's
+    system CA trust store, so relying on ssl's default lookup can
+    fail with an opaque certificate error on machines other than the
+    one it was built on.
+    """
+    return ssl.create_default_context(cafile=certifi.where())
 
 
 def get_platform_binary_name() -> str:
@@ -54,37 +71,48 @@ def get_current_version() -> str:
     return str(__version__)
 
 
-def fetch_latest_release() -> Optional[dict[str, str]]:
+def fetch_latest_release() -> dict[str, str]:
     """Fetch the latest release information from GitHub.
 
     Returns:
-        Dictionary with 'version' and 'download_url' keys, or None on error.
+        Dictionary with 'version' and 'download_url' keys.
+
+    Raises:
+        UpdateCheckError: If the release information can't be fetched,
+            parsed, or doesn't include an asset for this platform.
     """
     try:
         req = urllib.request.Request(
             GITHUB_API_URL,
             headers={"Accept": "application/vnd.github.v3+json", "User-Agent": "FrankenManager"},
         )
-        with urllib.request.urlopen(req, timeout=10) as response:
+        with urllib.request.urlopen(req, timeout=10, context=_ssl_context()) as response:
             data = json.loads(response.read().decode())
+    except urllib.error.URLError as e:
+        raise UpdateCheckError(f"Could not reach GitHub ({e.reason}).") from e
+    except json.JSONDecodeError as e:
+        raise UpdateCheckError(f"GitHub returned an unreadable response ({e}).") from e
 
+    try:
         version = data["tag_name"].lstrip("v")
-        binary_name = get_platform_binary_name()
+    except KeyError as e:
+        raise UpdateCheckError(f"Unexpected release format from GitHub (missing {e}).") from e
 
-        # Find the download URL for our platform
-        download_url = None
-        for asset in data.get("assets", []):
-            if asset["name"] == binary_name:
-                download_url = asset["browser_download_url"]
-                break
+    binary_name = get_platform_binary_name()
 
-        if not download_url:
-            return None
+    # Find the download URL for our platform
+    download_url = None
+    for asset in data.get("assets", []):
+        if asset["name"] == binary_name:
+            download_url = asset["browser_download_url"]
+            break
 
-        return {"version": version, "download_url": download_url, "name": data["name"]}
+    if not download_url:
+        raise UpdateCheckError(
+            f"The latest release ({version}) has no binary for this platform ({binary_name})."
+        )
 
-    except (urllib.error.URLError, json.JSONDecodeError, KeyError):
-        return None
+    return {"version": version, "download_url": download_url, "name": data["name"]}
 
 
 def check_for_updates() -> Optional[dict[str, str]]:
@@ -92,11 +120,11 @@ def check_for_updates() -> Optional[dict[str, str]]:
 
     Returns:
         Dictionary with update info if available, None otherwise.
+
+    Raises:
+        UpdateCheckError: If release information can't be fetched.
     """
     latest = fetch_latest_release()
-    if not latest:
-        return None
-
     current = get_current_version()
 
     # Handle development versions
@@ -149,7 +177,7 @@ def download_binary(url: str, dest: Path) -> bool:
         log_info(f"Downloading from {url}...")
 
         req = urllib.request.Request(url, headers={"User-Agent": "FrankenManager"})
-        with urllib.request.urlopen(req, timeout=60) as response:
+        with urllib.request.urlopen(req, timeout=60, context=_ssl_context()) as response:
             with open(dest, "wb") as f:
                 shutil.copyfileobj(response, f)
 
@@ -175,10 +203,10 @@ def update_binary(force: bool = False) -> bool:
         return False
 
     log_info("Checking for updates...")
-    latest = fetch_latest_release()
-
-    if not latest:
-        log_error("Could not fetch release information from GitHub.")
+    try:
+        latest = fetch_latest_release()
+    except UpdateCheckError as e:
+        log_error(str(e))
         return False
 
     current = get_current_version()

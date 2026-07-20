@@ -350,12 +350,21 @@ def update(
         frankenmanager update --check  # Check for updates without installing
         frankenmanager update --force  # Force reinstall latest version
     """
-    from .core.updater import check_for_updates, get_current_version, update_binary
-    from .utils.logging import log_info, log_success
+    from .core.updater import (
+        UpdateCheckError,
+        check_for_updates,
+        get_current_version,
+        update_binary,
+    )
+    from .utils.logging import log_error, log_info, log_success
 
     if check_only:
         log_info(f"Current version: {get_current_version()}")
-        update_info = check_for_updates()
+        try:
+            update_info = check_for_updates()
+        except UpdateCheckError as e:
+            log_error(str(e))
+            raise typer.Exit(1) from e
         if update_info:
             log_info(f"New version available: {update_info['version']}")
             log_info(f"Release: {update_info.get('name', 'N/A')}")

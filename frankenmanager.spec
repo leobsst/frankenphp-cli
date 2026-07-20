@@ -62,6 +62,8 @@ a = Analysis(
         "docker.models.containers",
         # Python-dotenv
         "dotenv",
+        # CA bundle used for HTTPS requests (self-update)
+        "certifi",
         # Our modules
         "frankenmanager",
         "frankenmanager.cli",
