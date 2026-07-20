@@ -103,7 +103,7 @@ def start_sharing(app_dir: Path, cert_file: Path, port: int) -> int:
     return process.pid
 
 
-def _wait_until_listening(process: subprocess.Popen, port: int, cert_bytes: bytes) -> None:
+def _wait_until_listening(process: "subprocess.Popen[bytes]", port: int, cert_bytes: bytes) -> None:
     """Block until the spawned server is actually serving our root CA cert.
 
     Popen returns as soon as the child is forked, long before it has bound
@@ -117,7 +117,9 @@ def _wait_until_listening(process: subprocess.Popen, port: int, cert_bytes: byte
     deadline = time.monotonic() + STARTUP_TIMEOUT
     while time.monotonic() < deadline:
         if process.poll() is not None:
-            stderr = process.stderr.read().decode(errors="replace").strip() if process.stderr else ""
+            stderr = (
+                process.stderr.read().decode(errors="replace").strip() if process.stderr else ""
+            )
             detail = stderr.splitlines()[-1] if stderr else f"exited with code {process.returncode}"
             raise SSLError(f"Root CA server failed to start: {detail}")
 
