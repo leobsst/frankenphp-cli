@@ -299,6 +299,53 @@ def status() -> None:
     show_status()
 
 
+@app.command(name="trust-ca")
+def trust_ca_cmd(
+    action: str = typer.Argument(..., help="on, off, or status"),
+    port: int = typer.Option(
+        None,
+        "--port",
+        "-p",
+        help="Port to serve the root CA on (default 9080)",
+    ),
+) -> None:
+    """Serve the local mkcert root CA over the LAN so other devices can trust it.
+
+    Off by default. Turn it on temporarily when you need another device on
+    your network to trust your local .test domains, then turn it off again.
+    Only the public root CA is served - never its private key.
+
+    Examples:
+        frankenmanager trust-ca on              # Start sharing on the default port
+        frankenmanager trust-ca on --port 9443   # Start sharing on a custom port
+        frankenmanager trust-ca status           # Check whether sharing is active
+        frankenmanager trust-ca off              # Stop sharing
+    """
+    from .commands.trust_ca import trust_ca_off, trust_ca_on, trust_ca_status
+    from .core.ca_server import DEFAULT_PORT
+
+    if action == "on":
+        trust_ca_on(port if port is not None else DEFAULT_PORT)
+    elif action == "off":
+        trust_ca_off()
+    elif action == "status":
+        trust_ca_status()
+    else:
+        console.print(f"[red]Unknown action '{action}'. Use on, off, or status.[/red]")
+        raise typer.Exit(1)
+
+
+@app.command(name="_serve-ca-internal", hidden=True)
+def serve_ca_internal_cmd(
+    cert_file: str = typer.Argument(...),
+    port: int = typer.Argument(...),
+) -> None:
+    """Internal: blocking single-file HTTP server, spawned by `trust-ca on`."""
+    from .core.ca_server import run_server
+
+    run_server(Path(cert_file), port)
+
+
 @app.command()
 def setup(
     remove: bool = typer.Option(False, "--remove", "-r", help="Remove privilege configuration"),

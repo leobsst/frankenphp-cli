@@ -16,6 +16,7 @@ db.sqlite
 .db_password_history
 .DS_Store
 .env
+.ca_server.state
 # Python
 .venv/
 __pycache__/

@@ -123,6 +123,7 @@ frankenmanager setup --status
 | `frankenmanager reset --db \| --caddyfiles` | Reset configuration and/or Caddyfiles (requires stopped server) |
 | `frankenmanager setup` | Configure passwordless operation |
 | `frankenmanager update` | Update FrankenManager to latest version |
+| `frankenmanager trust-ca on \| off \| status [--port <port>]` | Share the local mkcert root CA over the LAN so other devices can trust your `.test` domains (off by default) |
 | `frankenmanager --help` | Show help for all commands |
 
 ## Usage
@@ -520,6 +521,28 @@ Worker sites run on plain HTTP internally. TLS termination happens at the revers
 frankenmanager start "domain.test" /path/to/projects --force-ssl
 ```
 
+### Share the root CA over your LAN
+
+mkcert's root CA is only trusted on the machine where it was installed. Accessing your `.test` domains from another device on the same network (phone, another computer) shows a certificate warning until that device trusts the same root CA too.
+
+`trust-ca` serves `rootCA.pem` (never the private key) from your host's LAN IP over plain HTTP, so another device can download and install it without needing an MDM/GPO push. It's off by default and only runs while explicitly turned on:
+
+```bash
+# Start sharing on the default port (9080)
+frankenmanager trust-ca on
+
+# Start sharing on a custom port
+frankenmanager trust-ca on --port 9443
+
+# Check whether sharing is currently active
+frankenmanager trust-ca status
+
+# Stop sharing
+frankenmanager trust-ca off
+```
+
+`trust-ca on` prints a URL such as `http://192.168.1.42:9080/` - open it in a browser on the other device to download `rootCA.pem`, then install it as a trusted root certificate (Keychain Access on macOS, Certificate Manager on Windows, Settings > Security on Android/iOS). Turn sharing back off once the other device has installed it.
+
 ### Show version
 
 ```bash
@@ -862,6 +885,10 @@ Force regeneration:
 ```bash
 frankenmanager start "domain.test" /path --force-ssl
 ```
+
+### Certificate errors from another device on the network
+
+This is expected: mkcert's root CA is only trusted on the machine that installed it. Use `frankenmanager trust-ca on` to serve the root CA over your LAN so the other device can download and trust it - see [Share the root CA over your LAN](#share-the-root-ca-over-your-lan).
 
 ### mkcert not found
 

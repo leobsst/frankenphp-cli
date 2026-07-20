@@ -64,6 +64,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `--check` option to check for updates without installing
   - `--force` option to force reinstall latest version
   - Automatic update notifications on command execution
+- `trust-ca` - Share the local mkcert root CA over the LAN (off by default)
+  - `on`/`off`/`status` actions, optional `--port` (default `9080`)
+  - Serves only the public root certificate, never its private key
+  - Lets other devices on the network trust locally-issued `.test` domains without an MDM/GPO push
 
 #### Services
 - **FrankenPHP** (webserver-and-caddy) - PHP 8.3 with Caddy web server
@@ -100,6 +104,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Certificate storage in dedicated certs directory
 - Force SSL regeneration option across all commands
 - Per-domain certificate management
+- The local mkcert root CA is trusted inside PHP containers too, not just the host browser - outgoing PHP/curl calls to other local domains (e.g. cross-project API calls) validate correctly
+- Share the root CA over the LAN via `trust-ca` so other devices can trust it without manual per-device setup
 
 #### Caddyfile Management
 - Template-based Caddyfile generation
@@ -138,6 +144,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - PyInstaller-based binary compilation
 - Self-contained executables with embedded resources
 - Version checking and display
+- Static resource templates (Dockerfile, docker-compose files, Caddyfile templates, base php.ini) automatically resync on update when the installed version changes, leaving generated/live files (Caddyfile, docker-compose-generated.yml, per-domain site configs) untouched
 
 ### Technical Details
 - Built with Python 3.9+
