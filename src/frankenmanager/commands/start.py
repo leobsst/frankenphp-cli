@@ -281,6 +281,9 @@ def start_server(
             except Exception:
                 pass
 
-        db.reset()
+        # Restore domains to their pre-attempt state rather than wiping the
+        # database: previously registered domains/aliases are unrelated to
+        # this failure and must survive it.
+        db.set_domains_with_versions(registered)
         log_error("Cleanup complete. The server did not start.")
         raise
