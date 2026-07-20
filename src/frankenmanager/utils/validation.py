@@ -12,6 +12,13 @@ DOMAIN_REGEX = re.compile(r"^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z]{2
 # Reserved local hostnames allowed without a TLD
 LOCAL_HOSTNAMES = {"localhost"}
 
+# Reverse-proxy upstream target: optional http(s):// scheme, a hostname or IP,
+# an optional port, and an optional trailing slash (e.g. "127.0.0.1:8006",
+# "http://127.0.0.1:8006", "backend.internal:9000").
+PROXY_TARGET_REGEX = re.compile(
+    r"^(https?://)?[a-zA-Z0-9]([a-zA-Z0-9_.-]*[a-zA-Z0-9])?(:\d{1,5})?/?$"
+)
+
 
 def validate_domain(domain: str) -> None:
     """Validate a domain name format.
@@ -26,6 +33,20 @@ def validate_domain(domain: str) -> None:
         return
     if not DOMAIN_REGEX.match(domain):
         raise ValidationError(f"Invalid domain name: {domain}")
+
+
+def validate_proxy_target(target: str) -> None:
+    """Validate a reverse-proxy upstream target.
+
+    Args:
+        target: The raw upstream address (e.g. "127.0.0.1:8006",
+            "http://127.0.0.1:8006").
+
+    Raises:
+        ValidationError: If the target is not a valid host[:port] address.
+    """
+    if not PROXY_TARGET_REGEX.match(target):
+        raise ValidationError(f"Invalid proxy target: {target}")
 
 
 def validate_directory(path: Path) -> None:

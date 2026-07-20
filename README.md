@@ -22,6 +22,7 @@ A powerful CLI tool for managing local PHP development environments using Docker
 - **Multiple PHP versions** (8.2, 8.3, 8.4, 8.5) running simultaneously, per-domain
 - Live PHP version switching per domain (`switch-php`)
 - Alternate hosts (aliases) that reverse-proxy to an existing domain's site (`add-alias`), with no extra Caddyfile or container
+- Proxy hosts that reverse-proxy straight to a raw upstream address (`add-host <domain> <target>`), with no PHP container or per-site Caddyfile
 - Automated SSL certificate generation via mkcert
 - FrankenPHP with Caddy reverse proxy
 - MariaDB database with health checks
@@ -114,6 +115,7 @@ frankenmanager setup --status
 | `frankenmanager status` | Show current server and container status |
 | `frankenmanager list` | List all registered domains with their PHP versions |
 | `frankenmanager add-host <domains> [--php <version>]` | Add new domains while server is running |
+| `frankenmanager add-host <domain> <target>` | Add domain(s) that reverse-proxy to a raw upstream address (e.g. `127.0.0.1:8006`) |
 | `frankenmanager add-alias <target> <aliases>` | Add alternate host(s) that reverse-proxy to an existing domain |
 | `frankenmanager remove-host <domains>` | Remove domains (or alternate hosts) while server is running |
 | `frankenmanager restore-host [domains] [--php <version>]` | Restore archived domains |
@@ -376,6 +378,30 @@ This will:
 4. Generate Caddyfile configuration(s)
 5. Restart only the FrankenPHP container (other services remain untouched)
 
+#### Add a proxy host
+
+Give `add-host` a second argument — a raw upstream address — to register a domain that reverse-proxies straight to it instead of getting its own PHP container. This is useful for fronting another local service (e.g. something running directly on the host, or in an unrelated container) with a `.test` domain and HTTPS.
+
+```bash
+# Proxy to a bare host:port
+frankenmanager add-host "proxy.test" 127.0.0.1:8006
+
+# Proxy with an explicit scheme
+frankenmanager add-host "proxy.test" http://127.0.0.1:8006
+
+# Force SSL certificate regeneration
+frankenmanager add-host "proxy.test" 127.0.0.1:8006 --force-ssl
+```
+
+This will:
+1. Validate the domain name(s) and the upstream target
+2. Generate SSL certificates
+3. Add entries to `/etc/hosts`
+4. Add the domain to the reverse proxy Caddyfile (no per-site Caddyfile, no new PHP container)
+5. Restart only the reverse proxy
+
+`--php` is ignored when a target is given — proxy hosts have no PHP container of their own. Proxy hosts are shown in their own table in `frankenmanager list`.
+
 #### Add an alternate host (alias)
 
 `add-alias` attaches one or more extra domains to a host that's already configured with `add-host`/`start`. Unlike `add-host`, it does **not** create a per-site Caddyfile or a new PHP container: the alias gets its own SSL certificate and `/etc/hosts` entry, and is added to the reverse proxy's Caddyfile only, forwarding to the target domain's existing site.
@@ -411,11 +437,14 @@ frankenmanager remove-host "app1.test app2.test"
 
 # Remove an alternate host (alias) only, leaving the target untouched
 frankenmanager remove-host "myapp-alt.test"
+
+# Remove a proxy host
+frankenmanager remove-host "proxy.test"
 ```
 
 This will:
 1. Remove entries from `/etc/hosts`
-2. Archive the Caddyfile to `caddy/sites/archive/` (not deleted) — skipped for aliases, which have no Caddyfile of their own
+2. Archive the Caddyfile to `caddy/sites/archive/` (not deleted) — skipped for aliases and proxy hosts, which have no Caddyfile of their own
 3. Restart only the FrankenPHP container
 
 Removing a domain also removes any alternate hosts (aliases) pointing to it, since they'd otherwise be left proxying to a domain that no longer exists.
@@ -650,9 +679,17 @@ CREATE TABLE aliases (
     target_domain TEXT NOT NULL,
     added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Proxies table (raw upstream proxy hosts added via `add-host <domain> <target>`)
+CREATE TABLE proxies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    domain TEXT NOT NULL UNIQUE,
+    target TEXT NOT NULL,
+    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 ```
 
-The `aliases` table is created automatically the next time you run any `frankenmanager` command after upgrading — no reset or manual migration needed.
+The `aliases` and `proxies` tables are created automatically the next time you run any `frankenmanager` command after upgrading — no reset or manual migration needed.
 
 ### Environment Variables (.env)
 

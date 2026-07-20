@@ -138,6 +138,14 @@ def restart(
 @app.command(name="add-host")
 def add_host_cmd(
     domains: str = typer.Argument(..., help="Space-separated domain names to add"),
+    target: Optional[str] = typer.Argument(
+        None,
+        help=(
+            "Reverse-proxy upstream (e.g. http://127.0.0.1:8006 or 127.0.0.1:8006). "
+            "When set, the domain(s) proxy to this raw address instead of getting "
+            "their own PHP container."
+        ),
+    ),
     force_ssl: bool = typer.Option(False, "--force-ssl", help="Force SSL certificate regeneration"),
     php: Optional[str] = typer.Option(
         None,
@@ -150,15 +158,21 @@ def add_host_cmd(
     This command allows you to add new domains while the server is running,
     without having to stop and restart the entire environment.
 
+    If a target is given, the domain(s) are registered as proxy hosts that
+    forward straight to that raw upstream address instead of getting a PHP
+    container of their own.
+
     Examples:
         frankenmanager add-host "newapp.test"
         frankenmanager add-host "app1.test app2.test" --php 8.4
         frankenmanager add-host "legacy.test" --php 8.2 --force-ssl
+        frankenmanager add-host "domain.test" http://127.0.0.1:8006
+        frankenmanager add-host "domain.test" 127.0.0.1:8006
     """
     from .commands.add_host import add_host
 
     domain_list = domains.split()
-    add_host(domain_list, force_ssl, php)
+    add_host(domain_list, force_ssl, php, target)
 
 
 @app.command(name="add-alias")

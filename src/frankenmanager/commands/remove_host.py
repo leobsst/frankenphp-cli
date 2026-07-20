@@ -56,10 +56,12 @@ def remove_host(domains: list[str]) -> None:
     existing_domains = [d for d, _ in existing]
     domain_version_map = {d: v for d, v in existing}
     alias_target_map = {alias: target for alias, target in db.get_aliases()}
+    proxy_target_map = {proxy: target for proxy, target in db.get_proxies()}
 
-    # Validate domains to remove, splitting real hosts from alias-only hosts
+    # Validate domains to remove, splitting real hosts, alias-only hosts, and proxy hosts
     domains_to_remove: list[str] = []
     aliases_to_remove: list[str] = []
+    proxies_to_remove: list[str] = []
     for domain in domains:
         if domain in existing_domains:
             if domain in domains_to_remove:
@@ -71,10 +73,15 @@ def remove_host(domains: list[str]) -> None:
                 log_info(f"Domain '{domain}' is duplicated in input, skipping.")
             else:
                 aliases_to_remove.append(domain)
+        elif domain in proxy_target_map:
+            if domain in proxies_to_remove:
+                log_info(f"Domain '{domain}' is duplicated in input, skipping.")
+            else:
+                proxies_to_remove.append(domain)
         else:
             log_warning(f"Domain '{domain}' is not configured, skipping.")
 
-    if not domains_to_remove and not aliases_to_remove:
+    if not domains_to_remove and not aliases_to_remove and not proxies_to_remove:
         log_info("No domains to remove.")
         return
 
@@ -99,8 +106,9 @@ def remove_host(domains: list[str]) -> None:
 
     try:
         log_info(
-            f"Removing {len(domains_to_remove)} domain(s) "
-            f"and {len(aliases_to_remove)} alternate host(s)..."
+            f"Removing {len(domains_to_remove)} domain(s), "
+            f"{len(aliases_to_remove)} alternate host(s), "
+            f"and {len(proxies_to_remove)} proxy host(s)..."
         )
 
         # Remove hosts entries for real domains being removed
@@ -137,6 +145,14 @@ def remove_host(domains: list[str]) -> None:
             except Exception as e:
                 log_warning(f"Failed to remove hosts entry for {domain}: {e}")
 
+        # Remove requested proxy hosts
+        db.remove_proxies(proxies_to_remove)
+        for domain in proxies_to_remove:
+            try:
+                hosts.remove_entry("127.0.0.1", domain)
+            except Exception as e:
+                log_warning(f"Failed to remove hosts entry for {domain}: {e}")
+
         # Check which versions still have domains after removal
         versions_after = db.get_active_php_versions()
         orphaned_versions = versions_before - versions_after
@@ -161,7 +177,11 @@ def remove_host(domains: list[str]) -> None:
         # Regenerate main reverse proxy Caddyfile
         remaining_domains_versions = db.get_domains_with_versions()
         caddyfile.generate_main_caddyfile(
-            remaining_domains_versions, caddy_dir, env.is_production(), db.get_alias_entries()
+            remaining_domains_versions,
+            caddy_dir,
+            env.is_production(),
+            db.get_alias_entries(),
+            db.get_proxies(),
         )
 
         # Restart the reverse proxy
@@ -180,6 +200,10 @@ def remove_host(domains: list[str]) -> None:
         if all_removed_aliases:
             log_info("Removed alternate hosts:")
             for domain in all_removed_aliases:
+                log_info(f"  - {domain}")
+        if proxies_to_remove:
+            log_info("Removed proxy hosts:")
+            for domain in proxies_to_remove:
                 log_info(f"  - {domain}")
 
     except Exception as e:

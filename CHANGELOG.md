@@ -30,6 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Multiple domain support
   - Optional `--force-ssl` flag
   - Automatic Caddyfile generation and container restart
+  - Optional raw upstream target (e.g. `add-host domain.test 127.0.0.1:8006`) registers the domain(s) as proxy host(s) that reverse-proxy straight to that address instead of getting a PHP container of their own — `--php` is ignored in this mode
+  - Dedicated SSL certificate and `/etc/hosts` entry per proxy host
+  - Shown in their own table in `frankenmanager list`
 - `add-alias` - Add alternate host(s) that reverse-proxy to an already-configured domain
   - No per-site Caddyfile or new PHP container: only the reverse proxy's Caddyfile is updated
   - Dedicated SSL certificate and `/etc/hosts` entry per alias
@@ -42,6 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Automatic `/etc/hosts` cleanup
   - Also removes alternate hosts (aliases) that target a removed domain
   - Can remove an alternate host (alias) directly by name, leaving its target untouched
+  - Can remove a proxy host directly by name
 - `restore-host` - Restore archived domains
   - `--list` option to view all archived hosts
   - Multiple domain support
@@ -79,6 +83,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Timestamp tracking for domains and status changes
   - Automatic migration from legacy JSON config
   - Dedicated `aliases` table for alternate hosts, auto-created on upgrade (no reset required)
+  - Dedicated `proxies` table for raw upstream proxy hosts, auto-created on upgrade (no reset required)
 - `.env` file generation with sensible defaults
   - Auto-generated MariaDB root password
   - Auto-filled UID/GID for file ownership
@@ -105,6 +110,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `archive/` - Archived configurations from removed hosts
 - Automatic Caddy reload on configuration changes
 - Alternate host (alias) support in the reverse proxy Caddyfile: dedicated TLS block per alias, proxied to its target domain's site with no separate per-site Caddyfile
+- Proxy host support in the reverse proxy Caddyfile: dedicated TLS block per proxy host, forwarding straight to a raw upstream address with no separate per-site Caddyfile
 
 #### Developer Experience
 - Rich console output with color-coded messages

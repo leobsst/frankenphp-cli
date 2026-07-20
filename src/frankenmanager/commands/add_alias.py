@@ -116,7 +116,11 @@ def add_alias(target_domain: str, alias_domains: list[str], force_ssl: bool) -> 
         # Regenerate main reverse proxy Caddyfile with the new aliases included
         all_domains_versions = db.get_domains_with_versions()
         caddyfile.generate_main_caddyfile(
-            all_domains_versions, caddy_dir, env.is_production(), db.get_alias_entries()
+            all_domains_versions,
+            caddy_dir,
+            env.is_production(),
+            db.get_alias_entries(),
+            db.get_proxies(),
         )
 
         # Restart the reverse proxy to pick up the new routes

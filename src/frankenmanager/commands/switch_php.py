@@ -139,7 +139,11 @@ def switch_php(domain: str, php_version: str) -> None:
         # Regenerate main reverse proxy Caddyfile and restart proxy
         all_domains_versions = db.get_domains_with_versions()
         caddyfile.generate_main_caddyfile(
-            all_domains_versions, caddy_dir, env.is_production(), db.get_alias_entries()
+            all_domains_versions,
+            caddy_dir,
+            env.is_production(),
+            db.get_alias_entries(),
+            db.get_proxies(),
         )
 
         log_info("Restarting reverse proxy...")

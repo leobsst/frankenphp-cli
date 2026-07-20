@@ -31,9 +31,10 @@ def stop_server() -> None:
     # Stop containers (compose down handles all containers defined in the generated file)
     docker.compose_down(env.is_production() if env.env_path.exists() else False)
 
-    # Remove hosts entries (real domains + alias hosts)
+    # Remove hosts entries (real domains + alias hosts + proxy hosts)
     alias_domains = [alias for alias, _ in db.get_aliases()]
-    for domain in db.get_domains() + alias_domains:
+    proxy_domains = [domain for domain, _ in db.get_proxies()]
+    for domain in db.get_domains() + alias_domains + proxy_domains:
         try:
             hosts.remove_entry("127.0.0.1", domain)
         except Exception:

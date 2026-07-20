@@ -451,12 +451,43 @@ class CaddyfileGenerator:
             "",
         ]
 
+    def _build_raw_proxy_block(self, domain: str, target: str) -> list[str]:
+        """Build one reverse-proxy site block forwarding to a raw upstream address.
+
+        Args:
+            domain: Public-facing domain this block terminates TLS for.
+            target: Raw upstream address (e.g. "127.0.0.1:8006", "http://host:port").
+                Passed straight to Caddy's `reverse_proxy`, which understands
+                bare host:port as well as http:// / https:// prefixed addresses.
+
+        Returns:
+            Lines making up the Caddyfile site block.
+        """
+        simple_domain = domain.rsplit(".", 1)[0]
+
+        return [
+            f"{domain} {{",
+            f"\ttls /certs/{domain}.pem /certs/{domain}-key.pem",
+            f"\treverse_proxy {target}",
+            "\tlog {",
+            f"\t\toutput file /var/log/caddy/{simple_domain}_access.log {{",
+            "\t\t\troll_size 10mb",
+            "\t\t\troll_keep 5",
+            "\t\t\troll_keep_for 720h",
+            "\t\t}",
+            "\t\tformat console",
+            "\t}",
+            "}",
+            "",
+        ]
+
     def generate_main_caddyfile(
         self,
         domains_versions: list[tuple[str, str]],
         caddy_dir: Path,
         production: bool = False,
         aliases: Optional[list[tuple[str, str, str]]] = None,
+        raw_proxies: Optional[list[tuple[str, str]]] = None,
     ) -> None:
         """Generate the main Caddyfile that reverse-proxies to FrankenPHP containers.
 
@@ -469,6 +500,9 @@ class CaddyfileGenerator:
             aliases: Optional list of (alias_domain, php_version, target_domain)
                 tuples. Each alias gets its own TLS cert and block but proxies
                 to its target domain's site — no per-site Caddyfile is involved.
+            raw_proxies: Optional list of (domain, target) tuples. Each gets its
+                own TLS cert and block but proxies straight to the given raw
+                upstream address instead of a FrankenPHP container.
         """
         lines: list[str] = [
             "{",
@@ -483,6 +517,9 @@ class CaddyfileGenerator:
 
         for alias_domain, php_version, target_domain in aliases or []:
             lines.extend(self._build_proxy_block(alias_domain, php_version, target_domain))
+
+        for proxy_domain, target in raw_proxies or []:
+            lines.extend(self._build_raw_proxy_block(proxy_domain, target))
 
         main_caddyfile = caddy_dir / "Caddyfile"
         main_caddyfile.write_text("\n".join(lines) + "\n")

@@ -16,22 +16,24 @@ def list_hosts() -> None:
     db = DatabaseManager(project_dir / "db.sqlite")
     domains_with_versions = db.get_domains_with_versions()
     aliases = db.get_aliases()
+    proxies = db.get_proxies()
 
-    if not domains_with_versions:
+    if not domains_with_versions and not aliases and not proxies:
         console.print("\nNo domains registered.")
         console.print("Use 'frankenmanager start \"myapp.test\"' to add domains.\n")
         return
 
-    table = Table(title="Registered Domains", show_header=True, header_style="bold")
-    table.add_column("Domain", style="cyan")
-    table.add_column("PHP", style="green")
+    if domains_with_versions:
+        table = Table(title="Registered Domains", show_header=True, header_style="bold")
+        table.add_column("Domain", style="cyan")
+        table.add_column("PHP", style="green")
 
-    for domain, php_version in domains_with_versions:
-        table.add_row(f"https://{domain}", php_version)
+        for domain, php_version in domains_with_versions:
+            table.add_row(f"https://{domain}", php_version)
 
-    console.print()
-    console.print(table)
-    console.print(f"\n[dim]{len(domains_with_versions)} domain(s) registered[/dim]")
+        console.print()
+        console.print(table)
+        console.print(f"\n[dim]{len(domains_with_versions)} domain(s) registered[/dim]")
 
     if aliases:
         alias_table = Table(
@@ -45,6 +47,18 @@ def list_hosts() -> None:
 
         console.print()
         console.print(alias_table)
-        console.print(f"\n[dim]{len(aliases)} alternate host(s) registered[/dim]\n")
-    else:
+        console.print(f"\n[dim]{len(aliases)} alternate host(s) registered[/dim]")
+
+    if proxies:
+        proxy_table = Table(title="Proxy Hosts", show_header=True, header_style="bold")
+        proxy_table.add_column("Domain", style="cyan")
+        proxy_table.add_column("Upstream", style="magenta")
+
+        for domain, target in proxies:
+            proxy_table.add_row(f"https://{domain}", target)
+
         console.print()
+        console.print(proxy_table)
+        console.print(f"\n[dim]{len(proxies)} proxy host(s) registered[/dim]")
+
+    console.print()

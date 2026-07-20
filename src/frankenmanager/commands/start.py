@@ -186,14 +186,21 @@ def start_server(
     # a PHP version/container of their own, but still need certs + hosts entries
     alias_domains = [alias for alias, _, _ in db.get_alias_entries()]
 
+    # Proxy hosts likewise persist independently and forward to a raw upstream
+    # address, but still need certs + hosts entries
+    proxy_entries = db.get_proxies()
+    proxy_domains = [domain for domain, _ in proxy_entries]
+
     hosts_added: list[str] = []
 
     try:
-        # Generate SSL certificates (real domains + aliases)
-        ssl.generate_all(all_domains + alias_domains, force_ssl, env.is_production())
+        # Generate SSL certificates (real domains + aliases + proxies)
+        ssl.generate_all(
+            all_domains + alias_domains + proxy_domains, force_ssl, env.is_production()
+        )
 
-        # Add hosts entries (real domains + aliases)
-        for domain in all_domains + alias_domains:
+        # Add hosts entries (real domains + aliases + proxies)
+        for domain in all_domains + alias_domains + proxy_domains:
             hosts.add_entry("127.0.0.1", domain)
             hosts_added.append(domain)
 
@@ -205,7 +212,11 @@ def start_server(
 
         # Generate main reverse proxy Caddyfile
         caddyfile.generate_main_caddyfile(
-            domains_with_versions, caddy_dir, env.is_production(), db.get_alias_entries()
+            domains_with_versions,
+            caddy_dir,
+            env.is_production(),
+            db.get_alias_entries(),
+            proxy_entries,
         )
 
         # Save domains to database with versions

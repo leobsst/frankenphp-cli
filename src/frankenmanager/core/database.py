@@ -63,6 +63,20 @@ class DatabaseManager:
             """
             )
 
+            # Create proxies table: domains that reverse-proxy straight to a
+            # raw upstream address (e.g. "127.0.0.1:8006") instead of a PHP
+            # container. No php_version/Caddyfile of their own.
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS proxies (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    domain TEXT NOT NULL UNIQUE,
+                    target TEXT NOT NULL,
+                    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """
+            )
+
             conn.commit()
 
     @property
@@ -384,7 +398,73 @@ class DatabaseManager:
             cursor.execute("DELETE FROM aliases")
             conn.commit()
 
+    def add_proxies(self, domains: list[str], target: str) -> None:
+        """Add domain(s) that reverse-proxy straight to a raw upstream address.
+
+        Args:
+            domains: List of new domain names.
+            target: Raw upstream address (e.g. "127.0.0.1:8006", "http://host:port").
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+
+            for domain in domains:
+                cursor.execute(
+                    "INSERT OR IGNORE INTO proxies (domain, target) VALUES (?, ?)",
+                    (domain, target),
+                )
+
+            conn.commit()
+
+    def remove_proxies(self, domains: list[str]) -> None:
+        """Remove proxy domains.
+
+        Args:
+            domains: List of proxy domain names to remove.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+
+            for domain in domains:
+                cursor.execute("DELETE FROM proxies WHERE domain = ?", (domain,))
+
+            conn.commit()
+
+    def get_proxies(self) -> list[tuple[str, str]]:
+        """Get all configured proxy hosts.
+
+        Returns:
+            List of (domain, target) tuples.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT domain, target FROM proxies ORDER BY id")
+            return [(row[0], row[1]) for row in cursor.fetchall()]
+
+    def get_proxy_target(self, domain: str) -> Optional[str]:
+        """Get the upstream target for a proxy domain.
+
+        Args:
+            domain: The proxy domain name.
+
+        Returns:
+            The raw upstream address, or None if the domain is not a proxy.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT target FROM proxies WHERE domain = ?", (domain,))
+            row = cursor.fetchone()
+            return row[0] if row else None
+
+    def clear_proxies(self) -> None:
+        """Clear all configured proxy hosts."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM proxies")
+            conn.commit()
+
     def reset(self) -> None:
         """Reset database to default state."""
         self.clear_domains()
         self.clear_aliases()
+        self.clear_proxies()
