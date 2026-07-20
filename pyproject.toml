@@ -93,8 +93,9 @@ select = ["E", "F", "I", "N", "W", "UP"]
 ignore = ["UP007"]  # Allow Union[X, Y] for Python 3.9 compatibility
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.10"
 strict = true
+namespace_packages = false
 
 [[tool.mypy.overrides]]
 module = [
