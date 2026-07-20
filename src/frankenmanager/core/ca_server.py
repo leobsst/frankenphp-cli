@@ -27,6 +27,10 @@ def _state_file(app_dir: Path) -> Path:
     return app_dir / ".ca_server.state"
 
 
+def _log_file(app_dir: Path) -> Path:
+    return app_dir / ".ca_server.log"
+
+
 def get_lan_ip() -> str:
     """Best-effort non-loopback IP of this host, for display purposes only."""
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
@@ -92,18 +96,22 @@ def start_sharing(app_dir: Path, cert_file: Path, port: int) -> int:
             str(port),
         ]
 
-    process = subprocess.Popen(
-        cmd,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-        start_new_session=True,
-    )
-    _wait_until_listening(process, port, cert_file.read_bytes())
+    log_path = _log_file(app_dir)
+    with open(log_path, "wb") as errlog:
+        process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=errlog,
+            start_new_session=True,
+        )
+    _wait_until_listening(process, port, cert_file.read_bytes(), log_path)
     _state_file(app_dir).write_text(f"{process.pid} {port}")
     return process.pid
 
 
-def _wait_until_listening(process: "subprocess.Popen[bytes]", port: int, cert_bytes: bytes) -> None:
+def _wait_until_listening(
+    process: "subprocess.Popen[bytes]", port: int, cert_bytes: bytes, log_path: Path
+) -> None:
     """Block until the spawned server is actually serving our root CA cert.
 
     Popen returns as soon as the child is forked, long before it has bound
@@ -113,13 +121,17 @@ def _wait_until_listening(process: "subprocess.Popen[bytes]", port: int, cert_by
     dead. A bare TCP connect isn't enough either: if some *other* process is
     already squatting the port, the connect succeeds but it isn't our server
     - so the response body is checked against the actual cert bytes.
+
+    The child's stderr is a real file, not a pipe: a pipe's read end is only
+    held by this short-lived launcher, so once it exits the child would get
+    a broken pipe (and die) on the first write - e.g. the traceback from a
+    client that resets a connection mid-request. A file has no such "other
+    end" to lose.
     """
     deadline = time.monotonic() + STARTUP_TIMEOUT
     while time.monotonic() < deadline:
         if process.poll() is not None:
-            stderr = (
-                process.stderr.read().decode(errors="replace").strip() if process.stderr else ""
-            )
+            stderr = log_path.read_text(errors="replace").strip() if log_path.exists() else ""
             detail = stderr.splitlines()[-1] if stderr else f"exited with code {process.returncode}"
             raise SSLError(f"Root CA server failed to start: {detail}")
 
@@ -164,6 +176,7 @@ def stop_sharing(app_dir: Path) -> bool:
     except OSError:
         pass
     _state_file(app_dir).unlink(missing_ok=True)
+    _log_file(app_dir).unlink(missing_ok=True)
     return True
 
 
