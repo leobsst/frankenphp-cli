@@ -22,6 +22,7 @@ if platform.system() != "Windows":
 from ..exceptions import ConfigurationError
 from ..utils.logging import log_error, log_info, log_success, log_warning
 from ..utils.platform import Platform, get_hosts_file_path, get_platform, is_admin
+from .ssl_manager import generate_custom_ca, get_ca_root
 
 
 class PrivilegeManager:
@@ -798,7 +799,7 @@ Or download from: https://github.com/FiloSottile/mkcert/releases"""
         return False
 
     def setup_ca(self) -> bool:
-        """Install the mkcert Certificate Authority.
+        """Install the FrankenManager Certificate Authority.
 
         Returns:
             True if successful.
@@ -807,11 +808,21 @@ Or download from: https://github.com/FiloSottile/mkcert/releases"""
             log_error("mkcert is not installed")
             return False
 
-        log_info("Installing mkcert CA (may require admin password)...")
-
         mkcert = shutil.which("mkcert")
         if not mkcert:
             return False
+
+        # Write our own CA into CAROOT before mkcert -install runs, so it
+        # registers the FrankenManager-branded CA instead of generating one
+        # with mkcert's own default identity.
+        ca_root = get_ca_root(mkcert)
+        if ca_root is not None:
+            ca_cert = ca_root / "rootCA.pem"
+            ca_key = ca_root / "rootCA-key.pem"
+            if not (ca_cert.exists() and ca_key.exists()):
+                generate_custom_ca(ca_root)
+
+        log_info("Installing FrankenManager CA (may require admin password)...")
 
         if self.platform != Platform.WINDOWS and not is_admin():
             # On Unix, mkcert -install may need sudo for system trust store

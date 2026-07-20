@@ -24,6 +24,80 @@ CA_ORGANIZATIONAL_UNIT = "Local Development CA"
 CA_COMMON_NAME = "FrankenManager Local Development CA"
 
 
+def get_ca_root(mkcert: str) -> Optional[Path]:
+    """Resolve mkcert's CAROOT directory, or None if mkcert can't report it."""
+    ca_check = subprocess.run([mkcert, "-CAROOT"], capture_output=True, text=True)
+    if ca_check.returncode != 0:
+        return None
+    return Path(ca_check.stdout.strip())
+
+
+def generate_custom_ca(ca_root: Path) -> None:
+    """Generate a root CA under CAROOT with the fixed FrankenManager identity.
+
+    mkcert only generates its own CA when rootCA.pem is absent from CAROOT
+    (see its loadCA()), so writing ours there first makes a later
+    `mkcert -install` register this CA in the system trust store instead of
+    generating one with mkcert's default identity.
+    """
+    ca_root.mkdir(parents=True, exist_ok=True)
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=3072)
+
+    name = x509.Name(
+        [
+            x509.NameAttribute(NameOID.ORGANIZATION_NAME, CA_ORGANIZATION),
+            x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, CA_ORGANIZATIONAL_UNIT),
+            x509.NameAttribute(NameOID.COMMON_NAME, CA_COMMON_NAME),
+        ]
+    )
+
+    now = datetime.now(timezone.utc)
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now)
+        .not_valid_after(now + timedelta(days=3650))
+        .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
+        .add_extension(
+            x509.KeyUsage(
+                digital_signature=False,
+                content_commitment=False,
+                key_encipherment=False,
+                data_encipherment=False,
+                key_agreement=False,
+                key_cert_sign=True,
+                crl_sign=False,
+                encipher_only=False,
+                decipher_only=False,
+            ),
+            critical=True,
+        )
+        .add_extension(
+            x509.SubjectKeyIdentifier.from_public_key(key.public_key()),
+            critical=False,
+        )
+        .sign(key, hashes.SHA256())
+    )
+
+    key_path = ca_root / "rootCA-key.pem"
+    key_path.write_bytes(
+        key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+    )
+    key_path.chmod(0o600)
+
+    cert_path = ca_root / "rootCA.pem"
+    cert_path.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+    cert_path.chmod(0o644)
+
+
 class SSLManager:
     """Manages SSL certificate generation using mkcert."""
 
@@ -53,7 +127,7 @@ class SSLManager:
     def install_ca(self) -> None:
         """Install the FrankenManager CA (requires elevated privileges on Unix)."""
         mkcert = self._find_mkcert()
-        ca_root = self._get_ca_root(mkcert)
+        ca_root = get_ca_root(mkcert)
 
         if ca_root is not None:
             ca_cert = ca_root / "rootCA.pem"
@@ -64,81 +138,10 @@ class SSLManager:
                 self._sync_root_ca(ca_root)
                 return
 
-            # Write our own CA into CAROOT before mkcert ever touches it.
-            # mkcert only generates its own CA when rootCA.pem is absent
-            # (see its loadCA()); since it's already there, `mkcert -install`
-            # below will just register this CA in the system trust store
-            # instead of generating one with mkcert's default identity.
-            self._generate_custom_ca(ca_root)
+            generate_custom_ca(ca_root)
 
         ca_root = self._install_ca(mkcert)
         self._sync_root_ca(ca_root)
-
-    def _get_ca_root(self, mkcert: str) -> Optional[Path]:
-        """Resolve mkcert's CAROOT directory, or None if mkcert can't report it."""
-        ca_check = subprocess.run([mkcert, "-CAROOT"], capture_output=True, text=True)
-        if ca_check.returncode != 0:
-            return None
-        return Path(ca_check.stdout.strip())
-
-    def _generate_custom_ca(self, ca_root: Path) -> None:
-        """Generate a root CA under CAROOT with the fixed FrankenManager identity."""
-        ca_root.mkdir(parents=True, exist_ok=True)
-
-        key = rsa.generate_private_key(public_exponent=65537, key_size=3072)
-
-        name = x509.Name(
-            [
-                x509.NameAttribute(NameOID.ORGANIZATION_NAME, CA_ORGANIZATION),
-                x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, CA_ORGANIZATIONAL_UNIT),
-                x509.NameAttribute(NameOID.COMMON_NAME, CA_COMMON_NAME),
-            ]
-        )
-
-        now = datetime.now(timezone.utc)
-        cert = (
-            x509.CertificateBuilder()
-            .subject_name(name)
-            .issuer_name(name)
-            .public_key(key.public_key())
-            .serial_number(x509.random_serial_number())
-            .not_valid_before(now)
-            .not_valid_after(now + timedelta(days=3650))
-            .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
-            .add_extension(
-                x509.KeyUsage(
-                    digital_signature=False,
-                    content_commitment=False,
-                    key_encipherment=False,
-                    data_encipherment=False,
-                    key_agreement=False,
-                    key_cert_sign=True,
-                    crl_sign=False,
-                    encipher_only=False,
-                    decipher_only=False,
-                ),
-                critical=True,
-            )
-            .add_extension(
-                x509.SubjectKeyIdentifier.from_public_key(key.public_key()),
-                critical=False,
-            )
-            .sign(key, hashes.SHA256())
-        )
-
-        key_path = ca_root / "rootCA-key.pem"
-        key_path.write_bytes(
-            key.private_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PrivateFormat.PKCS8,
-                encryption_algorithm=serialization.NoEncryption(),
-            )
-        )
-        key_path.chmod(0o600)
-
-        cert_path = ca_root / "rootCA.pem"
-        cert_path.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
-        cert_path.chmod(0o644)
 
     def _install_ca(self, mkcert: str) -> Path:
         """Run `mkcert -install` and return the resulting CA root directory."""
