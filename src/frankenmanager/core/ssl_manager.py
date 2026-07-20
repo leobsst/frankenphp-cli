@@ -4,6 +4,7 @@ import shutil
 import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Optional
 
 from ..exceptions import SSLError
 from ..utils.logging import log_info, log_success
@@ -85,7 +86,7 @@ class SSLManager:
         ca_check = subprocess.run([mkcert, "-CAROOT"], capture_output=True, text=True)
         return Path(ca_check.stdout.strip())
 
-    def _sync_root_ca(self, ca_root: Path | None) -> None:
+    def _sync_root_ca(self, ca_root: Optional[Path]) -> None:
         """Copy the mkcert root CA into certs_dir so containers can trust it.
 
         The certs directory is already bind-mounted into the FrankenPHP
