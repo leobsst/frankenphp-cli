@@ -6,18 +6,21 @@ lets other devices choose to trust your local dev domains; it grants no
 access to anything else.
 """
 
+import http.client
 import http.server
 import os
 import signal
 import socket
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Optional
 
 from ..exceptions import SSLError
 
 DEFAULT_PORT = 9080
+STARTUP_TIMEOUT = 3.0
 
 
 def _state_file(app_dir: Path) -> Path:
@@ -92,11 +95,59 @@ def start_sharing(app_dir: Path, cert_file: Path, port: int) -> int:
     process = subprocess.Popen(
         cmd,
         stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
         start_new_session=True,
     )
+    _wait_until_listening(process, port, cert_file.read_bytes())
     _state_file(app_dir).write_text(f"{process.pid} {port}")
     return process.pid
+
+
+def _wait_until_listening(process: subprocess.Popen, port: int, cert_bytes: bytes) -> None:
+    """Block until the spawned server is actually serving our root CA cert.
+
+    Popen returns as soon as the child is forked, long before it has bound
+    the port - without this, a child that crashes on startup (port already
+    in use, permission denied, missing cert) would still leave `start_sharing`
+    reporting success and writing a state file for a process that's already
+    dead. A bare TCP connect isn't enough either: if some *other* process is
+    already squatting the port, the connect succeeds but it isn't our server
+    - so the response body is checked against the actual cert bytes.
+    """
+    deadline = time.monotonic() + STARTUP_TIMEOUT
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            stderr = process.stderr.read().decode(errors="replace").strip() if process.stderr else ""
+            detail = stderr.splitlines()[-1] if stderr else f"exited with code {process.returncode}"
+            raise SSLError(f"Root CA server failed to start: {detail}")
+
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=0.3)
+        try:
+            conn.request("GET", "/")
+            body = conn.getresponse().read()
+        except (OSError, http.client.HTTPException):
+            time.sleep(0.1)
+            continue
+        finally:
+            conn.close()
+
+        if body == cert_bytes:
+            return
+
+        process.kill()
+        process.wait(timeout=2)
+        raise SSLError(
+            f"Port {port} is already in use by another process (it responded, "
+            "but not with the expected root CA certificate). "
+            "Pick a different port with --port."
+        )
+
+    process.kill()
+    process.wait(timeout=2)
+    raise SSLError(
+        f"Root CA server did not start listening on port {port} within "
+        f"{STARTUP_TIMEOUT:.0f}s. It may be blocked by a firewall."
+    )
 
 
 def stop_sharing(app_dir: Path) -> bool:

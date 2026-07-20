@@ -323,16 +323,22 @@ def trust_ca_cmd(
     """
     from .commands.trust_ca import trust_ca_off, trust_ca_on, trust_ca_status
     from .core.ca_server import DEFAULT_PORT
+    from .exceptions import FrankenPHPError
+    from .utils.logging import log_error
 
-    if action == "on":
-        trust_ca_on(port if port is not None else DEFAULT_PORT)
-    elif action == "off":
-        trust_ca_off()
-    elif action == "status":
-        trust_ca_status()
-    else:
-        console.print(f"[red]Unknown action '{action}'. Use on, off, or status.[/red]")
-        raise typer.Exit(1)
+    try:
+        if action == "on":
+            trust_ca_on(port if port is not None else DEFAULT_PORT)
+        elif action == "off":
+            trust_ca_off()
+        elif action == "status":
+            trust_ca_status()
+        else:
+            console.print(f"[red]Unknown action '{action}'. Use on, off, or status.[/red]")
+            raise typer.Exit(1)
+    except FrankenPHPError as e:
+        log_error(str(e))
+        raise typer.Exit(1) from e
 
 
 @app.command(name="_serve-ca-internal", hidden=True)
