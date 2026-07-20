@@ -47,15 +47,22 @@ class SSLManager:
             text=True,
         )
 
+        ca_root = None
         if ca_check.returncode == 0:
             ca_root = Path(ca_check.stdout.strip())
             ca_cert = ca_root / "rootCA.pem"
             ca_key = ca_root / "rootCA-key.pem"
 
             # If both CA files exist, skip installation
-            if ca_cert.exists() and ca_key.exists():
-                return
+            if not (ca_cert.exists() and ca_key.exists()):
+                ca_root = self._install_ca(mkcert)
+        else:
+            ca_root = self._install_ca(mkcert)
 
+        self._sync_root_ca(ca_root)
+
+    def _install_ca(self, mkcert: str) -> Path:
+        """Run `mkcert -install` and return the resulting CA root directory."""
         log_info("Installing mkcert CA...")
 
         if get_platform() != Platform.WINDOWS:
@@ -74,6 +81,28 @@ class SSLManager:
 
         if result.returncode != 0:
             raise SSLError(f"Failed to install mkcert CA: {result.stderr}")
+
+        ca_check = subprocess.run([mkcert, "-CAROOT"], capture_output=True, text=True)
+        return Path(ca_check.stdout.strip())
+
+    def _sync_root_ca(self, ca_root: Path | None) -> None:
+        """Copy the mkcert root CA into certs_dir so containers can trust it.
+
+        The certs directory is already bind-mounted into the FrankenPHP
+        container as /certs; the container entrypoint installs this file
+        into the container's system trust store on startup so that
+        outgoing PHP/curl calls to other local domains (e.g. cross-project
+        API calls) validate correctly, not just requests from the host
+        browser.
+        """
+        if ca_root is None:
+            return
+
+        ca_cert = ca_root / "rootCA.pem"
+        if not ca_cert.exists():
+            return
+
+        shutil.copy(ca_cert, self.certs_dir / "rootCA.pem")
 
     def generate_localhost_cert(self) -> None:
         """Generate a certificate for localhost."""

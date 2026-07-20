@@ -52,3 +52,8 @@ RUN mkdir -p "$CUSTOM_PATH"
 WORKDIR $CUSTOM_PATH
 
 ENV CUSTOM_PATH=$CUSTOM_PATH
+
+COPY docker/entrypoint.sh /usr/local/bin/frankenphp-entrypoint.sh
+RUN chmod +x /usr/local/bin/frankenphp-entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/frankenphp-entrypoint.sh"]
