@@ -2,13 +2,26 @@
 
 import shutil
 import subprocess
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
+
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.x509.oid import NameOID
 
 from ..exceptions import SSLError
 from ..utils.logging import log_info, log_success
 from ..utils.platform import Platform, get_platform
+
+# Fixed identity baked into every root CA this tool generates, in place of
+# mkcert's own default ("mkcert development CA" / user@host). Not user
+# configurable on purpose: every machine running frankenmanager should trust
+# a CA that is recognizable as belonging to this tool, not to a random user.
+CA_ORGANIZATION = "FrankenManager"
+CA_ORGANIZATIONAL_UNIT = "Local Development CA"
+CA_COMMON_NAME = "FrankenManager Local Development CA"
 
 
 class SSLManager:
@@ -38,33 +51,98 @@ class SSLManager:
         return mkcert
 
     def install_ca(self) -> None:
-        """Install the mkcert CA (requires elevated privileges on Unix)."""
+        """Install the FrankenManager CA (requires elevated privileges on Unix)."""
         mkcert = self._find_mkcert()
+        ca_root = self._get_ca_root(mkcert)
 
-        # Check if CA is already installed by checking for CA root files
-        ca_check = subprocess.run(
-            [mkcert, "-CAROOT"],
-            capture_output=True,
-            text=True,
-        )
-
-        ca_root = None
-        if ca_check.returncode == 0:
-            ca_root = Path(ca_check.stdout.strip())
+        if ca_root is not None:
             ca_cert = ca_root / "rootCA.pem"
             ca_key = ca_root / "rootCA-key.pem"
 
-            # If both CA files exist, skip installation
-            if not (ca_cert.exists() and ca_key.exists()):
-                ca_root = self._install_ca(mkcert)
-        else:
-            ca_root = self._install_ca(mkcert)
+            # If both CA files already exist, it's already installed - skip.
+            if ca_cert.exists() and ca_key.exists():
+                self._sync_root_ca(ca_root)
+                return
 
+            # Write our own CA into CAROOT before mkcert ever touches it.
+            # mkcert only generates its own CA when rootCA.pem is absent
+            # (see its loadCA()); since it's already there, `mkcert -install`
+            # below will just register this CA in the system trust store
+            # instead of generating one with mkcert's default identity.
+            self._generate_custom_ca(ca_root)
+
+        ca_root = self._install_ca(mkcert)
         self._sync_root_ca(ca_root)
+
+    def _get_ca_root(self, mkcert: str) -> Optional[Path]:
+        """Resolve mkcert's CAROOT directory, or None if mkcert can't report it."""
+        ca_check = subprocess.run([mkcert, "-CAROOT"], capture_output=True, text=True)
+        if ca_check.returncode != 0:
+            return None
+        return Path(ca_check.stdout.strip())
+
+    def _generate_custom_ca(self, ca_root: Path) -> None:
+        """Generate a root CA under CAROOT with the fixed FrankenManager identity."""
+        ca_root.mkdir(parents=True, exist_ok=True)
+
+        key = rsa.generate_private_key(public_exponent=65537, key_size=3072)
+
+        name = x509.Name(
+            [
+                x509.NameAttribute(NameOID.ORGANIZATION_NAME, CA_ORGANIZATION),
+                x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, CA_ORGANIZATIONAL_UNIT),
+                x509.NameAttribute(NameOID.COMMON_NAME, CA_COMMON_NAME),
+            ]
+        )
+
+        now = datetime.now(timezone.utc)
+        cert = (
+            x509.CertificateBuilder()
+            .subject_name(name)
+            .issuer_name(name)
+            .public_key(key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(now)
+            .not_valid_after(now + timedelta(days=3650))
+            .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
+            .add_extension(
+                x509.KeyUsage(
+                    digital_signature=False,
+                    content_commitment=False,
+                    key_encipherment=False,
+                    data_encipherment=False,
+                    key_agreement=False,
+                    key_cert_sign=True,
+                    crl_sign=False,
+                    encipher_only=False,
+                    decipher_only=False,
+                ),
+                critical=True,
+            )
+            .add_extension(
+                x509.SubjectKeyIdentifier.from_public_key(key.public_key()),
+                critical=False,
+            )
+            .sign(key, hashes.SHA256())
+        )
+
+        key_path = ca_root / "rootCA-key.pem"
+        key_path.write_bytes(
+            key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+        )
+        key_path.chmod(0o600)
+
+        cert_path = ca_root / "rootCA.pem"
+        cert_path.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+        cert_path.chmod(0o644)
 
     def _install_ca(self, mkcert: str) -> Path:
         """Run `mkcert -install` and return the resulting CA root directory."""
-        log_info("Installing mkcert CA...")
+        log_info("Installing FrankenManager local CA...")
 
         if get_platform() != Platform.WINDOWS:
             # On Unix, mkcert -install requires sudo for system trust store
