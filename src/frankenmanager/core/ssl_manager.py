@@ -32,6 +32,64 @@ def get_ca_root(mkcert: str) -> Optional[Path]:
     return Path(ca_check.stdout.strip())
 
 
+def is_frankenmanager_ca(ca_root: Path) -> bool:
+    """Check whether CAROOT's rootCA.pem is already our own FrankenManager CA."""
+    cert_path = ca_root / "rootCA.pem"
+    if not cert_path.exists():
+        return False
+
+    try:
+        cert = x509.load_pem_x509_certificate(cert_path.read_bytes())
+    except ValueError:
+        return False
+
+    org = cert.subject.get_attributes_for_oid(NameOID.ORGANIZATION_NAME)
+    return bool(org) and org[0].value == CA_ORGANIZATION
+
+
+def _uninstall_ca(mkcert: str) -> None:
+    """Best-effort removal of whatever CA is currently trusted.
+
+    Called before overwriting CAROOT's files with our own, so the old CA
+    (e.g. mkcert's default one, pre-dating this tool) doesn't linger
+    trusted alongside ours. Failure here is not fatal - we still proceed
+    to install our own CA either way.
+    """
+    log_info("Removing the existing CA from the trust store before replacing it...")
+    if get_platform() != Platform.WINDOWS:
+        result = subprocess.run(["sudo", mkcert, "-uninstall"], capture_output=True, text=True)
+    else:
+        result = subprocess.run([mkcert, "-uninstall"], capture_output=True, text=True)
+
+    if result.returncode != 0:
+        log_info(f"Could not remove the previous CA (continuing anyway): {result.stderr.strip()}")
+
+
+def ensure_frankenmanager_ca(mkcert: str) -> tuple[Optional[Path], bool]:
+    """Make sure CAROOT holds our FrankenManager-branded CA.
+
+    Replaces any other CA already there (e.g. mkcert's own default one)
+    with ours.
+
+    Returns:
+        A tuple of (CAROOT directory, already_installed). already_installed
+        is True only when CAROOT already held our own CA and nothing had to
+        change - callers can skip re-running `mkcert -install` in that case.
+    """
+    ca_root = get_ca_root(mkcert)
+    if ca_root is None:
+        return None, False
+
+    if is_frankenmanager_ca(ca_root):
+        return ca_root, True
+
+    if (ca_root / "rootCA.pem").exists():
+        _uninstall_ca(mkcert)
+
+    generate_custom_ca(ca_root)
+    return ca_root, False
+
+
 def generate_custom_ca(ca_root: Path) -> None:
     """Generate a root CA under CAROOT with the fixed FrankenManager identity.
 
@@ -127,18 +185,11 @@ class SSLManager:
     def install_ca(self) -> None:
         """Install the FrankenManager CA (requires elevated privileges on Unix)."""
         mkcert = self._find_mkcert()
-        ca_root = get_ca_root(mkcert)
+        ca_root, already_installed = ensure_frankenmanager_ca(mkcert)
 
-        if ca_root is not None:
-            ca_cert = ca_root / "rootCA.pem"
-            ca_key = ca_root / "rootCA-key.pem"
-
-            # If both CA files already exist, it's already installed - skip.
-            if ca_cert.exists() and ca_key.exists():
-                self._sync_root_ca(ca_root)
-                return
-
-            generate_custom_ca(ca_root)
+        if already_installed:
+            self._sync_root_ca(ca_root)
+            return
 
         ca_root = self._install_ca(mkcert)
         self._sync_root_ca(ca_root)
