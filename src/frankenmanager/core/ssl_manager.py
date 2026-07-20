@@ -4,7 +4,6 @@ import shutil
 import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
 
 from ..exceptions import SSLError
 from ..utils.logging import log_info, log_success
@@ -65,7 +64,7 @@ class SSLManager:
 
         self._sync_root_ca(ca_root)
 
-    def _sync_root_ca(self, ca_root: Optional[Path]) -> None:
+    def _sync_root_ca(self, ca_root: Path) -> None:
         """Copy the mkcert root CA into certs_dir so containers can trust it.
 
         The certs directory is already bind-mounted into the FrankenPHP
@@ -75,9 +74,6 @@ class SSLManager:
         API calls) validate correctly, not just requests from the host
         browser.
         """
-        if ca_root is None:
-            return
-
         ca_cert = ca_root / "rootCA.pem"
         if not ca_cert.exists():
             return
