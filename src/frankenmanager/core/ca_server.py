@@ -71,7 +71,8 @@ def start_sharing(app_dir: Path, cert_file: Path, port: int) -> int:
         )
     if not cert_file.exists():
         raise SSLError(
-            f"Root CA not found at {cert_file}. Run `frankenmanager start` at least once first."
+            f"Root CA not found at {cert_file}. "
+            "Run `sudo frankenmanager setup --install-mkcert` first."
         )
 
     # --no-update-check is a top-level option and must precede the subcommand

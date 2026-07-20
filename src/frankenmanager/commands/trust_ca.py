@@ -1,5 +1,7 @@
 """Toggle sharing the local mkcert root CA over the LAN."""
 
+import shutil
+import subprocess
 from pathlib import Path
 
 from ..core.ca_server import (
@@ -9,24 +11,28 @@ from ..core.ca_server import (
     start_sharing,
     stop_sharing,
 )
-from ..core.environment import EnvironmentManager
 from ..core.resources import get_project_dir
-from ..exceptions import ServerStateError
+from ..exceptions import ServerStateError, SSLError
 from ..utils.logging import log_info, log_success, log_warning
 
 
 def _root_ca_path() -> Path:
-    project_dir = get_project_dir()
-    env = EnvironmentManager(project_dir / ".env", project_dir / ".env.example")
-    if env.env_path.exists():
-        env.load()
+    """Locate mkcert's actual rootCA.pem from its live CAROOT.
 
-    caddy_dir_value = env.get("CADDY_DIR")
-    caddy_dir = Path(caddy_dir_value) if caddy_dir_value else project_dir / "caddy"
-    if not caddy_dir.is_absolute():
-        caddy_dir = project_dir / caddy_dir
+    This is the CA installed system-wide by
+    `sudo frankenmanager setup --install-mkcert`, not any project's own
+    copy under caddy/certs/, so what gets shared always matches what's
+    actually trusted on this machine.
+    """
+    mkcert = shutil.which("mkcert")
+    if not mkcert:
+        raise SSLError("mkcert not found. Run `sudo frankenmanager setup --install-mkcert` first.")
 
-    return caddy_dir / "certs" / "rootCA.pem"
+    result = subprocess.run([mkcert, "-CAROOT"], capture_output=True, text=True)
+    if result.returncode != 0:
+        raise SSLError(f"Could not determine mkcert's CA root: {result.stderr.strip()}")
+
+    return Path(result.stdout.strip()) / "rootCA.pem"
 
 
 def trust_ca_on(port: int = DEFAULT_PORT) -> None:

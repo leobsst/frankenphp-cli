@@ -13,8 +13,14 @@ import shutil
 import subprocess
 import tempfile
 import urllib.request
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Union
+
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.x509.oid import NameOID
 
 if platform.system() != "Windows":
     import pwd
@@ -22,7 +28,14 @@ if platform.system() != "Windows":
 from ..exceptions import ConfigurationError
 from ..utils.logging import log_error, log_info, log_success, log_warning
 from ..utils.platform import Platform, get_hosts_file_path, get_platform, is_admin
-from .ssl_manager import ensure_frankenmanager_ca
+
+# Fixed identity baked into every root CA this tool generates, in place of
+# mkcert's own default ("mkcert development CA" / user@host). Not user
+# configurable on purpose: every machine running frankenmanager should trust
+# a CA that is recognizable as belonging to this tool, not to a random user.
+CA_ORGANIZATION = "FrankenManager"
+CA_ORGANIZATIONAL_UNIT = "Local Development CA"
+CA_COMMON_NAME = "FrankenManager Local Development CA"
 
 
 class PrivilegeManager:
@@ -798,6 +811,129 @@ Or download from: https://github.com/FiloSottile/mkcert/releases"""
         log_info(self.get_install_instructions())
         return False
 
+    def _get_ca_root(self, mkcert: str) -> Path | None:
+        """Resolve mkcert's CAROOT directory, or None if mkcert can't report it."""
+        ca_check = subprocess.run([mkcert, "-CAROOT"], capture_output=True, text=True)
+        if ca_check.returncode != 0:
+            return None
+        return Path(ca_check.stdout.strip())
+
+    def _is_frankenmanager_ca(self, ca_root: Path) -> bool:
+        """Check whether CAROOT's rootCA.pem is already our own FrankenManager CA."""
+        cert_path = ca_root / "rootCA.pem"
+        if not cert_path.exists():
+            return False
+
+        try:
+            cert = x509.load_pem_x509_certificate(cert_path.read_bytes())
+        except ValueError:
+            return False
+
+        org = cert.subject.get_attributes_for_oid(NameOID.ORGANIZATION_NAME)
+        return bool(org) and org[0].value == CA_ORGANIZATION
+
+    def _uninstall_ca(self, mkcert: str) -> None:
+        """Best-effort removal of whatever CA is currently trusted.
+
+        Called before overwriting CAROOT's files with our own, so the old CA
+        (e.g. mkcert's default one, pre-dating this tool) doesn't linger
+        trusted alongside ours. Failure here is not fatal - we still proceed
+        to install our own CA either way.
+        """
+        log_info("Removing the existing CA from the trust store before replacing it...")
+        if self.platform != Platform.WINDOWS:
+            result = subprocess.run(["sudo", mkcert, "-uninstall"], capture_output=True, text=True)
+        else:
+            result = subprocess.run([mkcert, "-uninstall"], capture_output=True, text=True)
+
+        if result.returncode != 0:
+            log_info(
+                f"Could not remove the previous CA (continuing anyway): {result.stderr.strip()}"
+            )
+
+    def _generate_custom_ca(self, ca_root: Path) -> None:
+        """Generate a root CA under CAROOT with the fixed FrankenManager identity.
+
+        mkcert only generates its own CA when rootCA.pem is absent from CAROOT
+        (see its loadCA()), so writing ours there first makes a later
+        `mkcert -install` register this CA in the system trust store instead
+        of generating one with mkcert's default identity.
+        """
+        ca_root.mkdir(parents=True, exist_ok=True)
+
+        key = rsa.generate_private_key(public_exponent=65537, key_size=3072)
+
+        name = x509.Name(
+            [
+                x509.NameAttribute(NameOID.ORGANIZATION_NAME, CA_ORGANIZATION),
+                x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, CA_ORGANIZATIONAL_UNIT),
+                x509.NameAttribute(NameOID.COMMON_NAME, CA_COMMON_NAME),
+            ]
+        )
+
+        now = datetime.now(timezone.utc)
+        cert = (
+            x509.CertificateBuilder()
+            .subject_name(name)
+            .issuer_name(name)
+            .public_key(key.public_key())
+            .serial_number(x509.random_serial_number())
+            .not_valid_before(now)
+            .not_valid_after(now + timedelta(days=3650))
+            .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
+            .add_extension(
+                x509.KeyUsage(
+                    digital_signature=False,
+                    content_commitment=False,
+                    key_encipherment=False,
+                    data_encipherment=False,
+                    key_agreement=False,
+                    key_cert_sign=True,
+                    crl_sign=False,
+                    encipher_only=False,
+                    decipher_only=False,
+                ),
+                critical=True,
+            )
+            .add_extension(
+                x509.SubjectKeyIdentifier.from_public_key(key.public_key()),
+                critical=False,
+            )
+            .sign(key, hashes.SHA256())
+        )
+
+        key_path = ca_root / "rootCA-key.pem"
+        key_path.write_bytes(
+            key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+        )
+        key_path.chmod(0o600)
+
+        cert_path = ca_root / "rootCA.pem"
+        cert_path.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+        cert_path.chmod(0o644)
+
+    def _ensure_frankenmanager_ca(self, mkcert: str) -> None:
+        """Make sure CAROOT holds our FrankenManager-branded CA.
+
+        Replaces any other CA already there (e.g. mkcert's own default one)
+        with ours.
+        """
+        ca_root = self._get_ca_root(mkcert)
+        if ca_root is None:
+            return
+
+        if self._is_frankenmanager_ca(ca_root):
+            return
+
+        if (ca_root / "rootCA.pem").exists():
+            self._uninstall_ca(mkcert)
+
+        self._generate_custom_ca(ca_root)
+
     def setup_ca(self) -> bool:
         """Install the FrankenManager Certificate Authority.
 
@@ -815,7 +951,7 @@ Or download from: https://github.com/FiloSottile/mkcert/releases"""
         # Write our own CA into CAROOT before mkcert -install runs, replacing
         # any other CA already there (e.g. mkcert's own default identity),
         # so it registers the FrankenManager-branded CA.
-        ensure_frankenmanager_ca(mkcert)
+        self._ensure_frankenmanager_ca(mkcert)
 
         log_info("Installing FrankenManager CA (may require admin password)...")
 
