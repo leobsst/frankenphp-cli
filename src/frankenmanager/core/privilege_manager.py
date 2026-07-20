@@ -37,7 +37,6 @@ CA_ORGANIZATION = "FrankenManager"
 CA_ORGANIZATIONAL_UNIT = "Local Development CA"
 CA_COMMON_NAME = "FrankenManager Local Development CA"
 
-
 class PrivilegeManager:
     """Manages privilege escalation configuration across platforms."""
 
