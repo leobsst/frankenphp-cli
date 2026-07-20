@@ -774,9 +774,15 @@ Or download from: https://github.com/FiloSottile/mkcert/releases"""
                 log_success("mkcert installed successfully!")
                 return True
 
-        # Try Scoop
+        # Try Scoop - mkcert lives in the "extras" bucket, not "main".
         if shutil.which("scoop"):
             log_info("Installing mkcert via Scoop...")
+            subprocess.run(
+                ["scoop", "bucket", "add", "extras"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
             result = subprocess.run(
                 ["scoop", "install", "mkcert"],
                 capture_output=True,
