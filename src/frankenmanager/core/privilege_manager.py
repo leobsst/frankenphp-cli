@@ -607,6 +607,12 @@ Or download from: https://github.com/FiloSottile/mkcert/releases"""
             log_info("mkcert is already installed")
             return True
 
+        # NSS (certutil) must be present before `mkcert -install` runs, or
+        # mkcert silently skips adding the CA to Firefox's/Java's trust
+        # store. Not fatal if it fails - the system trust store install
+        # still works without it.
+        self._install_nss()
+
         log_info("Attempting to install mkcert...")
 
         try:
@@ -621,6 +627,65 @@ Or download from: https://github.com/FiloSottile/mkcert/releases"""
             log_info("")
             log_info(self.get_install_instructions())
             return False
+
+    # Linux NSS package name and non-interactive install command for each
+    # package manager, keyed by the binary `shutil.which` should find on PATH.
+    _LINUX_NSS_PACKAGES = {
+        "apt-get": ("libnss3-tools", ["install", "-y"]),
+        "dnf": ("nss-tools", ["install", "-y"]),
+        "yum": ("nss-tools", ["install", "-y"]),
+        "pacman": ("nss", ["-S", "--noconfirm"]),
+        "zypper": ("mozilla-nss-tools", ["install", "-y"]),
+    }
+
+    def _install_nss(self) -> bool:
+        """Install NSS tooling (certutil) so mkcert can trust Firefox/Java too.
+
+        Returns:
+            True if NSS is installed (or not needed on this platform).
+        """
+        if self.platform == Platform.WINDOWS:
+            return True  # Firefox on Windows doesn't need certutil/NSS.
+
+        if self.platform == Platform.MACOS:
+            if not shutil.which("brew"):
+                log_warning("Homebrew not found, skipping NSS install for Firefox support.")
+                return False
+
+            log_info("Installing nss via Homebrew...")
+            result = subprocess.run(
+                ["brew", "install", "nss"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if result.returncode != 0:
+                log_warning(f"Failed to install nss: {result.stderr}")
+                return False
+            log_success("nss installed successfully!")
+            return True
+
+        # Linux
+        for manager, (package, install_args) in self._LINUX_NSS_PACKAGES.items():
+            if not shutil.which(manager):
+                continue
+
+            log_info(f"Installing {package} via {manager}...")
+            if manager == "apt-get":
+                subprocess.run(
+                    ["sudo", "apt-get", "update"], capture_output=True, text=True, check=False
+                )
+
+            install_cmd = ["sudo", manager, *install_args, package]
+            result = subprocess.run(install_cmd, capture_output=True, text=True, check=False)
+            if result.returncode != 0:
+                log_warning(f"Failed to install {package}: {result.stderr}")
+                return False
+            log_success(f"{package} installed successfully!")
+            return True
+
+        log_warning("No supported package manager found, skipping NSS install for Firefox support.")
+        return False
 
     def _install_macos(self) -> bool:
         """Install mkcert on macOS using Homebrew."""
