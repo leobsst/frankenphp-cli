@@ -585,15 +585,17 @@ frankenmanager reset --db --caddyfiles
 FrankenManager can update itself when new releases are available:
 
 ```bash
-# Update to latest version
-frankenmanager update
-
 # Check for updates without installing
 frankenmanager update --check
 
-# Force reinstall latest version
-frankenmanager update --force
+# Update to latest version (requires admin/sudo, see below)
+sudo frankenmanager update
+
+# Force reinstall latest version (requires admin/sudo)
+sudo frankenmanager update --force
 ```
+
+**Note**: the binary is installed in a system directory (e.g. `/usr/local/bin`), so `frankenmanager update` and `frankenmanager update --force` need to be run with `sudo` (or as an administrator). `frankenmanager update --check` does not modify anything and does not require elevated privileges.
 
 When you run any command, FrankenManager automatically checks for updates and notifies you if a new version is available.
 

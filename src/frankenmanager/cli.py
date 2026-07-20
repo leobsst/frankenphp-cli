@@ -344,11 +344,13 @@ def update(
     """Update FrankenManager to the latest version.
 
     This command downloads and installs the latest release from GitHub.
+    Since the binary lives in a system directory (e.g. /usr/local/bin),
+    installing it usually requires admin privileges: run with sudo.
 
     Examples:
-        frankenmanager update          # Update to latest version
         frankenmanager update --check  # Check for updates without installing
-        frankenmanager update --force  # Force reinstall latest version
+        sudo frankenmanager update     # Update to latest version
+        sudo frankenmanager update --force  # Force reinstall latest version
     """
     from .core.updater import (
         UpdateCheckError,

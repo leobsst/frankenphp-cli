@@ -5,7 +5,6 @@ import os
 import platform
 import shutil
 import ssl
-import stat
 import sys
 import tempfile
 import urllib.error
@@ -243,9 +242,12 @@ def update_binary(force: bool = False) -> bool:
             tmp_path.unlink(missing_ok=True)
             return False
 
-        # Make executable on Unix
+        # Make readable and executable on Unix. NamedTemporaryFile creates the
+        # file with mode 0600 regardless of umask, so group/other need both
+        # the read bit (the PyInstaller bootloader reads its own file at
+        # runtime to unpack the embedded archive) and the execute bit.
         if platform.system() != "Windows":
-            tmp_path.chmod(tmp_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+            tmp_path.chmod(0o755)
 
         # Replace current binary
         backup_path = exe_path.with_suffix(exe_path.suffix + ".backup")
@@ -298,7 +300,7 @@ def notify_if_update_available() -> None:
                 f"A new version is available: {update_info['version']} "
                 f"(current: {get_current_version()})"
             )
-            log_info("Run 'frankenmanager update' to update.")
+            log_info("Run 'sudo frankenmanager update' to update.")
     except Exception:
         # Silently ignore errors during startup check
         pass
