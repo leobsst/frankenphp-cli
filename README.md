@@ -7,7 +7,7 @@
 [![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20|%20Linux%20|%20Windows-lightgrey?style=flat-square)]()
 
-A powerful CLI tool for managing local PHP development environments using Docker containers with [FrankenPHP](https://frankenphp.dev) (Caddy + PHP 8.2 / 8.3 / 8.4 / 8.5).
+✨ A powerful CLI tool for managing local PHP development environments using Docker containers with [FrankenPHP](https://frankenphp.dev) (Caddy + PHP 8.2 / 8.3 / 8.4 / 8.5).
 
 **FrankenManager** simplifies the process of running multiple PHP projects locally with:
 - Automatic HTTPS with locally-trusted certificates
