@@ -15,11 +15,32 @@ permissions:
   contents: write
 
 jobs:
+  determine-version:
+    name: Determine release version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Compute version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          fi
+
   build-binaries:
     name: Build ${{ matrix.os }} binary
+    needs: determine-version
     runs-on: ${{ matrix.os }}
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      # Pin the exact release version so a binary built ahead of its tag
+      # (e.g. via workflow_dispatch, before the tag exists) never embeds
+      # a "guess-next-dev" version — only source/non-binary installs
+      # should ever report a .dev version.
+      SETUPTOOLS_SCM_PRETEND_VERSION_FOR_FRANKENMANAGER: ${{ needs.determine-version.outputs.version }}
     strategy:
       fail-fast: false
       matrix:
@@ -167,9 +188,11 @@ jobs:
 
   build-python-package:
     name: Build Python package
+    needs: determine-version
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      SETUPTOOLS_SCM_PRETEND_VERSION_FOR_FRANKENMANAGER: ${{ needs.determine-version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -197,7 +220,7 @@ jobs:
 
   create-release:
     name: Create GitHub Release
-    needs: [build-binaries, build-python-package]
+    needs: [determine-version, build-binaries, build-python-package]
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -235,19 +258,10 @@ jobs:
           sha256sum * > SHA256SUMS.txt
           cat SHA256SUMS.txt
 
-      - name: Get version
-        id: version
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          else
-            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-          fi
-
       - name: Extract CHANGELOG for version
         id: changelog
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
+          VERSION="${{ needs.determine-version.outputs.version }}"
 
           # Extract the section for this version from CHANGELOG.md
           if [ -f CHANGELOG.md ]; then
@@ -310,7 +324,7 @@ jobs:
           Or pin to this specific version:
 
           ```bash
-          VERSION=${{ steps.version.outputs.version }} curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/refs/heads/main/install.sh | bash
+          VERSION=${{ needs.determine-version.outputs.version }} curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/refs/heads/main/install.sh | bash
           ```
 
           ### Python Package (pip)
@@ -345,7 +359,7 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', github.event.inputs.version) || github.ref_name }}
-          name: FrankenManager v${{ steps.version.outputs.version }}
+          name: FrankenManager v${{ needs.determine-version.outputs.version }}
           draft: false
           prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
           generate_release_notes: false
