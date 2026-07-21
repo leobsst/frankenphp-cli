@@ -10,7 +10,6 @@ RUN apt-get update && apt-get install -qq -y --no-install-recommends \
     libmcrypt-dev \
     libjpeg-dev \
     libpng-dev \
-    librsvg2-bin \
     libfreetype6-dev \
     libbz2-dev \
     libzip-dev \
