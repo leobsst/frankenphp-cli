@@ -124,7 +124,7 @@ def _is_dev_version(version: str) -> bool:
     return version == "0.0.0.dev" or "dev" in version
 
 
-def _release_tuple(version: str) -> tuple:
+def _release_tuple(version: str) -> tuple[int, ...]:
     """Get the major.minor.micro release segment of a version string.
 
     Pre-release/dev suffixes (e.g. the ".devN" in "1.2.4.dev5") are
