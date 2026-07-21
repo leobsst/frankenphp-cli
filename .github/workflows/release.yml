@@ -39,8 +39,11 @@ jobs:
       # Pin the exact release version so a binary built ahead of its tag
       # (e.g. via workflow_dispatch, before the tag exists) never embeds
       # a "guess-next-dev" version — only source/non-binary installs
-      # should ever report a .dev version.
-      SETUPTOOLS_SCM_PRETEND_VERSION_FOR_FRANKENMANAGER: ${{ needs.determine-version.outputs.version }}
+      # should ever report a .dev version. hatch-vcs calls
+      # setuptools_scm.get_version() without a dist_name, so only the
+      # unscoped SETUPTOOLS_SCM_PRETEND_VERSION is actually read (the
+      # dist-scoped _FOR_<NAME> variant is silently ignored).
+      SETUPTOOLS_SCM_PRETEND_VERSION: ${{ needs.determine-version.outputs.version }}
     strategy:
       fail-fast: false
       matrix:
@@ -192,7 +195,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      SETUPTOOLS_SCM_PRETEND_VERSION_FOR_FRANKENMANAGER: ${{ needs.determine-version.outputs.version }}
+      SETUPTOOLS_SCM_PRETEND_VERSION: ${{ needs.determine-version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
         with:
