@@ -114,6 +114,26 @@ def fetch_latest_release() -> dict[str, str]:
     return {"version": version, "download_url": download_url, "name": data["name"]}
 
 
+def _is_dev_version(version: str) -> bool:
+    """Check whether a version string is an unreleased/dev build.
+
+    Returns:
+        True if the version looks like a dev build (e.g. "0.0.0.dev" or a
+        setuptools_scm "X.Y.Z.devN" version between tags).
+    """
+    return version == "0.0.0.dev" or "dev" in version
+
+
+def _release_tuple(version: str) -> tuple:
+    """Get the major.minor.micro release segment of a version string.
+
+    Pre-release/dev suffixes (e.g. the ".devN" in "1.2.4.dev5") are
+    ignored so that a dev build is only ever considered newer or older
+    based on the release it's building towards, never on its dev number.
+    """
+    return Version(version).release[:3]
+
+
 def check_for_updates() -> Optional[dict[str, str]]:
     """Check if a new version is available.
 
@@ -126,12 +146,14 @@ def check_for_updates() -> Optional[dict[str, str]]:
     latest = fetch_latest_release()
     current = get_current_version()
 
-    # Handle development versions
-    if current == "0.0.0.dev" or "dev" in current:
+    # Outside of a compiled binary, __version__ can't be trusted for
+    # comparison (e.g. the "0.0.0.dev" fallback for editable installs),
+    # so just surface the latest release instead of comparing versions.
+    if not is_running_from_binary() and _is_dev_version(current):
         return latest
 
     try:
-        if Version(latest["version"]) > Version(current):
+        if _release_tuple(latest["version"]) > _release_tuple(current):
             return latest
     except Exception:
         # Version parsing failed, skip update check
@@ -212,16 +234,16 @@ def update_binary(force: bool = False) -> bool:
     log_info(f"Current version: {current}")
     log_info(f"Latest version:  {latest['version']}")
 
-    # Check if update is needed
+    # Check if update is needed. We're always running as a compiled
+    # binary here (checked above), so even a dev-tagged current version
+    # (e.g. "1.2.4.dev5" built ahead of the "1.2.4" tag) is compared on
+    # its release number rather than always forcing an update.
     needs_update = force
     if not force:
-        if current == "0.0.0.dev" or "dev" in current:
-            needs_update = True
-        else:
-            try:
-                needs_update = Version(latest["version"]) > Version(current)
-            except Exception:
-                needs_update = False
+        try:
+            needs_update = _release_tuple(latest["version"]) > _release_tuple(current)
+        except Exception:
+            needs_update = False
 
     if not needs_update:
         log_success("Already on the latest version!")
