@@ -18,7 +18,6 @@ RUN apt-get update && apt-get install -qq -y --no-install-recommends \
     libicu-dev \
     libmagickwand-dev \
     libmagickcore-dev \
-    libgmp-dev \
     && docker-php-ext-configure intl \
     && docker-php-ext-install intl zip \
     && apt-get clean \
