@@ -11,6 +11,8 @@ from .php_versions import get_container_name, get_image_name, get_image_tag, get
 if TYPE_CHECKING:
     import docker
 
+    from .environment import EnvironmentManager
+
 
 REVERSE_PROXY_CONTAINER = "franken-caddy-proxy"
 
@@ -119,13 +121,22 @@ class DockerManager:
                 containers.insert(0, get_container_name(version))
         return containers
 
-    def build_image(self, custom_path: str, php_version: str, wwwgroup: str = "") -> None:
+    def build_image(
+        self,
+        custom_path: str,
+        php_version: str,
+        wwwgroup: str = "",
+        extra_apt_packages: str = "",
+        extra_composer_packages: str = "",
+    ) -> None:
         """Build the custom FrankenPHP Docker image for a specific PHP version.
 
         Args:
             custom_path: The custom path build argument.
             php_version: PHP version to build for.
             wwwgroup: The www group build argument.
+            extra_apt_packages: Space-separated extra apt packages to install.
+            extra_composer_packages: Space-separated extra global Composer packages to install.
 
         Raises:
             DockerError: If the build fails.
@@ -139,6 +150,10 @@ class DockerManager:
         }
         if wwwgroup:
             build_args["WWWGROUP"] = wwwgroup
+        if extra_apt_packages:
+            build_args["EXTRA_APT_PACKAGES"] = extra_apt_packages
+        if extra_composer_packages:
+            build_args["EXTRA_COMPOSER_PACKAGES"] = extra_composer_packages
 
         try:
             self.client.images.build(
@@ -150,16 +165,25 @@ class DockerManager:
         except Exception as e:
             raise DockerError(f"Failed to build image for PHP {php_version}: {e}")
 
-    def build_images(self, custom_path: str, php_versions: set[str], wwwgroup: str = "") -> None:
+    def build_images(
+        self,
+        custom_path: str,
+        php_versions: set[str],
+        wwwgroup: str = "",
+        env: Optional["EnvironmentManager"] = None,
+    ) -> None:
         """Build Docker images for all required PHP versions.
 
         Args:
             custom_path: The custom path build argument.
             php_versions: Set of PHP versions to build.
             wwwgroup: The www group build argument.
+            env: Environment manager used to resolve per-version extra apt/Composer packages.
         """
         for version in sorted(php_versions):
-            self.build_image(custom_path, version, wwwgroup)
+            extra_apt = env.get_extra_packages(version, "APT") if env else ""
+            extra_composer = env.get_extra_packages(version, "COMPOSER") if env else ""
+            self.build_image(custom_path, version, wwwgroup, extra_apt, extra_composer)
 
     def generate_compose_file(
         self,

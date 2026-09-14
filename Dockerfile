@@ -1,5 +1,16 @@
 ARG PHP_IMAGE_TAG=latest-php8.3
+FROM composer:2 AS composer
+
 FROM dunglas/frankenphp:${PHP_IMAGE_TAG}
+
+COPY --from=composer /usr/bin/composer /usr/bin/composer
+
+# Space-separated extra packages to install on top of the defaults below,
+# scoped per PHP version via EXTRA_APT_PACKAGES_<version without dot>
+# (e.g. EXTRA_APT_PACKAGES_84) and merged with the version-agnostic
+# EXTRA_APT_PACKAGES / EXTRA_COMPOSER_PACKAGES. See .env.example.
+ARG EXTRA_APT_PACKAGES=""
+ARG EXTRA_COMPOSER_PACKAGES=""
 
 # hadolint ignore=DL3008
 RUN apt-get update && apt-get install -qq -y --no-install-recommends \
@@ -18,6 +29,7 @@ RUN apt-get update && apt-get install -qq -y --no-install-recommends \
     libicu-dev \
     libmagickwand-dev \
     libmagickcore-dev \
+    ${EXTRA_APT_PACKAGES} \
     && docker-php-ext-configure intl \
     && docker-php-ext-install intl zip \
     && apt-get clean \
@@ -45,6 +57,13 @@ RUN install-php-extensions \
 RUN docker-php-ext-enable imagick \
     && mkdir /etc/letsencrypt \
     && mkdir -p /var/log/php && chmod 755 /var/log/php
+
+ENV COMPOSER_ALLOW_SUPERUSER=1
+ENV PATH="${PATH}:${XDG_CONFIG_HOME}/composer/vendor/bin"
+
+RUN if [ -n "$EXTRA_COMPOSER_PACKAGES" ]; then \
+        composer global require --no-interaction --optimize-autoloader ${EXTRA_COMPOSER_PACKAGES}; \
+    fi
 
 ARG CUSTOM_PATH=/home
 

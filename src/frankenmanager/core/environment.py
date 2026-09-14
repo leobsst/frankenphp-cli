@@ -140,6 +140,32 @@ class EnvironmentManager:
         """
         return self.generate_db_password()
 
+    def get_extra_packages(self, php_version: str, package_type: str) -> str:
+        """Merge the version-agnostic and per-version extra package lists.
+
+        Reads `EXTRA_{package_type}_PACKAGES` (applies to every PHP version)
+        and `EXTRA_{package_type}_PACKAGES_<version without dot>` (e.g.
+        `EXTRA_APT_PACKAGES_84` for PHP 8.4), then concatenates them.
+
+        Args:
+            php_version: PHP version string (e.g., "8.4").
+            package_type: "APT" or "COMPOSER".
+
+        Returns:
+            Space-separated, de-duplicated package list (may be empty).
+        """
+        suffix = php_version.replace(".", "")
+        global_packages = self.get(f"EXTRA_{package_type}_PACKAGES") or ""
+        version_packages = self.get(f"EXTRA_{package_type}_PACKAGES_{suffix}") or ""
+
+        seen: set[str] = set()
+        packages: list[str] = []
+        for pkg in f"{global_packages} {version_packages}".split():
+            if pkg not in seen:
+                seen.add(pkg)
+                packages.append(pkg)
+        return " ".join(packages)
+
     def is_production(self) -> bool:
         """Check if running in production mode.
 

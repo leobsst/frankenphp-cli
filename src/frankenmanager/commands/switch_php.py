@@ -83,7 +83,13 @@ def switch_php(domain: str, php_version: str) -> None:
             # Build and start a new container for the target PHP version
             log_info(f"Building Docker image for PHP {php_version}...")
             custom_path = env.get("DEFAULT_PROJECT_PATH") or ""
-            docker.build_image(custom_path, php_version, env.get("WWWGROUP") or "")
+            docker.build_image(
+                custom_path,
+                php_version,
+                env.get("WWWGROUP") or "",
+                env.get_extra_packages(php_version, "APT"),
+                env.get_extra_packages(php_version, "COMPOSER"),
+            )
 
             # Regenerate compose file
             docker.generate_compose_file(versions_after, {}, env.is_production(), db_engines)

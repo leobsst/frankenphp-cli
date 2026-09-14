@@ -230,7 +230,7 @@ def start_server(
         if healthcheck_cnf.exists() and (healthcheck_cnf.stat().st_mode & 0o022):
             healthcheck_cnf.chmod(0o640)
 
-        docker.build_images(str(custom_path), active_versions, env.get("WWWGROUP") or "")
+        docker.build_images(str(custom_path), active_versions, env.get("WWWGROUP") or "", env)
         docker.compose_down(env.is_production())
 
         # Generate docker-compose file
