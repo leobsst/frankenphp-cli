@@ -24,6 +24,7 @@
 - Alternate hosts (aliases) that reverse-proxy to an existing domain's site (`add-alias`), with no extra Caddyfile or container
 - Proxy hosts that reverse-proxy straight to a raw upstream address (`add-host <domain> <target>`), with no PHP container or per-site Caddyfile
 - Automated SSL certificate generation via mkcert
+- Optional extra apt/Composer packages in the PHP image, scoped per PHP version
 - FrankenPHP with Caddy reverse proxy
 - MariaDB database with health checks
 - Redis cache server
@@ -735,6 +736,28 @@ The `.env` file is automatically created in the data directory on first run. Edi
 | `WEB_HTTP_PORT` | `80` | Web server HTTP port |
 | `WEB_HTTPS_PORT` | `443` | Web server HTTPS port |
 | `MYSQL_MAX_ALLOWED_PACKET` | `512M` | MariaDB max packet size |
+| `EXTRA_APT_PACKAGES` | (empty) | Extra Linux (apt) packages to install in the PHP image, space-separated, for every PHP version |
+| `EXTRA_APT_PACKAGES_<version>` | (empty) | Extra apt packages for one PHP version only (e.g. `EXTRA_APT_PACKAGES_84`), merged with `EXTRA_APT_PACKAGES` |
+| `EXTRA_COMPOSER_PACKAGES` | (empty) | Extra global Composer packages to install in the PHP image, space-separated, for every PHP version |
+| `EXTRA_COMPOSER_PACKAGES_<version>` | (empty) | Extra global Composer packages for one PHP version only (e.g. `EXTRA_COMPOSER_PACKAGES_84`), merged with `EXTRA_COMPOSER_PACKAGES` |
+
+### Extra Packages (apt / Composer)
+
+The custom FrankenPHP image can install additional Linux (apt) and global Composer packages on top of the built-in ones, configured via `.env`. `<version>` is the PHP version without the dot (`82`, `83`, `84`, `85`).
+
+```bash
+# Applies to every PHP version
+EXTRA_APT_PACKAGES=htop vim
+EXTRA_COMPOSER_PACKAGES=deployer/deployer
+
+# Applies to PHP 8.4 only, merged with the vars above
+EXTRA_APT_PACKAGES_84=redis-tools
+EXTRA_COMPOSER_PACKAGES_84=laravel/installer
+```
+
+Composer packages are installed with `composer global require`, so their binaries are available on the container's `PATH`.
+
+Changes take effect on the next image build — run `frankenmanager start` (or trigger a rebuild for the affected version via `add-host`/`restore-host`/`switch-php` when creating a new version container).
 
 ### Production Mode
 

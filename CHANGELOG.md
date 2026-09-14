@@ -80,6 +80,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Redis** (franken_redis) - Cache server
 - **phpMyAdmin** (franken_phpmyadmin) - Web-based database management UI
 
+#### Custom Docker Image
+- Composer bundled in the custom FrankenPHP image
+- Optional extra Linux (apt) packages via `EXTRA_APT_PACKAGES` in `.env`, installed on top of the built-in ones
+- Optional extra global Composer packages via `EXTRA_COMPOSER_PACKAGES` in `.env`, installed with `composer global require`
+- Both scoped per PHP version with `EXTRA_APT_PACKAGES_<version>` / `EXTRA_COMPOSER_PACKAGES_<version>` (e.g. `EXTRA_APT_PACKAGES_84`), merged with the version-agnostic ones
+- Applied on the next image build (`frankenmanager start`, or when a new PHP version container is created)
+
 #### Configuration Management
 - SQLite database for server state and domain management
   - Real-time status checking
