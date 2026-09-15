@@ -145,9 +145,15 @@ def ensure_resources_extracted() -> Path:
             continue
 
         if src.is_file():
-            if not dst.exists():
-                shutil.copy2(src, dst)
-                _fix_permissions(dst)
+            # Always overwrite: these are the same plain template files listed
+            # in STATIC_RESOURCE_FILES ("safe to overwrite wholesale"). Skipping
+            # existing ones here would leave stale copies stuck forever if this
+            # branch ever runs again with leftover files still on disk (e.g. the
+            # ".initialized" marker was lost or manually deleted) - once the
+            # marker is (re)written below, _sync_static_resources() only acts on
+            # a version bump and would never catch the staleness afterwards.
+            shutil.copy2(src, dst)
+            _fix_permissions(dst)
         elif src.is_dir():
             # Use dirs_exist_ok=True to merge contents if directory already exists
             # This ensures files like Caddyfile are copied even if _ensure_directory_structure
