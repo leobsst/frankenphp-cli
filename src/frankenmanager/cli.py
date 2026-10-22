@@ -1,18 +1,39 @@
 """Main CLI application using Typer."""
 
+import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import typer
 from rich.console import Console
 
 from . import __version__
 from .core.php_versions import SUPPORTED_VERSIONS
+from .exceptions import FrankenPHPError
+from .utils.logging import log_error
 
-app = typer.Typer(
+
+class _App(typer.Typer):
+    """Typer app reporting FrankenManager errors as a one-line message.
+
+    Without this, every FrankenPHPError raised by a command (e.g. "The
+    server is already stopped.") would reach Typer's rich traceback
+    handler, which is both slow to render and noisy for expected errors.
+    """
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        try:
+            return super().__call__(*args, **kwargs)
+        except FrankenPHPError as e:
+            log_error(str(e))
+            sys.exit(1)
+
+
+app = _App(
     name="frankenmanager",
     help="FrankenPHP Docker development environment manager",
     add_completion=False,
+    pretty_exceptions_show_locals=False,
 )
 
 console = Console()
@@ -323,22 +344,16 @@ def trust_ca_cmd(
     """
     from .commands.trust_ca import trust_ca_off, trust_ca_on, trust_ca_status
     from .core.ca_server import DEFAULT_PORT
-    from .exceptions import FrankenPHPError
-    from .utils.logging import log_error
 
-    try:
-        if action == "on":
-            trust_ca_on(port if port is not None else DEFAULT_PORT)
-        elif action == "off":
-            trust_ca_off()
-        elif action == "status":
-            trust_ca_status()
-        else:
-            console.print(f"[red]Unknown action '{action}'. Use on, off, or status.[/red]")
-            raise typer.Exit(1)
-    except FrankenPHPError as e:
-        log_error(str(e))
-        raise typer.Exit(1) from e
+    if action == "on":
+        trust_ca_on(port if port is not None else DEFAULT_PORT)
+    elif action == "off":
+        trust_ca_off()
+    elif action == "status":
+        trust_ca_status()
+    else:
+        console.print(f"[red]Unknown action '{action}'. Use on, off, or status.[/red]")
+        raise typer.Exit(1)
 
 
 @app.command(name="_serve-ca-internal", hidden=True)
@@ -411,7 +426,7 @@ def update(
         get_current_version,
         update_binary,
     )
-    from .utils.logging import log_error, log_info, log_success
+    from .utils.logging import log_info, log_success
 
     if check_only:
         log_info(f"Current version: {get_current_version()}")
