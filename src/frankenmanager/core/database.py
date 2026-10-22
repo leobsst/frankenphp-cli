@@ -89,32 +89,33 @@ class DatabaseManager:
         if not self.docker_manager:
             return False
 
-        try:
-            # Check infrastructure containers (including reverse proxy)
-            from .docker_manager import REVERSE_PROXY_CONTAINER  # noqa: PLC0415
+        return self.is_running_with(self.docker_manager.get_containers_status())
 
-            for container in (REVERSE_PROXY_CONTAINER, "franken_redis"):
-                status_info = self.docker_manager.get_container_status(container)
-                if status_info["status"] != "running":
-                    return False
+    def is_running_with(self, statuses: dict[str, dict[str, str]]) -> bool:
+        """Check if the server is running from an existing container status snapshot.
 
-            # Check if at least one frankenphp container is running
-            domains_with_versions = self.get_domains_with_versions()
-            if not domains_with_versions:
-                return False
+        Lets callers that already fetched DockerManager.get_containers_status()
+        reuse it instead of querying Docker again.
 
-            active_versions = {v for _, v in domains_with_versions}
-            for version in active_versions:
-                from .php_versions import get_container_name  # noqa: PLC0415
+        Args:
+            statuses: Container statuses as returned by get_containers_status().
 
-                container_name = get_container_name(version)
-                status_info = self.docker_manager.get_container_status(container_name)
-                if status_info["status"] == "running":
-                    return True
+        Returns:
+            True if at least one FrankenPHP container and infrastructure containers are running.
+        """
+        from .docker_manager import REVERSE_PROXY_CONTAINER  # noqa: PLC0415
+        from .php_versions import get_container_name  # noqa: PLC0415
 
+        def running(name: str) -> bool:
+            return statuses.get(name, {}).get("status") == "running"
+
+        # Check infrastructure containers (including reverse proxy)
+        if not all(running(c) for c in (REVERSE_PROXY_CONTAINER, "franken_redis")):
             return False
-        except (ImportError, AttributeError, KeyError):
-            return False
+
+        # Check if at least one frankenphp container is running
+        active_versions = {v for _, v in self.get_domains_with_versions()}
+        return any(running(get_container_name(v)) for v in active_versions)
 
     def set_domains(self, domains: list[str], php_version: str = DEFAULT_PHP_VERSION) -> None:
         """Set the list of configured domains.

@@ -1,6 +1,7 @@
 """Docker container and compose management."""
 
 import os
+import re
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
@@ -15,6 +16,11 @@ if TYPE_CHECKING:
 
 
 REVERSE_PROXY_CONTAINER = "franken-caddy-proxy"
+
+CONTAINER_NOT_FOUND = {"status": "not found", "health": "N/A"}
+
+# Health status embedded in the container list's Status field
+_HEALTH_PATTERN = re.compile(r"\((?:health: )?(healthy|unhealthy|starting)\)")
 
 # Valid database engine identifiers
 VALID_DB_ENGINES = {"mariadb", "mysql", "postgresql"}
@@ -739,24 +745,30 @@ class DockerManager:
         for name in self.get_all_containers(php_versions, db_engines, production):
             self.restart_container(name)
 
-    def get_container_status(self, name: str) -> dict[str, str]:
-        """Get status info for a container.
-
-        Args:
-            name: Container name.
+    def get_containers_status(self) -> dict[str, dict[str, str]]:
+        """Get status info for every container in a single Docker API call.
 
         Returns:
-            Dictionary with 'status' and 'health' keys.
+            Mapping of container name to a dictionary with 'status' (e.g.
+            "running", "exited") and 'health' ("healthy", "unhealthy",
+            "starting" or "N/A") keys. Containers missing from the mapping
+            don't exist (see CONTAINER_NOT_FOUND). Empty if Docker is unreachable.
         """
         try:
-            container = self.client.containers.get(name)
-            health = "N/A"
-            state = container.attrs.get("State", {})
-            if state.get("Health"):
-                health = state["Health"].get("Status", "N/A")
-            return {"status": container.status, "health": health}
+            summaries = self.client.api.containers(all=True)
         except Exception:
-            return {"status": "not found", "health": "N/A"}
+            return {}
+
+        statuses: dict[str, dict[str, str]] = {}
+        for summary in summaries:
+            # The list endpoint has no Health object, only a human-readable
+            # Status such as "Up 2 minutes (healthy)" or "(health: starting)".
+            match = _HEALTH_PATTERN.search(summary.get("Status") or "")
+            health = match.group(1) if match else "N/A"
+            status = {"status": summary.get("State") or "unknown", "health": health}
+            for name in summary.get("Names") or []:
+                statuses[name.lstrip("/")] = status
+        return statuses
 
     def stop_container(self, name: str) -> bool:
         """Stop a single container by name.

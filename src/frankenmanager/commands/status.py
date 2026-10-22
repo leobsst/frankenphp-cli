@@ -4,7 +4,7 @@ from rich.console import Console
 from rich.table import Table
 
 from ..core.database import DatabaseManager
-from ..core.docker_manager import DockerManager, parse_db_engines
+from ..core.docker_manager import CONTAINER_NOT_FOUND, DockerManager, parse_db_engines
 from ..core.environment import EnvironmentManager
 from ..core.php_versions import get_container_name
 from ..core.resources import get_project_dir
@@ -24,8 +24,9 @@ def show_status() -> None:
         env.load()
     db_engines = parse_db_engines(env.get("DB_ENGINES") or "mariadb") or ["mariadb"]
 
-    # Get real-time status from Docker containers
-    is_running = db.is_running
+    # Get real-time status from Docker containers, in a single API call
+    statuses = docker.get_containers_status()
+    is_running = db.is_running_with(statuses)
     domains_with_versions = db.get_domains_with_versions()
     active_versions = db.get_active_php_versions()
 
@@ -57,7 +58,7 @@ def show_status() -> None:
     # FrankenPHP containers (one per active version)
     for version in sorted(active_versions):
         container_name = get_container_name(version)
-        _add_container_row(table, docker, container_name)
+        _add_container_row(table, statuses, container_name)
 
     # Infrastructure containers
     for container in docker.get_all_containers(
@@ -66,15 +67,15 @@ def show_status() -> None:
         # Skip PHP containers (already shown above)
         if container.startswith("frankenphp-"):
             continue
-        _add_container_row(table, docker, container)
+        _add_container_row(table, statuses, container)
 
     console.print(table)
     console.print()
 
 
-def _add_container_row(table: Table, docker: DockerManager, container: str) -> None:
+def _add_container_row(table: Table, statuses: dict[str, dict[str, str]], container: str) -> None:
     """Add a container status row to the table."""
-    status_info = docker.get_container_status(container)
+    status_info = statuses.get(container, CONTAINER_NOT_FOUND)
     status = status_info["status"]
     health = status_info["health"]
 
