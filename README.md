@@ -42,28 +42,24 @@
 
 ### Option 1: Pre-built Binaries (Recommended)
 
-Download the latest binary for your platform from the [Releases](https://github.com/leobsst/frankenphp-cli/releases) page.
-
-#### macOS (Apple Silicon)
+The quickest way is the install script, which downloads the latest release for your platform:
 
 ```bash
-curl -L https://github.com/leobsst/frankenphp-cli/releases/latest/download/frankenmanager-macos-arm64 -o /usr/local/bin/frankenmanager
-chmod +x /usr/local/bin/frankenmanager
+curl -fsSL https://raw.githubusercontent.com/leobsst/frankenphp-cli/refs/heads/main/install.sh | bash
 ```
 
-#### macOS (Intel)
+It installs the bundle (the `frankenmanager` executable plus its `_internal/` directory) in `/usr/local/lib/frankenmanager` and links it as `/usr/local/bin/frankenmanager`. Set `VERSION=x.y.z` to pin a version.
+
+To install manually, download the archive for your platform from the [Releases](https://github.com/leobsst/frankenphp-cli/releases) page (`frankenmanager-macos-arm64.tar.gz`, `frankenmanager-macos-x86_64.tar.gz` or `frankenmanager-linux-x86_64.tar.gz`), e.g. on macOS (Apple Silicon):
 
 ```bash
-curl -L https://github.com/leobsst/frankenphp-cli/releases/latest/download/frankenmanager-macos-x86_64 -o /usr/local/bin/frankenmanager
-chmod +x /usr/local/bin/frankenmanager
+curl -fsSL https://github.com/leobsst/frankenphp-cli/releases/latest/download/frankenmanager-macos-arm64.tar.gz | tar -xz -C /tmp
+sudo mkdir -p /usr/local/lib
+sudo mv /tmp/frankenmanager /usr/local/lib/frankenmanager
+sudo ln -sfn /usr/local/lib/frankenmanager/frankenmanager /usr/local/bin/frankenmanager
 ```
 
-#### Linux
-
-```bash
-curl -L https://github.com/leobsst/frankenphp-cli/releases/latest/download/frankenmanager-linux-x86_64 -o /usr/local/bin/frankenmanager
-chmod +x /usr/local/bin/frankenmanager
-```
+Keep the extracted `frankenmanager/` directory whole: the executable needs its `_internal/` directory next to it.
 
 #### Windows
 
@@ -619,9 +615,11 @@ sudo frankenmanager update
 sudo frankenmanager update --force
 ```
 
-**Note**: the binary is installed in a system directory (e.g. `/usr/local/bin`), so `frankenmanager update` and `frankenmanager update --force` need to be run with `sudo` (or as an administrator). `frankenmanager update --check` does not modify anything and does not require elevated privileges.
+**Note**: the binary is installed in a system directory (e.g. `/usr/local/lib`), so `frankenmanager update` and `frankenmanager update --force` need to be run with `sudo` (or as an administrator). `frankenmanager update --check` does not modify anything and does not require elevated privileges.
 
-When you run any command, FrankenManager automatically checks for updates and notifies you if a new version is available.
+Updating an install made with an older single-file binary (`/usr/local/bin/frankenmanager`) migrates it to the bundle layout: the bundle goes to `/usr/local/lib/frankenmanager` and `/usr/local/bin/frankenmanager` becomes a symlink to it.
+
+FrankenManager also notifies you when a new version is available. This check never slows a command down: the latest release found on GitHub is cached for 6 hours (in `update_check.json` in the data directory) and refreshed in the background, so a new release is announced from the next command on.
 
 ## Configuration
 
@@ -983,7 +981,7 @@ frankenmanager stop
 sudo frankenmanager setup --remove
 
 # Remove the binary (if installed via binary)
-sudo rm /usr/local/bin/frankenmanager
+sudo rm -rf /usr/local/bin/frankenmanager /usr/local/lib/frankenmanager
 
 # Remove data directory
 rm -rf ~/.frankenmanager

@@ -7,6 +7,7 @@ import shutil
 import ssl
 import subprocess
 import sys
+import tarfile
 import tempfile
 import time
 import urllib.error
@@ -24,6 +25,10 @@ from .resources import get_app_data_dir
 # GitHub repository for releases
 GITHUB_REPO = "leobsst/frankenphp-cli"
 GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+
+# Name of the bundle directory inside release archives, and of the
+# executable inside that directory.
+BUNDLE_NAME = "frankenmanager"
 
 # Startup update check: a successful GitHub lookup is cached for
 # UPDATE_CACHE_TTL. While the cache is stale, a failed lookup (offline,
@@ -74,6 +79,19 @@ def get_platform_binary_name() -> str:
         raise RuntimeError(f"Unsupported platform: {system}-{machine}")
 
 
+def get_platform_archive_name() -> str:
+    """Get the release archive name for the current platform.
+
+    The archive holds the fast-starting onedir bundle (executable +
+    _internal/). The bare binary asset (see get_platform_binary_name) is
+    only still published so that older single-file installs can update.
+
+    Returns:
+        The archive filename for the current OS and architecture.
+    """
+    return f"{get_platform_binary_name().removesuffix('.exe')}.tar.gz"
+
+
 def get_current_version() -> str:
     """Get the current installed version.
 
@@ -110,18 +128,18 @@ def fetch_latest_release() -> dict[str, str]:
     except KeyError as e:
         raise UpdateCheckError(f"Unexpected release format from GitHub (missing {e}).") from e
 
-    binary_name = get_platform_binary_name()
+    archive_name = get_platform_archive_name()
 
     # Find the download URL for our platform
     download_url = None
     for asset in data.get("assets", []):
-        if asset["name"] == binary_name:
+        if asset["name"] == archive_name:
             download_url = asset["browser_download_url"]
             break
 
     if not download_url:
         raise UpdateCheckError(
-            f"The latest release ({version}) has no binary for this platform ({binary_name})."
+            f"The latest release ({version}) has no build for this platform ({archive_name})."
         )
 
     return {"version": version, "download_url": download_url, "name": data["name"]}
@@ -226,6 +244,18 @@ def is_running_from_binary() -> bool:
     return getattr(sys, "frozen", False)
 
 
+def _is_onedir_bundle() -> bool:
+    """Check if running from an onedir bundle rather than a single-file binary.
+
+    A onedir bundle keeps its _internal/ directory next to the executable,
+    whereas a single-file binary unpacks itself to a temporary directory.
+    """
+    bundle_dir = getattr(sys, "_MEIPASS", None)
+    if bundle_dir is None:
+        return False
+    return Path(bundle_dir).resolve().parent == Path(sys.executable).resolve().parent
+
+
 def get_executable_path() -> Path:
     """Get the path to the current executable.
 
@@ -239,12 +269,12 @@ def get_executable_path() -> Path:
         return Path(sys.argv[0]).resolve()
 
 
-def download_binary(url: str, dest: Path) -> bool:
-    """Download a binary from URL to destination.
+def download_asset(url: str, dest: Path) -> bool:
+    """Download a release asset from URL to destination.
 
     Args:
         url: The download URL.
-        dest: Destination path for the binary.
+        dest: Destination path for the asset.
 
     Returns:
         True if download succeeded.
@@ -264,8 +294,55 @@ def download_binary(url: str, dest: Path) -> bool:
         return False
 
 
+def _extract_bundle(archive: Path, dest_dir: Path) -> Path:
+    """Extract a release archive and return the bundle directory it contains."""
+    with tarfile.open(archive, "r:gz") as tar:
+        if hasattr(tarfile, "data_filter"):
+            # Rejects absolute paths and links escaping dest_dir
+            tar.extractall(dest_dir, filter="data")
+        else:
+            tar.extractall(dest_dir)  # noqa: S202
+
+    bundle = dest_dir / BUNDLE_NAME
+    if not (bundle / BUNDLE_NAME).is_file():
+        raise OSError(f"Release archive does not contain {BUNDLE_NAME}/{BUNDLE_NAME}")
+    return bundle
+
+
+def _install_bundle(new_bundle: Path, install_dir: Path) -> None:
+    """Swap the installed bundle directory with a freshly extracted one.
+
+    The previous bundle is moved aside first and put back if the swap
+    fails, so a failed update never leaves a half-installed bundle.
+    """
+    staging_dir = install_dir.with_name(f"{install_dir.name}.new")
+    backup_dir = install_dir.with_name(f"{install_dir.name}.old")
+    shutil.rmtree(staging_dir, ignore_errors=True)
+    shutil.rmtree(backup_dir, ignore_errors=True)
+
+    install_dir.parent.mkdir(parents=True, exist_ok=True)
+    # Copy next to the install dir first so the final swap is a same-filesystem rename
+    shutil.move(str(new_bundle), str(staging_dir))
+
+    if install_dir.exists():
+        os.rename(install_dir, backup_dir)
+    try:
+        os.rename(staging_dir, install_dir)
+    except OSError:
+        if backup_dir.exists():
+            os.rename(backup_dir, install_dir)
+        raise
+
+    shutil.rmtree(backup_dir, ignore_errors=True)
+
+
 def update_binary(force: bool = False) -> bool:
     """Update the binary to the latest version.
+
+    The update installs the onedir bundle shipped in the release archive.
+    A legacy single-file install (e.g. /usr/local/bin/frankenmanager) is
+    migrated: the bundle goes to <prefix>/lib/frankenmanager and the old
+    binary is replaced by a symlink to the bundle's executable.
 
     Args:
         force: If True, update even if already on latest version.
@@ -306,60 +383,38 @@ def update_binary(force: bool = False) -> bool:
 
     log_info(f"Updating to version {latest['version']}...")
 
-    # Get current executable path
     exe_path = get_executable_path()
+    onedir = _is_onedir_bundle()
+    if onedir:
+        install_dir = exe_path.resolve().parent
+    else:
+        install_dir = exe_path.parent.parent / "lib" / BUNDLE_NAME
 
-    # Create temp file for download
-    with tempfile.NamedTemporaryFile(delete=False, suffix=exe_path.suffix) as tmp:
-        tmp_path = Path(tmp.name)
-
-    try:
-        # Download new binary
-        if not download_binary(latest["download_url"], tmp_path):
-            tmp_path.unlink(missing_ok=True)
+    with tempfile.TemporaryDirectory() as tmp:
+        archive_path = Path(tmp) / get_platform_archive_name()
+        if not download_asset(latest["download_url"], archive_path):
             return False
-
-        # Make readable and executable on Unix. NamedTemporaryFile creates the
-        # file with mode 0600 regardless of umask, so group/other need both
-        # the read bit (the PyInstaller bootloader reads its own file at
-        # runtime to unpack the embedded archive) and the execute bit.
-        if platform.system() != "Windows":
-            tmp_path.chmod(0o755)
-
-        # Replace current binary
-        backup_path = exe_path.with_suffix(exe_path.suffix + ".backup")
 
         try:
-            # Backup current binary
-            shutil.copy2(exe_path, backup_path)
+            new_bundle = _extract_bundle(archive_path, Path(tmp) / "extracted")
+            _install_bundle(new_bundle, install_dir)
 
-            # Replace with new binary
-            if platform.system() == "Windows":
-                # On Windows, rename current exe first
-                old_path = exe_path.with_suffix(exe_path.suffix + ".old")
-                os.rename(exe_path, old_path)
-                shutil.move(str(tmp_path), str(exe_path))
-                old_path.unlink(missing_ok=True)
-            else:
-                shutil.move(str(tmp_path), str(exe_path))
-
-            # Remove backup on success
-            backup_path.unlink(missing_ok=True)
-
-            log_success(f"Successfully updated to version {latest['version']}!")
-            log_info("Please restart FrankenManager to use the new version.")
-            return True
-
+            if not onedir:
+                # Replace the legacy single-file binary with a symlink to the bundle
+                tmp_link = exe_path.with_name(f".{exe_path.name}.link")
+                tmp_link.unlink(missing_ok=True)
+                tmp_link.symlink_to(install_dir / BUNDLE_NAME)
+                os.replace(tmp_link, exe_path)
         except PermissionError:
             log_error("Permission denied. Try running with sudo/administrator privileges.")
-            # Restore backup if it exists
-            if backup_path.exists():
-                shutil.move(str(backup_path), str(exe_path))
+            return False
+        except (OSError, tarfile.TarError) as e:
+            log_error(f"Update failed: {e}")
             return False
 
-    finally:
-        # Clean up temp file if it still exists
-        tmp_path.unlink(missing_ok=True)
+    log_success(f"Successfully updated to version {latest['version']}!")
+    log_info("Please restart FrankenManager to use the new version.")
+    return True
 
 
 def _spawn_cache_refresh() -> None:

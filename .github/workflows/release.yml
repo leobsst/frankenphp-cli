@@ -141,20 +141,25 @@ jobs:
         env:
           APPLE_NOTARY_CREDENTIALS: ${{ secrets.APPLE_NOTARY_CREDENTIALS }}
         run: |
-          BINARY_PATH=$(ls dist/frankenmanager-*)
+          # Legacy single-file binary (everything matching but the .tar.gz archive)
+          LEGACY_PATH=$(ls dist/frankenmanager-* | grep -v '\.tar\.gz$')
 
-          # Verify signature
-          codesign --verify --verbose "$BINARY_PATH"
-          echo "Binary signature verified"
+          # Verify signatures
+          codesign --verify --verbose dist/frankenmanager/frankenmanager
+          codesign --verify --verbose "$LEGACY_PATH"
+          echo "Binary signatures verified"
 
           # Parse notary credentials
           APPLE_ID=$(echo "$APPLE_NOTARY_CREDENTIALS" | python3 -c "import sys,json; print(json.load(sys.stdin)['apple_id'])")
           TEAM_ID=$(echo "$APPLE_NOTARY_CREDENTIALS" | python3 -c "import sys,json; print(json.load(sys.stdin)['team_id'])")
           APP_PASSWORD=$(echo "$APPLE_NOTARY_CREDENTIALS" | python3 -c "import sys,json; print(json.load(sys.stdin)['app_specific_password'])")
 
-          # Create zip for notarization
+          # Create zip for notarization (onedir bundle + legacy binary)
+          NOTARIZE_DIR=$RUNNER_TEMP/notarize
+          mkdir -p "$NOTARIZE_DIR"
+          cp -R dist/frankenmanager "$LEGACY_PATH" "$NOTARIZE_DIR/"
           ZIP_PATH=$RUNNER_TEMP/frankenmanager.zip
-          ditto -c -k --keepParent "$BINARY_PATH" "$ZIP_PATH"
+          ditto -c -k --keepParent "$NOTARIZE_DIR" "$ZIP_PATH"
 
           # Submit for notarization and wait
           xcrun notarytool submit "$ZIP_PATH" \
@@ -163,7 +168,7 @@ jobs:
             --password "$APP_PASSWORD" \
             --wait --timeout 10m
 
-          echo "macOS binary signed and notarized successfully"
+          echo "macOS binaries signed and notarized successfully"
 
       - name: Cleanup macOS keychain
         if: always() && steps.macos-keychain.outputs.keychain_path != ''
@@ -172,9 +177,18 @@ jobs:
       - name: Test binary (Unix)
         if: runner.os != 'Windows'
         run: |
-          chmod +x dist/frankenmanager-*
-          ./dist/frankenmanager-* --version
-          ./dist/frankenmanager-* --help
+          # Run the bundle as installed: extracted from the release archive
+          # and called through a symlink, like install.sh does
+          TEST_DIR=$RUNNER_TEMP/bundle-test
+          mkdir -p "$TEST_DIR/bin"
+          tar -xzf dist/frankenmanager-*.tar.gz -C "$TEST_DIR"
+          ln -s "$TEST_DIR/frankenmanager/frankenmanager" "$TEST_DIR/bin/frankenmanager"
+          "$TEST_DIR/bin/frankenmanager" --version
+          "$TEST_DIR/bin/frankenmanager" --help
+
+          LEGACY_PATH=$(ls dist/frankenmanager-* | grep -v '\.tar\.gz$')
+          chmod +x "$LEGACY_PATH"
+          "$LEGACY_PATH" --version
 
       - name: Test binary (Windows)
         if: runner.os == 'Windows'
@@ -309,14 +323,18 @@ jobs:
 
           ### Pre-built Binaries (Recommended)
 
-          Download the appropriate binary for your platform:
+          Download the appropriate archive for your platform:
 
           | Platform | Architecture | Download |
           |----------|--------------|----------|
-          | macOS | Apple Silicon | `frankenmanager-macos-arm64` |
-          | macOS | Intel | `frankenmanager-macos-x86_64` |
-          | Linux | x86_64 | `frankenmanager-linux-x86_64` |
-          | Windows | x86_64 | `frankenmanager-windows-x86_64.exe` |
+          | macOS | Apple Silicon | `frankenmanager-macos-arm64.tar.gz` |
+          | macOS | Intel | `frankenmanager-macos-x86_64.tar.gz` |
+          | Linux | x86_64 | `frankenmanager-linux-x86_64.tar.gz` |
+
+          Each archive contains a `frankenmanager/` directory: keep it whole and
+          put its `frankenmanager` executable on your PATH (e.g. with a symlink).
+          The bare `frankenmanager-<platform>` binaries are slower-starting
+          single-file builds, only kept so that older installs can self-update.
 
           #### Quick Install (macOS/Linux)
 

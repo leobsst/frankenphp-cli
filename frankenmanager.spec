@@ -1,8 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
 """PyInstaller spec file for FrankenManager.
 
-This spec file creates a single executable file that includes all dependencies.
-The binary can be distributed without requiring Python to be installed.
+This spec file creates a onedir bundle (dist/frankenmanager/: the executable
+plus its _internal/ directory) that includes all dependencies. The bundle can
+be distributed without requiring Python to be installed.
+
+A onedir bundle starts much faster than a single-file executable, which has
+to unpack itself to a temporary directory on every run. UPX is disabled for
+the same reason: decompressing binaries also slows down every startup.
+
+Set FRANKENMANAGER_LEGACY_ONEFILE=1 (done by `scripts/build.py --release`) to
+also build dist/frankenmanager-onefile, the single-file binary published only
+so that installs predating the onedir bundle can still self-update.
 
 Build commands:
     pyinstaller frankenmanager.spec
@@ -20,6 +29,7 @@ block_cipher = None
 # Read code signing identity from environment variable (set during CI builds)
 codesign_id = os.environ.get("CODESIGN_IDENTITY")
 entitlements = os.environ.get("ENTITLEMENTS_FILE")
+build_legacy_onefile = os.environ.get("FRANKENMANAGER_LEGACY_ONEFILE") == "1"
 
 # Get the source directory
 src_path = Path("src/frankenmanager")
@@ -124,17 +134,13 @@ pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
     [],
+    exclude_binaries=True,
     name="frankenmanager",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
-    upx_exclude=[],
-    runtime_tmpdir=None,
+    upx=False,
     console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -143,3 +149,37 @@ exe = EXE(
     entitlements_file=entitlements,
     icon=None,  # Add icon path here if desired: icon="assets/icon.ico"
 )
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=False,
+    name="frankenmanager",
+)
+
+if build_legacy_onefile:
+    legacy_exe = EXE(
+        pyz,
+        a.scripts,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        [],
+        name="frankenmanager-onefile",
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=False,
+        upx=False,
+        upx_exclude=[],
+        runtime_tmpdir=None,
+        console=True,
+        disable_windowed_traceback=False,
+        argv_emulation=False,
+        target_arch=None,
+        codesign_identity=codesign_id,
+        entitlements_file=entitlements,
+        icon=None,
+    )
