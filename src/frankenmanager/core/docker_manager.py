@@ -161,6 +161,7 @@ class DockerManager:
                 tag=image_name,
                 buildargs=build_args,
                 rm=True,
+                pull=True,
             )
         except Exception as e:
             raise DockerError(f"Failed to build image for PHP {php_version}: {e}")

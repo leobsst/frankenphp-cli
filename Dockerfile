@@ -1,4 +1,4 @@
-ARG PHP_IMAGE_TAG=latest-php8.3
+ARG PHP_IMAGE_TAG=1-php8.3-trixie
 FROM composer:2 AS composer
 
 FROM dunglas/frankenphp:${PHP_IMAGE_TAG}

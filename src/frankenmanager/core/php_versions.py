@@ -4,10 +4,10 @@ from typing import Optional
 
 # Mapping of PHP versions to their FrankenPHP Docker image tags
 PHP_IMAGE_TAGS: dict[str, str] = {
-    "8.2": "latest-php8.2",
-    "8.3": "latest-php8.3",
-    "8.4": "1.12-php8.4",
-    "8.5": "1.12-php8.5",
+    "8.2": "1-php8.2-trixie",
+    "8.3": "1-php8.3-trixie",
+    "8.4": "1-php8.4-trixie",
+    "8.5": "1-php8.5-trixie",
 }
 
 # Supported PHP versions (ordered)
