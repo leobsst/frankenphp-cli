@@ -12,6 +12,10 @@ from .core.php_versions import SUPPORTED_VERSIONS
 from .exceptions import FrankenPHPError
 from .utils.logging import log_error
 
+# Hidden commands spawned by the CLI itself, plus `update` which queries
+# GitHub on its own: none of them needs the startup update notification.
+_SKIP_UPDATE_CHECK_COMMANDS = {"_serve-ca-internal", "_refresh-update-cache", "update"}
+
 
 class _App(typer.Typer):
     """Typer app reporting FrankenManager errors as a one-line message.
@@ -52,6 +56,7 @@ def version_callback(value: bool) -> None:
 
 @app.callback()
 def main(
+    ctx: typer.Context,
     version: Optional[bool] = typer.Option(
         None,
         "--version",
@@ -68,7 +73,7 @@ def main(
     ),
 ) -> None:
     """FrankenManager - FrankenPHP Docker development environment manager."""
-    if not no_update_check:
+    if not no_update_check and ctx.invoked_subcommand not in _SKIP_UPDATE_CHECK_COMMANDS:
         from .core.updater import notify_if_update_available
 
         notify_if_update_available()
@@ -365,6 +370,17 @@ def serve_ca_internal_cmd(
     from .core.ca_server import run_server
 
     run_server(Path(cert_file), port)
+
+
+@app.command(name="_refresh-update-cache", hidden=True)
+def refresh_update_cache_cmd() -> None:
+    """Internal: refresh the cached GitHub release info, spawned at startup."""
+    from .core.updater import UpdateCheckError, refresh_update_cache
+
+    try:
+        refresh_update_cache()
+    except UpdateCheckError as e:
+        raise typer.Exit(1) from e
 
 
 @app.command()

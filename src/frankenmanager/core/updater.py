@@ -5,22 +5,35 @@ import os
 import platform
 import shutil
 import ssl
+import subprocess
 import sys
 import tempfile
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import certifi
 from packaging.version import Version
 
 from .. import __version__
 from ..utils.logging import log_error, log_info, log_success, log_warning
+from .resources import get_app_data_dir
 
 # GitHub repository for releases
 GITHUB_REPO = "leobsst/frankenphp-cli"
 GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+
+# Startup update check: a successful GitHub lookup is cached for
+# UPDATE_CACHE_TTL. While the cache is stale, a failed lookup (offline,
+# rate-limited...) is retried at most once per UPDATE_RETRY_DELAY.
+UPDATE_CACHE_FILE = "update_check.json"
+UPDATE_CACHE_TTL = 6 * 60 * 60
+UPDATE_RETRY_DELAY = 10 * 60
+
+# Hidden CLI command run in a detached process to refresh the cache.
+REFRESH_COMMAND = "_refresh-update-cache"
 
 
 class UpdateCheckError(Exception):
@@ -134,6 +147,63 @@ def _release_tuple(version: str) -> tuple[int, ...]:
     return Version(version).release[:3]
 
 
+def _is_newer_than_current(latest: dict[str, str]) -> bool:
+    """Check whether a release is newer than the running version."""
+    current = get_current_version()
+
+    # Outside of a compiled binary, __version__ can't be trusted for
+    # comparison (e.g. the "0.0.0.dev" fallback for editable installs),
+    # so just surface the latest release instead of comparing versions.
+    if not is_running_from_binary() and _is_dev_version(current):
+        return True
+
+    try:
+        return _release_tuple(latest["version"]) > _release_tuple(current)
+    except Exception:
+        # Version parsing failed, skip update check
+        return False
+
+
+def _cache_path() -> Path:
+    return get_app_data_dir() / UPDATE_CACHE_FILE
+
+
+def _read_cache() -> dict[str, Any]:
+    try:
+        data = json.loads(_cache_path().read_text())
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _write_cache(data: dict[str, Any]) -> None:
+    """Write the cache atomically, so a concurrent reader never sees half a file."""
+    path = _cache_path()
+    tmp_path = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path.write_text(json.dumps(data))
+        os.replace(tmp_path, path)
+    except OSError:
+        tmp_path.unlink(missing_ok=True)
+
+
+def refresh_update_cache() -> dict[str, str]:
+    """Fetch the latest release from GitHub and cache it on success.
+
+    Returns:
+        The latest release information.
+
+    Raises:
+        UpdateCheckError: If release information can't be fetched.
+    """
+    latest = fetch_latest_release()
+    cache = _read_cache()
+    cache.update({"checked_at": time.time(), "latest": latest})
+    _write_cache(cache)
+    return latest
+
+
 def check_for_updates() -> Optional[dict[str, str]]:
     """Check if a new version is available.
 
@@ -143,23 +213,8 @@ def check_for_updates() -> Optional[dict[str, str]]:
     Raises:
         UpdateCheckError: If release information can't be fetched.
     """
-    latest = fetch_latest_release()
-    current = get_current_version()
-
-    # Outside of a compiled binary, __version__ can't be trusted for
-    # comparison (e.g. the "0.0.0.dev" fallback for editable installs),
-    # so just surface the latest release instead of comparing versions.
-    if not is_running_from_binary() and _is_dev_version(current):
-        return latest
-
-    try:
-        if _release_tuple(latest["version"]) > _release_tuple(current):
-            return latest
-    except Exception:
-        # Version parsing failed, skip update check
-        pass
-
-    return None
+    latest = refresh_update_cache()
+    return latest if _is_newer_than_current(latest) else None
 
 
 def is_running_from_binary() -> bool:
@@ -225,7 +280,7 @@ def update_binary(force: bool = False) -> bool:
 
     log_info("Checking for updates...")
     try:
-        latest = fetch_latest_release()
+        latest = refresh_update_cache()
     except UpdateCheckError as e:
         log_error(str(e))
         return False
@@ -307,19 +362,47 @@ def update_binary(force: bool = False) -> bool:
         tmp_path.unlink(missing_ok=True)
 
 
-def notify_if_update_available() -> None:
-    """Check for updates and print a notification if available.
+def _spawn_cache_refresh() -> None:
+    """Refresh the update cache in a detached background process.
 
-    This is meant to be called at startup and should be non-blocking.
+    The process outlives the current command, so the user never waits on
+    GitHub; its result is picked up by the next command.
+    """
+    subprocess.Popen(
+        [sys.executable, "--no-update-check", REFRESH_COMMAND],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+
+def notify_if_update_available() -> None:
+    """Print a notification if a newer version is known to be available.
+
+    Never touches the network itself: it reads the cached result of the
+    last GitHub lookup, and refreshes a stale cache in a detached process
+    (see _spawn_cache_refresh). A newly published release is therefore
+    announced from the following command on.
     """
     if not is_running_from_binary():
         return
 
     try:
-        update_info = check_for_updates()
-        if update_info:
+        cache = _read_cache()
+        now = time.time()
+        if (
+            now - cache.get("checked_at", 0) >= UPDATE_CACHE_TTL
+            and now - cache.get("attempted_at", 0) >= UPDATE_RETRY_DELAY
+        ):
+            cache["attempted_at"] = now
+            _write_cache(cache)
+            _spawn_cache_refresh()
+
+        latest = cache.get("latest")
+        if latest and _is_newer_than_current(latest):
             log_warning(
-                f"A new version is available: {update_info['version']} "
+                f"A new version is available: {latest['version']} "
                 f"(current: {get_current_version()})"
             )
             log_info("Run 'sudo frankenmanager update' to update.")
