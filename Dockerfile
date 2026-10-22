@@ -12,14 +12,8 @@ COPY --from=composer /usr/bin/composer /usr/bin/composer
 ARG EXTRA_APT_PACKAGES=""
 ARG EXTRA_COMPOSER_PACKAGES=""
 
-# libc-client is only needed by the bundled imap extension (PHP < 8.4);
-# PHP_VERSION is provided by the base image.
-# hadolint ignore=DL3008,SC2086
-RUN IMAP_APT_PACKAGES=""; \
-    if dpkg --compare-versions "$PHP_VERSION" lt 8.4; then \
-        IMAP_APT_PACKAGES="libc-client2007e-dev"; \
-    fi; \
-    apt-get update && apt-get install -qq -y --no-install-recommends \
+# hadolint ignore=DL3008
+RUN apt-get update && apt-get install -qq -y --no-install-recommends \
     git \
     zip \
     unzip \
@@ -30,13 +24,12 @@ RUN IMAP_APT_PACKAGES=""; \
     libjpeg-dev \
     libwebp-dev \
     librsvg2-bin \
-    libfreetype6-dev \
+    libfreetype-dev \
     libbz2-dev \
     libzip-dev \
     libicu-dev \
     libmagickwand-dev \
     libmagickcore-dev \
-    ${IMAP_APT_PACKAGES} \
     ${EXTRA_APT_PACKAGES} \
     && docker-php-ext-configure intl \
     && docker-php-ext-install intl zip \
