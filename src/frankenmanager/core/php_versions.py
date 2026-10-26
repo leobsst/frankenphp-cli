@@ -2,13 +2,20 @@
 
 from typing import Optional
 
-# Mapping of PHP versions to their FrankenPHP Docker image tags
+# Mapping of PHP versions to their FrankenPHP Docker image tags (without the
+# distro suffix, see IMAGE_DISTROS)
 PHP_IMAGE_TAGS: dict[str, str] = {
-    "8.2": "1-php8.2-trixie",
-    "8.3": "1-php8.3-trixie",
-    "8.4": "1-php8.4-trixie",
-    "8.5": "1-php8.5-trixie",
+    "8.2": "1-php8.2",
+    "8.3": "1-php8.3",
+    "8.4": "1-php8.4",
+    "8.5": "1-php8.5",
 }
+
+# Supported base image distributions, appended to the image tag
+IMAGE_DISTROS = ("alpine", "trixie")
+
+# Fallback distribution when PHP_IMAGE_DISTRO is not configured in .env
+DEFAULT_IMAGE_DISTRO = "alpine"
 
 # Supported PHP versions (ordered)
 SUPPORTED_VERSIONS = sorted(PHP_IMAGE_TAGS.keys())
@@ -40,14 +47,36 @@ def resolve_default_php_version(env_value: Optional[str]) -> str:
     return DEFAULT_PHP_VERSION
 
 
-def get_image_tag(php_version: str) -> str:
+def resolve_image_distro(env_value: Optional[str]) -> str:
+    """Resolve the base image distribution from .env or fallback.
+
+    Args:
+        env_value: Value of PHP_IMAGE_DISTRO from .env (may be None/empty).
+
+    Returns:
+        A supported distribution name ("alpine" or "trixie").
+
+    Raises:
+        ValueError: If a value is set but not supported.
+    """
+    if not env_value:
+        return DEFAULT_IMAGE_DISTRO
+    distro = env_value.strip().lower()
+    if distro not in IMAGE_DISTROS:
+        supported = ", ".join(IMAGE_DISTROS)
+        raise ValueError(f"Unsupported PHP_IMAGE_DISTRO '{env_value}'. Supported: {supported}")
+    return distro
+
+
+def get_image_tag(php_version: str, distro: str = DEFAULT_IMAGE_DISTRO) -> str:
     """Get the FrankenPHP Docker image tag for a PHP version.
 
     Args:
         php_version: PHP version string (e.g., "8.3").
+        distro: Base image distribution ("alpine" or "trixie").
 
     Returns:
-        The Docker image tag.
+        The Docker image tag (e.g., "1-php8.3-alpine").
 
     Raises:
         ValueError: If the version is not supported.
@@ -56,7 +85,7 @@ def get_image_tag(php_version: str) -> str:
     if not tag:
         supported = ", ".join(SUPPORTED_VERSIONS)
         raise ValueError(f"Unsupported PHP version '{php_version}'. Supported: {supported}")
-    return tag
+    return f"{tag}-{distro}"
 
 
 def get_container_name(php_version: str) -> str:

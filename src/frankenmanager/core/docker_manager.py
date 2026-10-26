@@ -7,7 +7,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 from ..exceptions import DockerError
-from .php_versions import get_container_name, get_image_name, get_image_tag, get_internal_ports
+from .php_versions import (
+    DEFAULT_IMAGE_DISTRO,
+    get_container_name,
+    get_image_name,
+    get_image_tag,
+    get_internal_ports,
+)
 
 if TYPE_CHECKING:
     import docker
@@ -132,8 +138,10 @@ class DockerManager:
         custom_path: str,
         php_version: str,
         wwwgroup: str = "",
-        extra_apt_packages: str = "",
+        extra_system_packages: str = "",
         extra_composer_packages: str = "",
+        distro: str = DEFAULT_IMAGE_DISTRO,
+        install_pdftk: bool = False,
     ) -> None:
         """Build the custom FrankenPHP Docker image for a specific PHP version.
 
@@ -141,13 +149,15 @@ class DockerManager:
             custom_path: The custom path build argument.
             php_version: PHP version to build for.
             wwwgroup: The www group build argument.
-            extra_apt_packages: Space-separated extra apt packages to install.
+            extra_system_packages: Space-separated extra apk/apt packages to install.
             extra_composer_packages: Space-separated extra global Composer packages to install.
+            distro: Base image distribution ("alpine" or "trixie").
+            install_pdftk: Whether to install pdftk and its Java runtime.
 
         Raises:
             DockerError: If the build fails.
         """
-        image_tag = get_image_tag(php_version)
+        image_tag = get_image_tag(php_version, distro)
         image_name = get_image_name(php_version)
 
         build_args = {
@@ -156,10 +166,12 @@ class DockerManager:
         }
         if wwwgroup:
             build_args["WWWGROUP"] = wwwgroup
-        if extra_apt_packages:
-            build_args["EXTRA_APT_PACKAGES"] = extra_apt_packages
+        if extra_system_packages:
+            build_args["EXTRA_SYSTEM_PACKAGES"] = extra_system_packages
         if extra_composer_packages:
             build_args["EXTRA_COMPOSER_PACKAGES"] = extra_composer_packages
+        if install_pdftk:
+            build_args["INSTALL_PDFTK"] = "true"
 
         try:
             self.client.images.build(
@@ -172,25 +184,41 @@ class DockerManager:
         except Exception as e:
             raise DockerError(f"Failed to build image for PHP {php_version}: {e}")
 
+    def build_image_from_env(
+        self, custom_path: str, php_version: str, env: "EnvironmentManager"
+    ) -> None:
+        """Build the image for a PHP version with the build options set in .env.
+
+        Args:
+            custom_path: The custom path build argument.
+            php_version: PHP version to build for.
+            env: Environment manager providing distro, extra packages and pdftk options.
+        """
+        self.build_image(
+            custom_path,
+            php_version,
+            env.get("WWWGROUP") or "",
+            env.get_extra_system_packages(php_version),
+            env.get_extra_packages(php_version, "COMPOSER"),
+            env.get_image_distro(),
+            env.is_pdftk_enabled(),
+        )
+
     def build_images(
         self,
         custom_path: str,
         php_versions: set[str],
-        wwwgroup: str = "",
-        env: Optional["EnvironmentManager"] = None,
+        env: "EnvironmentManager",
     ) -> None:
         """Build Docker images for all required PHP versions.
 
         Args:
             custom_path: The custom path build argument.
             php_versions: Set of PHP versions to build.
-            wwwgroup: The www group build argument.
-            env: Environment manager used to resolve per-version extra apt/Composer packages.
+            env: Environment manager providing the build options.
         """
         for version in sorted(php_versions):
-            extra_apt = env.get_extra_packages(version, "APT") if env else ""
-            extra_composer = env.get_extra_packages(version, "COMPOSER") if env else ""
-            self.build_image(custom_path, version, wwwgroup, extra_apt, extra_composer)
+            self.build_image_from_env(custom_path, version, env)
 
     def generate_compose_file(
         self,

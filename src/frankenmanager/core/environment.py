@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Optional
 
 from ..exceptions import ConfigurationError
+from ..utils.logging import log_warning
+from .php_versions import resolve_image_distro
 
 
 class EnvironmentManager:
@@ -149,7 +151,7 @@ class EnvironmentManager:
 
         Args:
             php_version: PHP version string (e.g., "8.4").
-            package_type: "APT" or "COMPOSER".
+            package_type: "APT", "APK" or "COMPOSER".
 
         Returns:
             Space-separated, de-duplicated package list (may be empty).
@@ -165,6 +167,49 @@ class EnvironmentManager:
                 seen.add(pkg)
                 packages.append(pkg)
         return " ".join(packages)
+
+    def get_image_distro(self) -> str:
+        """Get the base image distribution from PHP_IMAGE_DISTRO.
+
+        Returns:
+            "alpine" (default) or "trixie".
+
+        Raises:
+            ConfigurationError: If PHP_IMAGE_DISTRO holds an unsupported value.
+        """
+        try:
+            return resolve_image_distro(self.get("PHP_IMAGE_DISTRO"))
+        except ValueError as e:
+            raise ConfigurationError(str(e)) from e
+
+    def get_extra_system_packages(self, php_version: str) -> str:
+        """Get the extra system packages matching the configured distribution.
+
+        Reads EXTRA_APK_PACKAGES* on Alpine and EXTRA_APT_PACKAGES* on Trixie,
+        since package names differ between the two package managers.
+
+        Args:
+            php_version: PHP version string (e.g., "8.4").
+
+        Returns:
+            Space-separated, de-duplicated package list (may be empty).
+        """
+        if self.get_image_distro() == "alpine":
+            if self.get_extra_packages(php_version, "APT"):
+                log_warning(
+                    "EXTRA_APT_PACKAGES is ignored on Alpine images: use EXTRA_APK_PACKAGES, "
+                    "or set PHP_IMAGE_DISTRO=trixie."
+                )
+            return self.get_extra_packages(php_version, "APK")
+        return self.get_extra_packages(php_version, "APT")
+
+    def is_pdftk_enabled(self) -> bool:
+        """Check if pdftk (and the Java runtime it needs) should be installed.
+
+        Returns:
+            True if INSTALL_PDFTK is 'true'.
+        """
+        return self.get("INSTALL_PDFTK") == "true"
 
     def is_production(self) -> bool:
         """Check if running in production mode.

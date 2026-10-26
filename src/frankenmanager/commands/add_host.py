@@ -148,13 +148,7 @@ def add_host(
             # Build and start a new container for this PHP version
             log_info(f"Building Docker image for PHP {php_version}...")
             custom_path = env.get("DEFAULT_PROJECT_PATH") or ""
-            docker.build_image(
-                custom_path,
-                php_version,
-                env.get("WWWGROUP") or "",
-                env.get_extra_packages(php_version, "APT"),
-                env.get_extra_packages(php_version, "COMPOSER"),
-            )
+            docker.build_image_from_env(custom_path, php_version, env)
 
             # Regenerate compose file with the new version
             db_engines = parse_db_engines(env.get("DB_ENGINES") or "mariadb") or ["mariadb"]

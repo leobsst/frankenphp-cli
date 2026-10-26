@@ -1,4 +1,5 @@
-ARG PHP_IMAGE_TAG=1-php8.3-trixie
+# Base image tag, suffixed with the distribution: -alpine (default) or -trixie
+ARG PHP_IMAGE_TAG=1-php8.3-alpine
 FROM composer:2 AS composer
 
 FROM dunglas/frankenphp:${PHP_IMAGE_TAG}
@@ -6,37 +7,47 @@ FROM dunglas/frankenphp:${PHP_IMAGE_TAG}
 COPY --from=composer /usr/bin/composer /usr/bin/composer
 
 # Space-separated extra packages to install on top of the defaults below,
-# scoped per PHP version via EXTRA_APT_PACKAGES_<version without dot>
-# (e.g. EXTRA_APT_PACKAGES_84) and merged with the version-agnostic
-# EXTRA_APT_PACKAGES / EXTRA_COMPOSER_PACKAGES. See .env.example.
-ARG EXTRA_APT_PACKAGES=""
+# resolved from EXTRA_APK_PACKAGES (Alpine) or EXTRA_APT_PACKAGES (Trixie),
+# scoped per PHP version via the <version without dot> suffix and merged with
+# EXTRA_COMPOSER_PACKAGES(_<version>). See .env.example.
+ARG EXTRA_SYSTEM_PACKAGES=""
 ARG EXTRA_COMPOSER_PACKAGES=""
+# Set to "true" to install pdftk (pulls a Java runtime, ~200 MB)
+ARG INSTALL_PDFTK=""
+# Alpine has no pdftk package: the standalone pdftk-java jar is used instead
+ARG PDFTK_VERSION=3.3.3
 
-# hadolint ignore=DL3008
-RUN apt-get update && apt-get install -qq -y --no-install-recommends \
-    git \
-    zip \
-    unzip \
-    curl \
-    libmcrypt-dev \
-    libgmp-dev \
-    libpng-dev \
-    libjpeg-dev \
-    libwebp-dev \
-    librsvg2-bin \
-    libfreetype-dev \
-    libbz2-dev \
-    libzip-dev \
-    libicu-dev \
-    libmagickwand-dev \
-    libmagickcore-dev \
-    ${EXTRA_APT_PACKAGES} \
-    && docker-php-ext-configure intl \
-    && docker-php-ext-install intl zip \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN install-php-extensions \
+# Build dependencies of the PHP extensions are installed and removed by
+# install-php-extensions itself, so only runtime tools are listed here.
+# hadolint ignore=DL3008,DL3018,SC2046
+RUN if command -v apk >/dev/null; then \
+        apk add --no-cache \
+            git \
+            zip \
+            unzip \
+            curl \
+            rsvg-convert \
+            ca-certificates \
+            $([ "$INSTALL_PDFTK" = "true" ] && echo openjdk21-jre-headless) \
+            ${EXTRA_SYSTEM_PACKAGES} \
+        && if [ "$INSTALL_PDFTK" = "true" ]; then \
+            curl -fsSL -o /usr/local/share/pdftk-all.jar \
+                "https://gitlab.com/api/v4/projects/5024297/packages/generic/pdftk-java/v${PDFTK_VERSION}/pdftk-all.jar" \
+            && printf '#!/bin/sh\nexec java -jar /usr/local/share/pdftk-all.jar "$@"\n' > /usr/local/bin/pdftk \
+            && chmod +x /usr/local/bin/pdftk; \
+        fi; \
+    else \
+        apt-get update && apt-get install -qq -y --no-install-recommends \
+            git \
+            zip \
+            unzip \
+            curl \
+            librsvg2-bin \
+            $([ "$INSTALL_PDFTK" = "true" ] && echo pdftk-java) \
+            ${EXTRA_SYSTEM_PACKAGES} \
+        && rm -rf /var/lib/apt/lists/*; \
+    fi \
+    && install-php-extensions \
     pdo_mysql \
     zip \
     gd \
@@ -50,12 +61,7 @@ RUN install-php-extensions \
     exif \
     gmp \
     sysvsem \
-    mbstring \
-    curl \
-    xml \
-    redis
-
-RUN docker-php-ext-enable imagick \
+    redis \
     && mkdir /etc/letsencrypt \
     && mkdir -p /var/log/php && chmod 755 /var/log/php
 
