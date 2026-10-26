@@ -734,22 +734,32 @@ The `.env` file is automatically created in the data directory on first run. Edi
 | `WEB_HTTP_PORT` | `80` | Web server HTTP port |
 | `WEB_HTTPS_PORT` | `443` | Web server HTTPS port |
 | `MYSQL_MAX_ALLOWED_PACKET` | `512M` | MariaDB max packet size |
-| `EXTRA_APT_PACKAGES` | (empty) | Extra Linux (apt) packages to install in the PHP image, space-separated, for every PHP version |
+| `PHP_IMAGE_DISTRO` | `alpine` | Base distribution of the PHP images: `alpine` (smaller) or `trixie` (Debian, glibc) |
+| `INSTALL_PDFTK` | `false` | Install `pdftk` in the PHP image (adds a Java runtime, ~200 MB) |
+| `EXTRA_APK_PACKAGES` | (empty) | Extra Linux (apk) packages to install in the PHP image when `PHP_IMAGE_DISTRO=alpine`, space-separated, for every PHP version |
+| `EXTRA_APK_PACKAGES_<version>` | (empty) | Extra apk packages for one PHP version only (e.g. `EXTRA_APK_PACKAGES_84`), merged with `EXTRA_APK_PACKAGES` |
+| `EXTRA_APT_PACKAGES` | (empty) | Extra Linux (apt) packages to install in the PHP image when `PHP_IMAGE_DISTRO=trixie`, space-separated, for every PHP version |
 | `EXTRA_APT_PACKAGES_<version>` | (empty) | Extra apt packages for one PHP version only (e.g. `EXTRA_APT_PACKAGES_84`), merged with `EXTRA_APT_PACKAGES` |
 | `EXTRA_COMPOSER_PACKAGES` | (empty) | Extra global Composer packages to install in the PHP image, space-separated, for every PHP version |
 | `EXTRA_COMPOSER_PACKAGES_<version>` | (empty) | Extra global Composer packages for one PHP version only (e.g. `EXTRA_COMPOSER_PACKAGES_84`), merged with `EXTRA_COMPOSER_PACKAGES` |
 
-### Extra Packages (apt / Composer)
+### Base Image (Alpine / Trixie)
 
-The custom FrankenPHP image can install additional Linux (apt) and global Composer packages on top of the built-in ones, configured via `.env`. `<version>` is the PHP version without the dot (`82`, `83`, `84`, `85`).
+The PHP images are built on Alpine by default, which keeps them around half the size of the Debian ones. Set `PHP_IMAGE_DISTRO=trixie` to build on Debian Trixie instead, e.g. if a project relies on glibc-specific behavior (`iconv` transliteration, locales...).
+
+`pdftk` is not installed by default since it needs a Java runtime (~200 MB). Set `INSTALL_PDFTK=true` to add it, on either distribution.
+
+### Extra Packages (apk / apt / Composer)
+
+The custom FrankenPHP image can install additional Linux and global Composer packages on top of the built-in ones, configured via `.env`. Linux packages are read from `EXTRA_APK_PACKAGES` on Alpine and from `EXTRA_APT_PACKAGES` on Trixie, as package names differ. `<version>` is the PHP version without the dot (`82`, `83`, `84`, `85`).
 
 ```bash
 # Applies to every PHP version
-EXTRA_APT_PACKAGES=htop vim
+EXTRA_APK_PACKAGES=htop vim
 EXTRA_COMPOSER_PACKAGES=deployer/deployer
 
 # Applies to PHP 8.4 only, merged with the vars above
-EXTRA_APT_PACKAGES_84=redis-tools
+EXTRA_APK_PACKAGES_84=redis
 EXTRA_COMPOSER_PACKAGES_84=laravel/installer
 ```
 

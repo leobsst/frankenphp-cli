@@ -82,9 +82,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Custom Docker Image
 - Composer bundled in the custom FrankenPHP image
-- Optional extra Linux (apt) packages via `EXTRA_APT_PACKAGES` in `.env`, installed on top of the built-in ones
+- Alpine-based image by default, roughly half the size of the Debian one; `PHP_IMAGE_DISTRO=trixie` switches back to Debian Trixie
+- Optional `pdftk` (with its Java runtime) via `INSTALL_PDFTK=true`, on both distributions
+- Optional extra Linux packages via `EXTRA_APK_PACKAGES` (Alpine) or `EXTRA_APT_PACKAGES` (Trixie) in `.env`, installed on top of the built-in ones
 - Optional extra global Composer packages via `EXTRA_COMPOSER_PACKAGES` in `.env`, installed with `composer global require`
-- Both scoped per PHP version with `EXTRA_APT_PACKAGES_<version>` / `EXTRA_COMPOSER_PACKAGES_<version>` (e.g. `EXTRA_APT_PACKAGES_84`), merged with the version-agnostic ones
+- All scoped per PHP version with `EXTRA_APK_PACKAGES_<version>` / `EXTRA_APT_PACKAGES_<version>` / `EXTRA_COMPOSER_PACKAGES_<version>` (e.g. `EXTRA_APT_PACKAGES_84`), merged with the version-agnostic ones
 - Applied on the next image build (`frankenmanager start`, or when a new PHP version container is created)
 
 #### Configuration Management
