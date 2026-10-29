@@ -30,6 +30,7 @@
 - Redis cache server
 - phpMyAdmin for database management
 - Automatic `/etc/hosts` management (passwordless after setup)
+- Optional LAN DNS server so other devices reach your domains without editing their hosts file
 - Production and development configurations
 - Brotli + Gzip compression
 - Static asset caching
@@ -120,6 +121,7 @@ frankenmanager setup --status
 | `frankenmanager reset --db \| --caddyfiles` | Reset configuration and/or Caddyfiles (requires stopped server) |
 | `frankenmanager setup` | Configure passwordless operation |
 | `frankenmanager update` | Update FrankenManager to latest version |
+| `frankenmanager restart --dns` | Restart the LAN DNS server (when `DNS_SERVER=true`) |
 | `frankenmanager trust-ca on \| off \| status [--port <port>]` | Share the local mkcert root CA over the LAN so other devices can trust your `.test` domains (off by default) |
 | `frankenmanager --help` | Show help for all commands |
 
@@ -322,6 +324,9 @@ frankenmanager restart --phpmyadmin
 # or use the short alias
 frankenmanager restart --pma
 
+# Restart only the LAN DNS server (when DNS_SERVER=true)
+frankenmanager restart --dns
+
 # Restart multiple specific containers
 frankenmanager restart --cache --pma
 
@@ -337,6 +342,7 @@ frankenmanager restart --caddy --force-ssl
 | `--database` | `--db` | franken_mariadb | MariaDB database server |
 | `--cache` | - | franken_redis | Redis cache server |
 | `--phpmyadmin` | `--pma` | franken_phpmyadmin | phpMyAdmin database UI |
+| `--dns` | - | franken_dns | LAN DNS server (when `DNS_SERVER=true`) |
 
 **Notes:**
 - When restarting `--caddy`, SSL certificates are regenerated (use `--force-ssl` to force full regeneration)
@@ -540,6 +546,35 @@ frankenmanager trust-ca off
 
 `trust-ca on` prints a URL such as `http://192.168.1.42:9080/` - open it in a browser on the other device to download `rootCA.pem`, then install it as a trusted root certificate (Keychain Access on macOS, Certificate Manager on Windows, Settings > Security on Android/iOS). Turn sharing back off once the other device has installed it.
 
+### LAN DNS server
+
+The `/etc/hosts` entries only exist on your machine: other devices on the network can't resolve your `.test` domains. Instead of editing the hosts file of each device, you can turn on an optional DNS server container ([CoreDNS](https://coredns.io)) in `.env`:
+
+```bash
+DNS_SERVER=true
+```
+
+On the next `frankenmanager start`, it resolves every registered domain (including alternate and proxy hosts) to your machine's LAN IP, and forwards every other query to `DNS_UPSTREAM`. `start` and `status` print the address it listens on, e.g. `192.168.1.42:53`.
+
+Then point the other devices at it, either:
+- per device: set `192.168.1.42` as the DNS server in its Wi-Fi/network settings;
+- for the whole network: set it as the DNS server handed out by your router (DHCP settings).
+
+Domains added or removed with `add-host`, `add-alias`, `remove-host` or `restore-host` are picked up within a few seconds, without restarting anything.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DNS_SERVER` | `false` | Run the LAN DNS server |
+| `DNS_IP` | (auto-detected) | IP the domains resolve to and the server listens on. Set it if the detected LAN IP is wrong (several network interfaces, VPN...) |
+| `DNS_PORT` | `53` | Port the server listens on. Keep `53`: most devices can't use another port |
+| `DNS_UPSTREAM` | `1.1.1.1 9.9.9.9` | Space-separated resolvers for every other query. Use your router's or company's DNS if public resolvers are blocked |
+
+**Notes:**
+- The LAN IP is detected on `start`: if it changes (new network, DHCP lease), run `frankenmanager stop` then `start` again.
+- `DNS_UPSTREAM` defaults to public resolvers rather than your machine's own: if the router hands this server out, your machine may itself resolve through it, and forwarding to its own resolver would loop.
+- Anyone on your network can query this server while it runs. It only answers for your registered domains and forwards the rest, so it exposes no more than your web server already does.
+- Combine it with [`trust-ca`](#share-the-root-ca-over-your-lan) so the other devices also trust the HTTPS certificates.
+
 ### Show version
 
 ```bash
@@ -653,6 +688,7 @@ You can override this location with the `FRANKENMANAGER_DATA_DIR` environment va
 │   ├── data/               # Caddy data
 │   ├── config/             # Caddy config
 │   └── log/                # Access and error logs
+├── dns/                    # LAN DNS server config and records (when DNS_SERVER=true)
 ├── php/
 │   ├── php.ini             # PHP configuration
 │   └── php-prod.ini        # Production overrides
@@ -733,6 +769,10 @@ The `.env` file is automatically created in the data directory on first run. Edi
 | `REDIS_PORT` | `6379` | Redis port |
 | `WEB_HTTP_PORT` | `80` | Web server HTTP port |
 | `WEB_HTTPS_PORT` | `443` | Web server HTTPS port |
+| `DNS_SERVER` | `false` | Run the LAN DNS server (see [LAN DNS server](#lan-dns-server)) |
+| `DNS_IP` | (auto-detected) | IP the LAN DNS server resolves domains to and listens on |
+| `DNS_PORT` | `53` | LAN DNS server port |
+| `DNS_UPSTREAM` | `1.1.1.1 9.9.9.9` | Resolvers the LAN DNS server forwards other queries to |
 | `MYSQL_MAX_ALLOWED_PACKET` | `512M` | MariaDB max packet size |
 | `PHP_IMAGE_DISTRO` | `alpine` | Base distribution of the PHP images: `alpine` (smaller) or `trixie` (Debian, glibc) |
 | `INSTALL_PDFTK` | `false` | Install `pdftk` in the PHP image (adds a Java runtime, ~200 MB) |
@@ -815,6 +855,7 @@ frankenmanager/
 │   │   ├── php_versions.py     PHP version map and port assignments
 │   │   ├── ssl_manager.py      mkcert wrapper
 │   │   ├── hosts_manager.py    /etc/hosts management
+│   │   ├── dns_server.py       Optional LAN DNS server (CoreDNS) config
 │   │   ├── caddyfile.py        Caddyfile generation and migration
 │   │   ├── password_manager.py MariaDB password sync
 │   │   ├── privilege_manager.py Passwordless sudo setup
@@ -841,6 +882,7 @@ frankenmanager/
 | MariaDB | `franken_mariadb` | 3306 | Database |
 | Redis | `franken_redis` | 6379 | Cache |
 | phpMyAdmin | `franken_phpmyadmin` | 8080 | Database UI |
+| CoreDNS (optional) | `franken_dns` | 53 (LAN IP only) | LAN DNS server, when `DNS_SERVER=true` |
 
 Only containers for PHP versions that have at least one domain are started.
 
@@ -920,6 +962,10 @@ frankenmanager start "domain.test" /path --force-ssl
 ### Certificate errors from another device on the network
 
 This is expected: mkcert's root CA is only trusted on the machine that installed it. Use `frankenmanager trust-ca on` to serve the root CA over your LAN so the other device can download and trust it - see [Share the root CA over your LAN](#share-the-root-ca-over-your-lan).
+
+### Another device can't resolve the domains
+
+The domains are only in your machine's `/etc/hosts`. Turn on the [LAN DNS server](#lan-dns-server) and set it as that device's DNS server. If it still fails, check that `frankenmanager status` shows `franken_dns` running and that your firewall allows incoming traffic on port 53 (UDP and TCP).
 
 ### mkcert not found
 
