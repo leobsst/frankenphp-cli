@@ -3,6 +3,7 @@
 from rich.console import Console
 from rich.table import Table
 
+from ..core import dns_server
 from ..core.database import DatabaseManager
 from ..core.docker_manager import CONTAINER_NOT_FOUND, DockerManager, parse_db_engines
 from ..core.environment import EnvironmentManager
@@ -36,6 +37,10 @@ def show_status() -> None:
     status_color = "green" if is_running else "red"
     console.print(f"Status: [{status_color}]{status}[/]")
 
+    dns_listen = dns_server.get_listen_address(env)
+    if dns_listen:
+        console.print(f"LAN DNS server: {dns_listen}")
+
     # Show domains with PHP versions
     if domains_with_versions:
         console.print("\n[bold]Domains:[/bold]")
@@ -62,7 +67,7 @@ def show_status() -> None:
 
     # Infrastructure containers
     for container in docker.get_all_containers(
-        db_engines=db_engines, production=env.is_production()
+        db_engines=db_engines, production=env.is_production(), dns=dns_listen is not None
     ):
         # Skip PHP containers (already shown above)
         if container.startswith("frankenphp-"):

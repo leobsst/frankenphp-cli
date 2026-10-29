@@ -6,6 +6,7 @@ from typing import Optional
 from rich.console import Console
 from rich.table import Table
 
+from ..core import dns_server
 from ..core.caddyfile import CaddyfileGenerator
 from ..core.database import DatabaseManager
 from ..core.docker_manager import DockerManager, parse_db_engines
@@ -160,6 +161,9 @@ def restore_host(domains: list[str], force_ssl: bool, php_version: Optional[str]
         # Update database with restored domains
         db.add_domains(restored_domains, php_version)
 
+        # Keep the LAN DNS server records in step (no-op unless DNS_SERVER=true)
+        dns_server.sync(project_dir, env, db)
+
         if need_new_container:
             # Build and start a new container for this PHP version
             log_info(f"Building Docker image for PHP {php_version}...")
@@ -169,7 +173,13 @@ def restore_host(domains: list[str], force_ssl: bool, php_version: Optional[str]
             # Regenerate compose file with the new version
             db_engines = parse_db_engines(env.get("DB_ENGINES") or "mariadb") or ["mariadb"]
             all_versions = active_versions | {php_version}
-            docker.generate_compose_file(all_versions, {}, env.is_production(), db_engines)
+            docker.generate_compose_file(
+                all_versions,
+                {},
+                env.is_production(),
+                db_engines,
+                dns_server.get_listen_address(env),
+            )
 
             log_info(f"Starting PHP {php_version} container...")
             expose = env.get("EXPOSE_SERVICES") == "true"

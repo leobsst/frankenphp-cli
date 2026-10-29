@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Optional
 
+from ..core import dns_server
 from ..core.caddyfile import CaddyfileGenerator
 from ..core.database import DatabaseManager
 from ..core.docker_manager import DockerManager, parse_db_engines
@@ -144,6 +145,9 @@ def add_host(
             db.get_proxies(),
         )
 
+        # Keep the LAN DNS server records in step (no-op unless DNS_SERVER=true)
+        dns_server.sync(project_dir, env, db)
+
         if need_new_container:
             # Build and start a new container for this PHP version
             log_info(f"Building Docker image for PHP {php_version}...")
@@ -153,7 +157,13 @@ def add_host(
             # Regenerate compose file with the new version
             db_engines = parse_db_engines(env.get("DB_ENGINES") or "mariadb") or ["mariadb"]
             all_versions = active_versions | {php_version}
-            docker.generate_compose_file(all_versions, {}, env.is_production(), db_engines)
+            docker.generate_compose_file(
+                all_versions,
+                {},
+                env.is_production(),
+                db_engines,
+                dns_server.get_listen_address(env),
+            )
 
             # Restart all via compose to start the new container
             log_info(f"Starting PHP {php_version} container...")
@@ -274,6 +284,9 @@ def _add_proxy_hosts(
             db.get_alias_entries(),
             db.get_proxies(),
         )
+
+        # Keep the LAN DNS server records in step (no-op unless DNS_SERVER=true)
+        dns_server.sync(docker.project_dir, env, db)
 
         # Restart the reverse proxy to pick up the new routes
         from ..core.docker_manager import REVERSE_PROXY_CONTAINER  # noqa: PLC0415

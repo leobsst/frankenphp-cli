@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Optional
 
+from ..core import dns_server
 from ..core.caddyfile import CaddyfileGenerator
 from ..core.database import DatabaseManager
 from ..core.docker_manager import DockerManager
@@ -122,6 +123,9 @@ def add_alias(target_domain: str, alias_domains: list[str], force_ssl: bool) -> 
             db.get_alias_entries(),
             db.get_proxies(),
         )
+
+        # Keep the LAN DNS server records in step (no-op unless DNS_SERVER=true)
+        dns_server.sync(project_dir, env, db)
 
         # Restart the reverse proxy to pick up the new routes
         from ..core.docker_manager import REVERSE_PROXY_CONTAINER  # noqa: PLC0415

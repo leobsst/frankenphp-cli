@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Optional
 
+from ..core import dns_server
 from ..core.caddyfile import CaddyfileGenerator
 from ..core.database import DatabaseManager
 from ..core.docker_manager import REVERSE_PROXY_CONTAINER, DockerManager, parse_db_engines
@@ -86,7 +87,13 @@ def switch_php(domain: str, php_version: str) -> None:
             docker.build_image_from_env(custom_path, php_version, env)
 
             # Regenerate compose file
-            docker.generate_compose_file(versions_after, {}, env.is_production(), db_engines)
+            docker.generate_compose_file(
+                versions_after,
+                {},
+                env.is_production(),
+                db_engines,
+                dns_server.get_listen_address(env),
+            )
 
             # Start the new container via compose up
             log_info(f"Starting PHP {php_version} container...")
@@ -134,7 +141,13 @@ def switch_php(domain: str, php_version: str) -> None:
 
         # Update compose file if versions changed
         if orphaned_versions:
-            docker.generate_compose_file(versions_after, {}, env.is_production(), db_engines)
+            docker.generate_compose_file(
+                versions_after,
+                {},
+                env.is_production(),
+                db_engines,
+                dns_server.get_listen_address(env),
+            )
 
         # Regenerate main reverse proxy Caddyfile and restart proxy
         all_domains_versions = db.get_domains_with_versions()

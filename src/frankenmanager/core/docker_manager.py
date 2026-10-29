@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 from ..exceptions import DockerError
+from . import dns_server
 from .php_versions import (
     DEFAULT_IMAGE_DISTRO,
     get_container_name,
@@ -101,6 +102,7 @@ class DockerManager:
         php_versions: Optional[set[str]] = None,
         db_engines: Optional[list[str]] = None,
         production: bool = False,
+        dns: bool = False,
     ) -> list[str]:
         """Get the list of all container names including PHP version containers.
 
@@ -108,6 +110,7 @@ class DockerManager:
             php_versions: Set of active PHP versions. If None, returns only infra containers.
             db_engines: List of active database engines. If None, defaults to ["mariadb"].
             production: Whether in production mode (no admin UIs).
+            dns: Whether the LAN DNS server is enabled.
 
         Returns:
             List of container names.
@@ -127,6 +130,9 @@ class DockerManager:
                 admin = DB_ADMIN_CONTAINERS.get(engine)
                 if admin:
                     containers.append(admin)
+
+        if dns:
+            containers.append(dns_server.CONTAINER_NAME)
 
         if php_versions:
             for version in sorted(php_versions):
@@ -226,6 +232,7 @@ class DockerManager:
         env_vars: dict[str, str],
         production: bool = False,
         db_engines: Optional[list[str]] = None,
+        dns_listen: Optional[str] = None,
     ) -> Path:
         """Generate a docker-compose file with services for each PHP version.
 
@@ -234,6 +241,7 @@ class DockerManager:
             env_vars: Environment variables for compose.
             production: Whether to generate production compose file.
             db_engines: List of database engines to include. Defaults to ["mariadb"].
+            dns_listen: "ip:port" to publish the LAN DNS server on, None to leave it out.
 
         Returns:
             Path to the generated compose file.
@@ -241,7 +249,7 @@ class DockerManager:
         if db_engines is None:
             db_engines = ["mariadb"]
         compose_path = self.project_dir / "docker-compose-generated.yml"
-        content = self._build_compose_content(php_versions, production, db_engines)
+        content = self._build_compose_content(php_versions, production, db_engines, dns_listen)
         compose_path.write_text(content)
         return compose_path
 
@@ -500,7 +508,11 @@ class DockerManager:
         return lines
 
     def _build_compose_content(
-        self, php_versions: set[str], production: bool, db_engines: Optional[list[str]] = None
+        self,
+        php_versions: set[str],
+        production: bool,
+        db_engines: Optional[list[str]] = None,
+        dns_listen: Optional[str] = None,
     ) -> str:
         """Build the docker-compose YAML content.
 
@@ -508,6 +520,7 @@ class DockerManager:
             php_versions: Set of PHP versions.
             production: Whether this is for production.
             db_engines: List of database engines. Defaults to ["mariadb"].
+            dns_listen: "ip:port" to publish the LAN DNS server on, None to leave it out.
 
         Returns:
             YAML content as string.
@@ -557,6 +570,25 @@ class DockerManager:
                     "      timeout: 5s",
                     "      retries: 5",
                     "      start_period: 10s",
+                    "",
+                ]
+            )
+
+        # LAN DNS server (opt-in): published on the LAN IP only, on its own
+        # default network, since it only needs to reach the upstream resolvers
+        if dns_listen:
+            lines.extend(
+                [
+                    "  dns:",
+                    f"    container_name: {dns_server.CONTAINER_NAME}",
+                    f"    image: {dns_server.IMAGE}",
+                    "    restart: always",
+                    "    command: -conf /etc/coredns/Corefile",
+                    "    volumes:",
+                    "      - ./dns:/etc/coredns:ro",
+                    "    ports:",
+                    f'      - "{dns_listen}:53/udp"',
+                    f'      - "{dns_listen}:53/tcp"',
                     "",
                 ]
             )
@@ -762,6 +794,7 @@ class DockerManager:
         php_versions: Optional[set[str]] = None,
         db_engines: Optional[list[str]] = None,
         production: bool = False,
+        dns: bool = False,
     ) -> None:
         """Restart all containers.
 
@@ -769,8 +802,9 @@ class DockerManager:
             php_versions: Set of active PHP versions.
             db_engines: List of active database engines.
             production: Whether in production mode.
+            dns: Whether the LAN DNS server is enabled.
         """
-        for name in self.get_all_containers(php_versions, db_engines, production):
+        for name in self.get_all_containers(php_versions, db_engines, production, dns):
             self.restart_container(name)
 
     def get_containers_status(self) -> dict[str, dict[str, str]]:

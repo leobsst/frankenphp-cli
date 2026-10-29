@@ -10,6 +10,7 @@ caddy/sites/php-*/*
 docker-compose-generated.yml
 php/8.*/
 database/*
+dns/
 .config
 .config.backup
 db.sqlite

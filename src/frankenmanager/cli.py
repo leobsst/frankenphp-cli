@@ -136,6 +136,7 @@ def restart(
     phpmyadmin: bool = typer.Option(
         False, "--phpmyadmin", "--pma", help="Restart only the phpMyAdmin container"
     ),
+    dns: bool = typer.Option(False, "--dns", help="Restart only the LAN DNS server container"),
 ) -> None:
     """Restart the FrankenPHP development server or specific containers.
 
@@ -144,6 +145,7 @@ def restart(
         frankenmanager restart --caddy            # Restart only web server/Caddy
         frankenmanager restart --database         # Restart only database
         frankenmanager restart --cache --pma      # Restart Redis and phpMyAdmin
+        frankenmanager restart --dns              # Restart the LAN DNS server
     """
     from .commands.restart import restart_server
 
@@ -157,6 +159,8 @@ def restart(
         containers.append("cache")
     if phpmyadmin:
         containers.append("phpmyadmin")
+    if dns:
+        containers.append("dns")
 
     restart_server(force_ssl, containers if containers else None)
 

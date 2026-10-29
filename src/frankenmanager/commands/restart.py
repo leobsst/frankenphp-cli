@@ -2,6 +2,7 @@
 
 from typing import Optional
 
+from ..core import dns_server
 from ..core.database import DatabaseManager
 from ..core.docker_manager import DB_CONTAINERS, DockerManager, parse_db_engines
 from ..core.environment import EnvironmentManager
@@ -16,6 +17,7 @@ from ..utils.logging import log_info, log_success
 CONTAINER_MAP = {
     "cache": "franken_redis",
     "phpmyadmin": "franken_phpmyadmin",
+    "dns": dns_server.CONTAINER_NAME,
 }
 
 
@@ -25,7 +27,7 @@ def restart_server(force_ssl: bool, containers: Optional[list[str]] = None) -> N
     Args:
         force_ssl: Whether to force SSL certificate regeneration.
         containers: List of container names to restart (None = restart all).
-                   Valid values: "caddy", "database", "cache", "phpmyadmin"
+                   Valid values: "caddy", "database", "cache", "phpmyadmin", "dns"
     """
     project_dir = get_project_dir()
 
@@ -70,7 +72,9 @@ def restart_server(force_ssl: bool, containers: Optional[list[str]] = None) -> N
 
     # Restart containers
     if restart_all:
-        docker.restart_all(active_versions, db_engines, env.is_production())
+        docker.restart_all(
+            active_versions, db_engines, env.is_production(), dns_server.is_enabled(env)
+        )
     else:
         if containers:
             for container_name in containers:

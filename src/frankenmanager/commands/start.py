@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from ..core import dns_server
 from ..core.caddyfile import CaddyfileGenerator
 from ..core.database import DatabaseManager
 from ..core.docker_manager import DockerManager, parse_db_engines
@@ -14,7 +15,7 @@ from ..core.php_versions import resolve_default_php_version, validate_php_versio
 from ..core.resources import ensure_php_version_config, get_project_dir
 from ..core.ssl_manager import SSLManager
 from ..exceptions import ServerStateError
-from ..utils.logging import log_error, log_info, log_success
+from ..utils.logging import log_error, log_info, log_success, log_warning
 from ..utils.validation import validate_directory, validate_domain
 
 
@@ -222,6 +223,10 @@ def start_server(
         # Save domains to database with versions
         db.set_domains_with_versions(domains_with_versions)
 
+        # LAN DNS server records (no-op unless DNS_SERVER=true)
+        dns_server.sync(project_dir, env, db)
+        dns_listen = dns_server.get_listen_address(env)
+
         # Build and start containers
         log_info("Building Docker images...")
 
@@ -234,7 +239,9 @@ def start_server(
         docker.compose_down(env.is_production())
 
         # Generate docker-compose file
-        docker.generate_compose_file(active_versions, {}, env.is_production(), db_engines)
+        docker.generate_compose_file(
+            active_versions, {}, env.is_production(), db_engines, dns_listen
+        )
 
         # Prepare environment variables for docker-compose
         expose = env.get("EXPOSE_SERVICES") == "true"
@@ -280,6 +287,15 @@ def start_server(
         for version in sorted(active_versions):
             version_domains = [d for d, v in domains_with_versions if v == version]
             log_info(f"  PHP {version}: {', '.join(version_domains)}")
+
+        if dns_listen:
+            log_info(f"LAN DNS server listening on {dns_listen}")
+            log_info("  Set it as the DNS server of your other devices (or of your router).")
+            if dns_listen.startswith("127."):
+                log_warning(
+                    "No LAN IP detected: the DNS server is only reachable from this machine. "
+                    "Set DNS_IP in .env to this machine's LAN IP."
+                )
 
     except Exception as e:
         # Cleanup on failure

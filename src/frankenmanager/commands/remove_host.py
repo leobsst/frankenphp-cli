@@ -3,9 +3,10 @@
 from pathlib import Path
 from typing import Optional
 
+from ..core import dns_server
 from ..core.caddyfile import CaddyfileGenerator
 from ..core.database import DatabaseManager
-from ..core.docker_manager import DockerManager
+from ..core.docker_manager import DockerManager, parse_db_engines
 from ..core.environment import EnvironmentManager
 from ..core.hosts_manager import HostsManager
 from ..core.php_versions import get_container_name
@@ -172,7 +173,14 @@ def remove_host(domains: list[str]) -> None:
 
         # Regenerate compose file without orphaned versions
         if orphaned_versions:
-            docker.generate_compose_file(versions_after, {}, env.is_production())
+            db_engines = parse_db_engines(env.get("DB_ENGINES") or "mariadb") or ["mariadb"]
+            docker.generate_compose_file(
+                versions_after,
+                {},
+                env.is_production(),
+                db_engines,
+                dns_server.get_listen_address(env),
+            )
 
         # Regenerate main reverse proxy Caddyfile
         remaining_domains_versions = db.get_domains_with_versions()
@@ -183,6 +191,9 @@ def remove_host(domains: list[str]) -> None:
             db.get_alias_entries(),
             db.get_proxies(),
         )
+
+        # Keep the LAN DNS server records in step (no-op unless DNS_SERVER=true)
+        dns_server.sync(project_dir, env, db)
 
         # Restart the reverse proxy
         from ..core.docker_manager import REVERSE_PROXY_CONTAINER  # noqa: PLC0415
