@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Optional
 
 from .. import __version__
+from ..exceptions import ConfigurationError
 from ..utils.logging import log_info, log_warning
 from .php_versions import SUPPORTED_VERSIONS
 
@@ -118,6 +119,7 @@ def ensure_resources_extracted() -> Path:
     if resources_dir is None:
         log_warning("No bundled resources found. Using app data directory as-is.")
         marker_file.write_text("1")
+        chown_to_sudo_user(marker_file)
         return app_dir
 
     log_info(f"Initializing FrankenManager data directory: {app_dir}")
@@ -170,39 +172,72 @@ def ensure_resources_extracted() -> Path:
     # Create marker file
     marker_file.write_text("1")
     (app_dir / RESOURCES_VERSION_MARKER).write_text(__version__)
+    chown_to_sudo_user(marker_file)
+    chown_to_sudo_user(app_dir / RESOURCES_VERSION_MARKER)
 
     log_info("FrankenManager initialized successfully.")
     return app_dir
 
 
-def _fix_permissions(path: Path) -> None:
-    """Ensure files under path are owned by the real (non-sudo) user.
+def chown_to_sudo_user(path: Path) -> None:
+    """Give path back to the real user when running under sudo.
 
-    When frankenmanager is invoked via sudo, os.getuid() returns 0. sudo sets
-    SUDO_UID / SUDO_GID so we can still chown files back to the actual user.
-    On non-sudo root processes or Windows this is a no-op.
+    When frankenmanager is invoked via sudo, os.getuid() returns 0 but HOME
+    still points to the invoking user's home (macOS default), so anything
+    created under ~/.frankenmanager would be owned by root and unwritable by
+    later non-sudo runs. sudo sets SUDO_UID / SUDO_GID so we can chown back.
+    Non-recursive. No-op outside sudo and on Windows.
     """
-    if not hasattr(os, "getuid"):
+    if not hasattr(os, "chown"):
         return  # Windows
+
+    sudo_uid = os.environ.get("SUDO_UID")
+    if not sudo_uid:
+        return  # Not running under sudo, nothing to fix
+    sudo_gid = os.environ.get("SUDO_GID")
+
+    try:
+        os.chown(path, int(sudo_uid), int(sudo_gid) if sudo_gid else -1)
+    except (OSError, ValueError):
+        pass
+
+
+def make_user_dir(path: Path) -> None:
+    """mkdir -p, then hand every directory it created back to the sudo user.
+
+    Directories that already existed are left untouched (e.g. MariaDB data
+    owned by the container user).
+    """
+    created = []
+    current = path
+    while not current.exists() and current.parent != current:
+        created.append(current)
+        current = current.parent
+
+    path.mkdir(parents=True, exist_ok=True)
+
+    for directory in reversed(created):
+        chown_to_sudo_user(directory)
+
+
+def _fix_permissions(path: Path) -> None:
+    """Ensure path and everything under it are owned by the real (non-sudo) user.
+
+    See chown_to_sudo_user(). No-op outside sudo and on Windows.
+    """
+    if not hasattr(os, "chown") or not os.environ.get("SUDO_UID"):
+        return
 
     import stat
 
-    sudo_uid = os.environ.get("SUDO_UID")
-    sudo_gid = os.environ.get("SUDO_GID")
-    if not sudo_uid:
-        return  # Not running under sudo, nothing to fix
-
-    target_uid = int(sudo_uid)
-    target_gid = int(sudo_gid) if sudo_gid else -1
-
-    targets = [path] if path.is_file() else list(path.rglob("*"))
+    targets = [path] if path.is_file() else [path, *path.rglob("*")]
     for item in targets:
-        try:
-            os.chown(item, target_uid, target_gid)
-            if item.is_file():
+        chown_to_sudo_user(item)
+        if item.is_file():
+            try:
                 item.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH)
-        except (PermissionError, OSError):
-            pass
+            except OSError:
+                pass
 
 
 def _ensure_directory_structure(app_dir: Path) -> None:
@@ -210,30 +245,44 @@ def _ensure_directory_structure(app_dir: Path) -> None:
 
     Args:
         app_dir: The application data directory.
+
+    Raises:
+        ConfigurationError: If the app data directory is not writable, typically
+            because a previous `sudo frankenmanager ...` run created it as root.
     """
-    # Create app directory if it doesn't exist
-    app_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        _create_directory_structure(app_dir)
+    except PermissionError as e:
+        raise ConfigurationError(
+            f"Permission denied on {e.filename or app_dir}: the FrankenManager data "
+            "directory is probably owned by root (created by a previous sudo run). "
+            f'Fix it with: sudo chown -R "$(whoami)" "{app_dir}"'
+        ) from e
+
+
+def _create_directory_structure(app_dir: Path) -> None:
+    make_user_dir(app_dir)
 
     # Caddy directories
-    (app_dir / "caddy" / "sites" / "custom").mkdir(parents=True, exist_ok=True)
-    (app_dir / "caddy" / "sites" / "default").mkdir(parents=True, exist_ok=True)
-    (app_dir / "caddy" / "sites" / "archive").mkdir(parents=True, exist_ok=True)
+    make_user_dir(app_dir / "caddy" / "sites" / "custom")
+    make_user_dir(app_dir / "caddy" / "sites" / "default")
+    make_user_dir(app_dir / "caddy" / "sites" / "archive")
 
     # Per-version site directories
     for version in SUPPORTED_VERSIONS:
-        (app_dir / "caddy" / "sites" / f"php-{version}").mkdir(parents=True, exist_ok=True)
-    (app_dir / "caddy" / "certs").mkdir(parents=True, exist_ok=True)
-    (app_dir / "caddy" / "log" / "caddy").mkdir(parents=True, exist_ok=True)
-    (app_dir / "caddy" / "log" / "php").mkdir(parents=True, exist_ok=True)
-    (app_dir / "caddy" / "data").mkdir(parents=True, exist_ok=True)
-    (app_dir / "caddy" / "config").mkdir(parents=True, exist_ok=True)
+        make_user_dir(app_dir / "caddy" / "sites" / f"php-{version}")
+    make_user_dir(app_dir / "caddy" / "certs")
+    make_user_dir(app_dir / "caddy" / "log" / "caddy")
+    make_user_dir(app_dir / "caddy" / "log" / "php")
+    make_user_dir(app_dir / "caddy" / "data")
+    make_user_dir(app_dir / "caddy" / "config")
 
     # PHP config directories (one per supported version)
     for version in SUPPORTED_VERSIONS:
-        (app_dir / "php" / version).mkdir(parents=True, exist_ok=True)
+        make_user_dir(app_dir / "php" / version)
 
     # Database directory (MariaDB data)
-    (app_dir / "database").mkdir(parents=True, exist_ok=True)
+    make_user_dir(app_dir / "database")
 
 
 def _sync_static_resources(app_dir: Path) -> None:
@@ -261,11 +310,12 @@ def _sync_static_resources(app_dir: Path) -> None:
         if not src.exists():
             continue
         dst = app_dir / rel_path
-        dst.parent.mkdir(parents=True, exist_ok=True)
+        make_user_dir(dst.parent)
         shutil.copy2(src, dst)
         _fix_permissions(dst)
 
     version_file.write_text(__version__)
+    chown_to_sudo_user(version_file)
 
 
 def _cleanup_incorrect_directories(app_dir: Path) -> None:
@@ -307,22 +357,8 @@ def _distribute_php_configs(app_dir: Path) -> None:
     Args:
         app_dir: The application data directory.
     """
-    base_php_ini = app_dir / "php" / "php.ini"
-    base_php_prod_ini = app_dir / "php" / "php-prod.ini"
-
     for version in SUPPORTED_VERSIONS:
-        version_dir = app_dir / "php" / version
-        version_dir.mkdir(parents=True, exist_ok=True)
-
-        target_ini = version_dir / "php.ini"
-        target_prod_ini = version_dir / "php-prod.ini"
-
-        if not target_ini.exists() and base_php_ini.exists() and base_php_ini.is_file():
-            shutil.copy2(base_php_ini, target_ini)
-
-        has_prod_ini = base_php_prod_ini.exists() and base_php_prod_ini.is_file()
-        if not target_prod_ini.exists() and has_prod_ini:
-            shutil.copy2(base_php_prod_ini, target_prod_ini)
+        ensure_php_version_config(app_dir, version)
 
 
 def ensure_php_version_config(app_dir: Path, php_version: str) -> None:
@@ -335,19 +371,14 @@ def ensure_php_version_config(app_dir: Path, php_version: str) -> None:
         php_version: The PHP version string (e.g., "8.4").
     """
     version_dir = app_dir / "php" / php_version
-    version_dir.mkdir(parents=True, exist_ok=True)
+    make_user_dir(version_dir)
 
-    base_php_ini = app_dir / "php" / "php.ini"
-    base_php_prod_ini = app_dir / "php" / "php-prod.ini"
-
-    target_ini = version_dir / "php.ini"
-    target_prod_ini = version_dir / "php-prod.ini"
-
-    if not target_ini.exists() and base_php_ini.exists() and base_php_ini.is_file():
-        shutil.copy2(base_php_ini, target_ini)
-
-    if not target_prod_ini.exists() and base_php_prod_ini.exists() and base_php_prod_ini.is_file():
-        shutil.copy2(base_php_prod_ini, target_prod_ini)
+    for name in ("php.ini", "php-prod.ini"):
+        base = app_dir / "php" / name
+        target = version_dir / name
+        if not target.exists() and base.is_file():
+            shutil.copy2(base, target)
+            chown_to_sudo_user(target)
 
 
 def get_project_dir() -> Path:

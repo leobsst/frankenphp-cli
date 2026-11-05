@@ -20,7 +20,7 @@ from packaging.version import Version
 
 from .. import __version__
 from ..utils.logging import log_error, log_info, log_success, log_warning
-from .resources import get_app_data_dir
+from .resources import chown_to_sudo_user, get_app_data_dir, make_user_dir
 
 # GitHub repository for releases
 GITHUB_REPO = "leobsst/frankenphp-cli"
@@ -199,9 +199,13 @@ def _write_cache(data: dict[str, Any]) -> None:
     path = _cache_path()
     tmp_path = path.with_name(f"{path.name}.{os.getpid()}.tmp")
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
+        # Under `sudo frankenmanager ...` this may be the very first write to
+        # the data directory: keep it (and the cache) owned by the real user,
+        # otherwise later non-sudo runs can't populate it.
+        make_user_dir(path.parent)
         tmp_path.write_text(json.dumps(data))
         os.replace(tmp_path, path)
+        chown_to_sudo_user(path)
     except OSError:
         tmp_path.unlink(missing_ok=True)
 
