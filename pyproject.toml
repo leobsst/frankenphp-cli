@@ -84,7 +84,6 @@ packages = ["src/frankenmanager"]
 "caddy/Caddyfile" = "frankenmanager/resources/caddy/Caddyfile"
 "caddy/Caddyfile.worker" = "frankenmanager/resources/caddy/Caddyfile.worker"
 "caddy/Caddyfile.template" = "frankenmanager/resources/caddy/Caddyfile.template"
-"caddy/sites/default/localhost_Caddyfile" = "frankenmanager/resources/caddy/sites/default/localhost_Caddyfile"
 "php/php.ini" = "frankenmanager/resources/php/php.ini"
 "php/php-prod.ini" = "frankenmanager/resources/php/php-prod.ini"
 
