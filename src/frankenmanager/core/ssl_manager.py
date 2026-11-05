@@ -1,5 +1,6 @@
 """SSL certificate generation using mkcert."""
 
+import os
 import shutil
 import subprocess
 from datetime import datetime, timedelta
@@ -60,6 +61,13 @@ class SSLManager:
         if not (ca_cert.exists() and ca_key.exists()):
             raise SSLError(
                 "No root CA installed yet. Run `sudo frankenmanager setup --install-mkcert` first."
+            )
+        if not os.access(ca_key, os.R_OK):
+            # Typically left owned by root by an older `sudo frankenmanager setup`.
+            raise SSLError(
+                f"Cannot read the root CA key {ca_key} (permission denied). "
+                "Run `sudo frankenmanager setup --install-mkcert` again to fix its "
+                f'ownership, or: sudo chown -R "$(whoami)" "{ca_root}"'
             )
 
         self._sync_root_ca(ca_root)

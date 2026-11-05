@@ -28,6 +28,7 @@ if platform.system() != "Windows":
 from ..exceptions import ConfigurationError
 from ..utils.logging import log_error, log_info, log_success, log_warning
 from ..utils.platform import Platform, get_hosts_file_path, get_platform, is_admin
+from .resources import chown_to_sudo_user, make_user_dir
 
 # Fixed identity baked into every root CA this tool generates, in place of
 # mkcert's own default ("mkcert development CA" / user@host). Not user
@@ -859,7 +860,7 @@ Or download from: https://github.com/FiloSottile/mkcert/releases"""
         `mkcert -install` register this CA in the system trust store instead
         of generating one with mkcert's default identity.
         """
-        ca_root.mkdir(parents=True, exist_ok=True)
+        make_user_dir(ca_root)
 
         key = rsa.generate_private_key(public_exponent=65537, key_size=3072)
 
@@ -916,23 +917,40 @@ Or download from: https://github.com/FiloSottile/mkcert/releases"""
         cert_path.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
         cert_path.chmod(0o644)
 
-    def _ensure_frankenmanager_ca(self, mkcert: str) -> None:
+    def _ensure_frankenmanager_ca(self, mkcert: str) -> Path | None:
         """Make sure CAROOT holds our FrankenManager-branded CA.
 
         Replaces any other CA already there (e.g. mkcert's own default one)
         with ours.
+
+        Returns:
+            The CAROOT directory, or None if mkcert can't report it.
         """
         ca_root = self._get_ca_root(mkcert)
         if ca_root is None:
-            return
+            return None
 
         if self._is_frankenmanager_ca(ca_root):
-            return
+            return ca_root
 
         if (ca_root / "rootCA.pem").exists():
             self._uninstall_ca(mkcert)
 
         self._generate_custom_ca(ca_root)
+        return ca_root
+
+    @staticmethod
+    def _give_ca_root_to_user(ca_root: Path) -> None:
+        """Hand CAROOT and its CA files back to the real user under sudo.
+
+        CAROOT lives in the user's home (HOME is kept by sudo on macOS), and
+        every non-sudo `frankenmanager start` runs mkcert as that user, which
+        must read rootCA-key.pem to sign site certificates. Also repairs
+        installs where a previous sudo run left these files owned by root.
+        """
+        for path in (ca_root, ca_root / "rootCA.pem", ca_root / "rootCA-key.pem"):
+            if path.exists():
+                chown_to_sudo_user(path)
 
     def setup_ca(self) -> bool:
         """Install the FrankenManager Certificate Authority.
@@ -951,8 +969,15 @@ Or download from: https://github.com/FiloSottile/mkcert/releases"""
         # Write our own CA into CAROOT before mkcert -install runs, replacing
         # any other CA already there (e.g. mkcert's own default identity),
         # so it registers the FrankenManager-branded CA.
-        self._ensure_frankenmanager_ca(mkcert)
+        ca_root = self._ensure_frankenmanager_ca(mkcert)
+        try:
+            return self._run_mkcert_install(mkcert)
+        finally:
+            if ca_root is not None:
+                self._give_ca_root_to_user(ca_root)
 
+    def _run_mkcert_install(self, mkcert: str) -> bool:
+        """Register the CA from CAROOT in the system trust stores."""
         log_info("Installing FrankenManager CA (may require admin password)...")
 
         if self.platform != Platform.WINDOWS and not is_admin():
