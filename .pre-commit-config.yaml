@@ -17,5 +17,6 @@ repos:
           - docker>=7.0.0
           - python-dotenv>=1.0.0
           - cryptography>=42.0.0
+          - packaging>=21.0
         pass_filenames: false
         entry: mypy src/

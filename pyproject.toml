@@ -105,6 +105,7 @@ namespace_packages = false
 module = [
     "docker.*",
     "packaging.*",
+    "qrcode.*",
     "frankenmanager._version",
 ]
 ignore_missing_imports = true
