@@ -44,7 +44,6 @@ resource_files = [
     ("caddy/Caddyfile", "resources/caddy"),
     ("caddy/Caddyfile.worker", "resources/caddy"),
     ("caddy/Caddyfile.template", "resources/caddy"),
-    ("caddy/sites/default/localhost_Caddyfile", "resources/caddy/sites/default"),
     ("php/php.ini", "resources/php"),
     ("php/php-prod.ini", "resources/php"),
 ]

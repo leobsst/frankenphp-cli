@@ -66,7 +66,7 @@ class CaddyfileGenerator:
                 content = self._build_worker_site(domain, simple_domain)
                 caddyfile_path.write_text(content)
 
-        # Also move any remaining non-domain files (e.g. localhost_Caddyfile)
+        # Also move any remaining legacy files left in custom/
         if self.custom_dir.exists():
             for legacy_file in self.custom_dir.glob("*_Caddyfile"):
                 target = version_dir / legacy_file.name
@@ -488,6 +488,8 @@ class CaddyfileGenerator:
         production: bool = False,
         aliases: Optional[list[tuple[str, str, str]]] = None,
         raw_proxies: Optional[list[tuple[str, str]]] = None,
+        *,
+        phpmyadmin_target: Optional[str] = None,
     ) -> None:
         """Generate the main Caddyfile that reverse-proxies to FrankenPHP containers.
 
@@ -503,6 +505,9 @@ class CaddyfileGenerator:
             raw_proxies: Optional list of (domain, target) tuples. Each gets its
                 own TLS cert and block but proxies straight to the given raw
                 upstream address instead of a FrankenPHP container.
+            phpmyadmin_target: Optional phpMyAdmin upstream (e.g. "127.0.0.1:8080").
+                When set, https://localhost proxies to it, unless localhost is
+                already registered as a domain, alias or proxy host.
         """
         lines: list[str] = [
             "{",
@@ -520,6 +525,15 @@ class CaddyfileGenerator:
 
         for proxy_domain, target in raw_proxies or []:
             lines.extend(self._build_raw_proxy_block(proxy_domain, target))
+
+        registered = (
+            {domain for domain, _ in domains_versions}
+            | {alias for alias, _, _ in aliases or []}
+            | {domain for domain, _ in raw_proxies or []}
+        )
+        if phpmyadmin_target and "localhost" not in registered:
+            # Certificate generated at startup by SSLManager.generate_localhost_cert()
+            lines.extend(self._build_raw_proxy_block("localhost", phpmyadmin_target))
 
         main_caddyfile = caddy_dir / "Caddyfile"
         main_caddyfile.write_text("\n".join(lines) + "\n")

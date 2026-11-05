@@ -32,7 +32,6 @@ STATIC_RESOURCE_FILES = [
     Path("docker") / "entrypoint.sh",
     Path("caddy") / "Caddyfile.worker",
     Path("caddy") / "Caddyfile.template",
-    Path("caddy") / "sites" / "default" / "localhost_Caddyfile",
     Path("php") / "php.ini",
     Path("php") / "php-prod.ini",
 ]
@@ -265,7 +264,6 @@ def _create_directory_structure(app_dir: Path) -> None:
 
     # Caddy directories
     make_user_dir(app_dir / "caddy" / "sites" / "custom")
-    make_user_dir(app_dir / "caddy" / "sites" / "default")
     make_user_dir(app_dir / "caddy" / "sites" / "archive")
 
     # Per-version site directories

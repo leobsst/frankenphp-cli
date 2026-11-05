@@ -218,6 +218,7 @@ def start_server(
             env.is_production(),
             db.get_alias_entries(),
             proxy_entries,
+            phpmyadmin_target=env.get_phpmyadmin_target(),
         )
 
         # Save domains to database with versions

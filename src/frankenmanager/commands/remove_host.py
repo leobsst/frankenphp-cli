@@ -190,6 +190,7 @@ def remove_host(domains: list[str]) -> None:
             env.is_production(),
             db.get_alias_entries(),
             db.get_proxies(),
+            phpmyadmin_target=env.get_phpmyadmin_target(),
         )
 
         # Keep the LAN DNS server records in step (no-op unless DNS_SERVER=true)

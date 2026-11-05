@@ -220,6 +220,28 @@ class EnvironmentManager:
         env = self.get("APP_ENV", "dev")
         return env in ("prod", "production")
 
+    def get_phpmyadmin_target(self) -> Optional[str]:
+        """Get the phpMyAdmin upstream that https://localhost should proxy to.
+
+        Only one phpMyAdmin can own localhost: MariaDB's takes precedence,
+        MySQL's is used when MariaDB isn't enabled (it stays reachable on
+        PMA_MYSQL_PORT otherwise).
+
+        Returns:
+            "127.0.0.1:<port>" in dev when a phpMyAdmin container runs (MariaDB
+            or MySQL enabled), None otherwise (production, PostgreSQL only).
+        """
+        from .docker_manager import parse_db_engines
+
+        if self.is_production():
+            return None
+        db_engines = parse_db_engines(self.get("DB_ENGINES") or "mariadb") or ["mariadb"]
+        if "mariadb" in db_engines:
+            return f"127.0.0.1:{self.get('PMA_PORT') or '8080'}"
+        if "mysql" in db_engines:
+            return f"127.0.0.1:{self.get('PMA_MYSQL_PORT') or '8082'}"
+        return None
+
     def get_certs_dir(self) -> Path:
         """Get the configured certificates directory.
 

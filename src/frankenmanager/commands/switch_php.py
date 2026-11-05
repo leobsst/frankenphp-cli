@@ -157,6 +157,7 @@ def switch_php(domain: str, php_version: str) -> None:
             env.is_production(),
             db.get_alias_entries(),
             db.get_proxies(),
+            phpmyadmin_target=env.get_phpmyadmin_target(),
         )
 
         log_info("Restarting reverse proxy...")

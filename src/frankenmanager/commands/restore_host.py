@@ -220,6 +220,7 @@ def restore_host(domains: list[str], force_ssl: bool, php_version: Optional[str]
             env.is_production(),
             db.get_alias_entries(),
             db.get_proxies(),
+            phpmyadmin_target=env.get_phpmyadmin_target(),
         )
 
         from ..core.docker_manager import REVERSE_PROXY_CONTAINER  # noqa: PLC0415
