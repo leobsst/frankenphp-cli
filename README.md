@@ -881,7 +881,7 @@ frankenmanager/
 | FrankenPHP 8.5 | `frankenphp-8.5` | 8580 (internal) | PHP 8.5 worker |
 | MariaDB | `franken_mariadb` | 3306 | Database |
 | Redis | `franken_redis` | 6379 | Cache |
-| phpMyAdmin | `franken_phpmyadmin` | 8080 | Database UI |
+| phpMyAdmin | `franken_phpmyadmin` | 8080 | Database UI, also served at `https://localhost` in dev (unless `localhost` is registered as a host). With `DB_ENGINES=mysql` only, `localhost` serves `franken_phpmyadmin_mysql` (`PMA_MYSQL_PORT`) instead |
 | CoreDNS (optional) | `franken_dns` | 53 (LAN IP only) | LAN DNS server, when `DNS_SERVER=true` |
 
 Only containers for PHP versions that have at least one domain are started.
