@@ -976,7 +976,8 @@ Releases are published by the `Release` workflow, run manually from the GitHub A
 - Only repository admins can run it: the workflow stops right away for anyone else.
 - The release and its `v<version>` tag are created in the name of the admin who runs it, with their own token taken from the `RELEASE_TOKENS` secret, a JSON object mapping GitHub logins to fine-grained personal access tokens (this repository only, *Contents: Read and write*): `{"alice": "github_pat_..."}`.
 - `version`: `X.Y.Z`, or `X.Y.Z-suffix` for a pre-release (e.g. `1.2.0-rc.1`).
-- `changelog` (optional): Markdown inserted as the release notes' *What's Changed* section. In the UI field, type `\n` for line breaks; from the CLI, real line breaks are kept: `gh workflow run release.yml -f version=1.2.0 -f changelog="$(cat notes.md)"`. When empty, the version's section of `CHANGELOG.md` is used.
+- `changelog` (optional): Markdown inserted as the release notes' *What's Changed* section. GitHub only offers single-line text inputs, so this suits short notes: type `\n` for line breaks in the UI field, or pass a file from the CLI, which keeps real line breaks: `gh workflow run release.yml -f version=1.2.0 -f changelog="$(cat notes.md)"`. When empty, the version's section of `CHANGELOG.md` is used.
+- `draft` (optional): creates the release as a draft, with its binaries attached. Open it from the *Releases* page, write the notes in GitHub's Markdown editor (with preview), then click *Publish release*. The `v<version>` tag is only created at that point.
 
 ## Platform Support
 
