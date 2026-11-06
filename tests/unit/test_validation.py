@@ -26,6 +26,26 @@ class TestValidateDomain:
         """Domain with hyphen should pass."""
         validate_domain("my-app.test")
 
+    @pytest.mark.parametrize(
+        "domain",
+        [
+            "s3.api.test",
+            "s3.ppd.api.test",
+            "s3.api-mediteam.test",
+            "s3.ppd.api-mediteam.test",
+            "api.v2.test",
+        ],
+    )
+    def test_valid_nested_subdomain(self, domain):
+        """Nested subdomains with digits or hyphens in any label should pass."""
+        validate_domain(domain)
+
+    @pytest.mark.parametrize("domain", ["s3..api.test", "s3.-api.test", "s3.api-.test"])
+    def test_invalid_subdomain_label(self, domain):
+        """Empty labels or labels starting/ending with a hyphen should fail."""
+        with pytest.raises(ValidationError):
+            validate_domain(domain)
+
     def test_invalid_domain_no_tld(self):
         """Domain without TLD should fail."""
         with pytest.raises(ValidationError):
