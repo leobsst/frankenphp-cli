@@ -8,7 +8,7 @@ import typer
 from rich.console import Console
 
 from . import __version__
-from .core.php_versions import SUPPORTED_VERSIONS
+from .core.php_versions import DEPRECATED_VERSIONS, SUPPORTED_VERSIONS
 from .exceptions import FrankenPHPError
 from .utils.logging import log_error
 
@@ -43,7 +43,9 @@ app = _App(
 console = Console()
 
 _php_version_help = (
-    f"PHP version ({', '.join(SUPPORTED_VERSIONS)}). Defaults to DEFAULT_PHP_VERSION in .env"
+    f"PHP version ({', '.join(SUPPORTED_VERSIONS)}; "
+    f"{', '.join(sorted(DEPRECATED_VERSIONS))} deprecated). "
+    "Defaults to DEFAULT_PHP_VERSION in .env"
 )
 
 
@@ -96,23 +98,30 @@ def start(
         "--php",
         help=_php_version_help,
     ),
+    build: bool = typer.Option(
+        False, "--build", help="Rebuild the PHP images even if they are up to date"
+    ),
 ) -> None:
     """Start the FrankenPHP development server.
 
     If domains are not provided, uses domains registered in the database.
+    With no domain at all, starts the reverse proxy and databases only
+    (add hosts later with add-host).
     If --path is not specified, uses DEFAULT_PROJECT_PATH from .env file.
+    PHP images are only built when missing or outdated, unless --build is set.
 
     Examples:
         frankenmanager start "myapp.test"
         frankenmanager start "myapp.test api.test" --path /home/projects
         frankenmanager start "myapp.test" --php 8.4
         frankenmanager start  # Uses registered domains from database
+        frankenmanager start --build  # Force a rebuild of the PHP images
     """
     from .commands.start import start_server
 
     domain_list = domains.split() if domains else None
     custom_path = Path(path) if path else None
-    start_server(domain_list, custom_path, force_ssl, php)
+    start_server(domain_list, custom_path, force_ssl, php, build)
 
 
 @app.command()
@@ -132,11 +141,16 @@ def restart(
     database: bool = typer.Option(
         False, "--database", "--db", help="Restart only the database container"
     ),
-    cache: bool = typer.Option(False, "--cache", help="Restart only the Redis cache container"),
+    cache: bool = typer.Option(
+        False, "--cache", help="Restart only the Redis cache container (REDIS_ENABLED=true)"
+    ),
     phpmyadmin: bool = typer.Option(
         False, "--phpmyadmin", "--pma", help="Restart only the phpMyAdmin container"
     ),
     dns: bool = typer.Option(False, "--dns", help="Restart only the LAN DNS server container"),
+    build: bool = typer.Option(
+        False, "--build", help="Rebuild the PHP images and recreate their containers"
+    ),
 ) -> None:
     """Restart the FrankenPHP development server or specific containers.
 
@@ -146,6 +160,7 @@ def restart(
         frankenmanager restart --database         # Restart only database
         frankenmanager restart --cache --pma      # Restart Redis and phpMyAdmin
         frankenmanager restart --dns              # Restart the LAN DNS server
+        frankenmanager restart --build            # Rebuild PHP images, then restart
     """
     from .commands.restart import restart_server
 
@@ -162,7 +177,7 @@ def restart(
     if dns:
         containers.append("dns")
 
-    restart_server(force_ssl, containers if containers else None)
+    restart_server(force_ssl, containers if containers else None, build)
 
 
 @app.command(name="add-host")

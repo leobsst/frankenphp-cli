@@ -77,6 +77,44 @@ class DatabaseManager:
             """
             )
 
+            # Key/value runtime settings (e.g. the project path given to start)
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                )
+            """
+            )
+
+            conn.commit()
+
+    def get_setting(self, key: str) -> Optional[str]:
+        """Get a stored runtime setting.
+
+        Args:
+            key: Setting name.
+
+        Returns:
+            The stored value, None if unset.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+        return row[0] if row else None
+
+    def set_setting(self, key: str, value: str) -> None:
+        """Store a runtime setting.
+
+        Args:
+            key: Setting name.
+            value: Value to store.
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                "INSERT INTO settings (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
             conn.commit()
 
     @property
@@ -84,7 +122,8 @@ class DatabaseManager:
         """Check if the server is currently running based on real-time Docker container status.
 
         Returns:
-            True if at least one FrankenPHP container and infrastructure containers are running.
+            True if the reverse proxy runs, plus at least one FrankenPHP
+            container when PHP domains are registered.
         """
         if not self.docker_manager:
             return False
@@ -101,7 +140,9 @@ class DatabaseManager:
             statuses: Container statuses as returned by get_containers_status().
 
         Returns:
-            True if at least one FrankenPHP container and infrastructure containers are running.
+            True if the reverse proxy runs, plus at least one FrankenPHP
+            container when PHP domains are registered. A server without PHP
+            domains (proxy hosts only, or freshly installed) runs no PHP container.
         """
         from .docker_manager import REVERSE_PROXY_CONTAINER  # noqa: PLC0415
         from .php_versions import get_container_name  # noqa: PLC0415
@@ -109,12 +150,12 @@ class DatabaseManager:
         def running(name: str) -> bool:
             return statuses.get(name, {}).get("status") == "running"
 
-        # Check infrastructure containers (including reverse proxy)
-        if not all(running(c) for c in (REVERSE_PROXY_CONTAINER, "franken_redis")):
+        if not running(REVERSE_PROXY_CONTAINER):
             return False
 
-        # Check if at least one frankenphp container is running
         active_versions = {v for _, v in self.get_domains_with_versions()}
+        if not active_versions:
+            return True
         return any(running(get_container_name(v)) for v in active_versions)
 
     def set_domains(self, domains: list[str], php_version: str = DEFAULT_PHP_VERSION) -> None:

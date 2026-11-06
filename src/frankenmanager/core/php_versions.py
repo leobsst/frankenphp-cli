@@ -2,6 +2,8 @@
 
 from typing import Optional
 
+from ..utils.logging import log_warning
+
 # Mapping of PHP versions to their FrankenPHP Docker image tags (without the
 # distro suffix, see IMAGE_DISTROS)
 PHP_IMAGE_TAGS: dict[str, str] = {
@@ -31,6 +33,10 @@ PHP_INTERNAL_PORTS: dict[str, tuple[int, int]] = {
 
 # Fallback PHP version when not configured in .env
 DEFAULT_PHP_VERSION = "8.3"
+
+# Versions still supported but deprecated (security fixes only upstream):
+# using them prints a warning
+DEPRECATED_VERSIONS = frozenset({"8.2"})
 
 
 def resolve_default_php_version(env_value: Optional[str]) -> str:
@@ -147,3 +153,16 @@ def validate_php_version(php_version: str) -> str:
         supported = ", ".join(SUPPORTED_VERSIONS)
         raise ValueError(f"Unsupported PHP version '{php_version}'. Supported: {supported}")
     return php_version
+
+
+def warn_if_deprecated(php_version: str) -> None:
+    """Print a warning when a deprecated PHP version is used.
+
+    Args:
+        php_version: PHP version string (e.g., "8.2").
+    """
+    if php_version in DEPRECATED_VERSIONS:
+        log_warning(
+            f"PHP {php_version} is deprecated and will be removed in a future release. "
+            f"Consider upgrading to PHP {DEFAULT_PHP_VERSION} or later."
+        )

@@ -220,27 +220,89 @@ class EnvironmentManager:
         env = self.get("APP_ENV", "dev")
         return env in ("prod", "production")
 
-    def get_phpmyadmin_target(self) -> Optional[str]:
-        """Get the phpMyAdmin upstream that https://localhost should proxy to.
-
-        Only one phpMyAdmin can own localhost: MariaDB's takes precedence,
-        MySQL's is used when MariaDB isn't enabled (it stays reachable on
-        PMA_MYSQL_PORT otherwise).
+    def is_redis_enabled(self) -> bool:
+        """Check if the Redis cache container should run.
 
         Returns:
-            "127.0.0.1:<port>" in dev when a phpMyAdmin container runs (MariaDB
-            or MySQL enabled), None otherwise (production, PostgreSQL only).
+            True if REDIS_ENABLED is 'true' (disabled by default).
         """
-        from .docker_manager import parse_db_engines
+        return (self.get("REDIS_ENABLED") or "").strip().lower() == "true"
 
+    def get_db_engines(self) -> list[str]:
+        """Get the enabled database engines from DB_ENGINES.
+
+        Returns:
+            Valid engines in the configured order, ["mariadb"] when none is set.
+        """
+        from .docker_manager import parse_db_engines  # noqa: PLC0415
+
+        return parse_db_engines(self.get("DB_ENGINES") or "mariadb") or ["mariadb"]
+
+    def get_db_admin_target(self) -> Optional[str]:
+        """Get the database admin UI upstream that https://localhost should proxy to.
+
+        phpMyAdmin owns localhost whenever MariaDB or MySQL is enabled (a single
+        container serves both servers). pgAdmin takes it over when PostgreSQL is
+        the only engine; otherwise it stays reachable on PGADMIN_PORT.
+
+        Returns:
+            "127.0.0.1:<port>" in dev when an admin UI runs, None in production.
+        """
         if self.is_production():
             return None
-        db_engines = parse_db_engines(self.get("DB_ENGINES") or "mariadb") or ["mariadb"]
-        if "mariadb" in db_engines:
+        db_engines = self.get_db_engines()
+        if "mariadb" in db_engines or "mysql" in db_engines:
             return f"127.0.0.1:{self.get('PMA_PORT') or '8080'}"
-        if "mysql" in db_engines:
-            return f"127.0.0.1:{self.get('PMA_MYSQL_PORT') or '8082'}"
+        if "postgresql" in db_engines:
+            return f"127.0.0.1:{self.get('PGADMIN_PORT') or '8081'}"
         return None
+
+    def resolve_dir(self, key: str, default: str, project_dir: Path) -> Path:
+        """Resolve a storage directory from .env, relative to the project directory.
+
+        Args:
+            key: Variable name (e.g. "CADDY_DIR").
+            default: Default relative path when the variable is empty.
+            project_dir: Base directory for relative paths.
+
+        Returns:
+            Absolute path.
+        """
+        path = Path(self.get(key) or default)
+        return path if path.is_absolute() else project_dir / path
+
+    def build_compose_env_vars(
+        self, project_dir: Path, custom_path: str, db_engines: list[str]
+    ) -> dict[str, str]:
+        """Build every variable the generated docker-compose file expects.
+
+        Args:
+            project_dir: Project (data) directory.
+            custom_path: Projects root mounted into the PHP containers.
+            db_engines: Enabled database engines.
+
+        Returns:
+            Environment variables for `docker compose`.
+        """
+        localhost = "" if self.get("EXPOSE_SERVICES") == "true" else "127.0.0.1:"
+        db_port = self.get("DB_PORT") or "3306"
+        pma_port = self.get("PMA_PORT") or "8080"
+        redis_port = self.get("REDIS_PORT") or "6379"
+        return {
+            "CUSTOM_PATH": custom_path,
+            "UID": self.require("UID"),
+            "GID": self.require("GID"),
+            "DB_PORT": f"{localhost}{db_port}:3306",
+            "PMA_PORT": f"{localhost}{pma_port}:80",
+            "REDIS_PORT": f"{localhost}{redis_port}:6379",
+            "WEB_HTTP_PORT": self.get("WEB_HTTP_PORT") or "80",
+            "WEB_HTTPS_PORT": self.get("WEB_HTTPS_PORT") or "443",
+            "MYSQL_MAX_ALLOWED_PACKET": self.get("MYSQL_MAX_ALLOWED_PACKET") or "512M",
+            "PWD": str(project_dir),
+            "CADDY_DIR": str(self.resolve_dir("CADDY_DIR", "./caddy", project_dir)),
+            "DATABASE_DIR": str(self.resolve_dir("DATABASE_DIR", "./database", project_dir)),
+            **self.build_db_env_vars(db_engines, localhost),
+        }
 
     def get_certs_dir(self) -> Path:
         """Get the configured certificates directory.
@@ -272,8 +334,6 @@ class EnvironmentManager:
             env_vars["MYSQL_ROOT_PASSWORD"] = self.require("MYSQL_ROOT_PASSWORD")
             env_vars["MYSQL_VERSION"] = self.get("MYSQL_VERSION") or "8.0"
             env_vars["MYSQL_PORT"] = f"{localhost}{mysql_port}:3306"
-            pma_mysql_port = self.get("PMA_MYSQL_PORT") or "8082"
-            env_vars["PMA_MYSQL_PORT"] = f"{localhost}{pma_mysql_port}:80"
 
         if "postgresql" in db_engines:
             pg_port = self.get("POSTGRES_PORT") or "5432"

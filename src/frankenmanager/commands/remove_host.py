@@ -6,11 +6,12 @@ from typing import Optional
 from ..core import dns_server
 from ..core.caddyfile import CaddyfileGenerator
 from ..core.database import DatabaseManager
-from ..core.docker_manager import DockerManager, parse_db_engines
+from ..core.docker_manager import DockerManager
 from ..core.environment import EnvironmentManager
 from ..core.hosts_manager import HostsManager
 from ..core.php_versions import get_container_name
 from ..core.resources import get_project_dir
+from ..core.stack import generate_compose
 from ..exceptions import ServerStateError
 from ..utils.logging import log_error, log_info, log_success, log_warning
 
@@ -84,12 +85,6 @@ def remove_host(domains: list[str]) -> None:
 
     if not domains_to_remove and not aliases_to_remove and not proxies_to_remove:
         log_info("No domains to remove.")
-        return
-
-    # Check if we're trying to remove all domains
-    remaining_after_removal = [d for d in existing_domains if d not in domains_to_remove]
-    if domains_to_remove and not remaining_after_removal:
-        log_error("Cannot remove all domains. Use 'stop' command to stop the server entirely.")
         return
 
     # Resolve storage paths from environment
@@ -173,14 +168,7 @@ def remove_host(domains: list[str]) -> None:
 
         # Regenerate compose file without orphaned versions
         if orphaned_versions:
-            db_engines = parse_db_engines(env.get("DB_ENGINES") or "mariadb") or ["mariadb"]
-            docker.generate_compose_file(
-                versions_after,
-                {},
-                env.is_production(),
-                db_engines,
-                dns_server.get_listen_address(env),
-            )
+            generate_compose(docker, env, versions_after)
 
         # Regenerate main reverse proxy Caddyfile
         remaining_domains_versions = db.get_domains_with_versions()
@@ -190,7 +178,7 @@ def remove_host(domains: list[str]) -> None:
             env.is_production(),
             db.get_alias_entries(),
             db.get_proxies(),
-            phpmyadmin_target=env.get_phpmyadmin_target(),
+            db_admin_target=env.get_db_admin_target(),
         )
 
         # Keep the LAN DNS server records in step (no-op unless DNS_SERVER=true)

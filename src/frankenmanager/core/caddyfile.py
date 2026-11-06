@@ -489,7 +489,7 @@ class CaddyfileGenerator:
         aliases: Optional[list[tuple[str, str, str]]] = None,
         raw_proxies: Optional[list[tuple[str, str]]] = None,
         *,
-        phpmyadmin_target: Optional[str] = None,
+        db_admin_target: Optional[str] = None,
     ) -> None:
         """Generate the main Caddyfile that reverse-proxies to FrankenPHP containers.
 
@@ -505,9 +505,10 @@ class CaddyfileGenerator:
             raw_proxies: Optional list of (domain, target) tuples. Each gets its
                 own TLS cert and block but proxies straight to the given raw
                 upstream address instead of a FrankenPHP container.
-            phpmyadmin_target: Optional phpMyAdmin upstream (e.g. "127.0.0.1:8080").
-                When set, https://localhost proxies to it, unless localhost is
-                already registered as a domain, alias or proxy host.
+            db_admin_target: Optional database admin UI upstream (phpMyAdmin or
+                pgAdmin, e.g. "127.0.0.1:8080"). When set, https://localhost
+                proxies to it, unless localhost is already registered as a
+                domain, alias or proxy host.
         """
         lines: list[str] = [
             "{",
@@ -531,9 +532,9 @@ class CaddyfileGenerator:
             | {alias for alias, _, _ in aliases or []}
             | {domain for domain, _ in raw_proxies or []}
         )
-        if phpmyadmin_target and "localhost" not in registered:
+        if db_admin_target and "localhost" not in registered:
             # Certificate generated at startup by SSLManager.generate_localhost_cert()
-            lines.extend(self._build_raw_proxy_block("localhost", phpmyadmin_target))
+            lines.extend(self._build_raw_proxy_block("localhost", db_admin_target))
 
         main_caddyfile = caddy_dir / "Caddyfile"
         main_caddyfile.write_text("\n".join(lines) + "\n")

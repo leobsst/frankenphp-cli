@@ -5,7 +5,7 @@ from rich.table import Table
 
 from ..core import dns_server
 from ..core.database import DatabaseManager
-from ..core.docker_manager import CONTAINER_NOT_FOUND, DockerManager, parse_db_engines
+from ..core.docker_manager import CONTAINER_NOT_FOUND, DockerManager
 from ..core.environment import EnvironmentManager
 from ..core.php_versions import get_container_name
 from ..core.resources import get_project_dir
@@ -23,7 +23,7 @@ def show_status() -> None:
     env = EnvironmentManager(project_dir / ".env", project_dir / ".env.example")
     if env.env_path.exists():
         env.load()
-    db_engines = parse_db_engines(env.get("DB_ENGINES") or "mariadb") or ["mariadb"]
+    db_engines = env.get_db_engines()
 
     # Get real-time status from Docker containers, in a single API call
     statuses = docker.get_containers_status()
@@ -67,7 +67,10 @@ def show_status() -> None:
 
     # Infrastructure containers
     for container in docker.get_all_containers(
-        db_engines=db_engines, production=env.is_production(), dns=dns_listen is not None
+        db_engines=db_engines,
+        production=env.is_production(),
+        dns=dns_listen is not None,
+        redis=env.is_redis_enabled(),
     ):
         # Skip PHP containers (already shown above)
         if container.startswith("frankenphp-"):

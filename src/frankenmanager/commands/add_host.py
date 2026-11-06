@@ -6,16 +6,18 @@ from typing import Optional
 from ..core import dns_server
 from ..core.caddyfile import CaddyfileGenerator
 from ..core.database import DatabaseManager
-from ..core.docker_manager import DockerManager, parse_db_engines
+from ..core.docker_manager import DockerManager
 from ..core.environment import EnvironmentManager
 from ..core.hosts_manager import HostsManager
 from ..core.php_versions import (
     get_container_name,
     resolve_default_php_version,
     validate_php_version,
+    warn_if_deprecated,
 )
 from ..core.resources import ensure_php_version_config, get_project_dir
 from ..core.ssl_manager import SSLManager
+from ..core.stack import compose_up, get_project_path
 from ..exceptions import ServerStateError
 from ..utils.logging import log_error, log_info, log_success
 from ..utils.validation import validate_domain, validate_proxy_target
@@ -105,6 +107,7 @@ def add_host(
     if php_version is None:
         php_version = resolve_default_php_version(env.get("DEFAULT_PHP_VERSION"))
     validate_php_version(php_version)
+    warn_if_deprecated(php_version)
 
     # Check if we need to start a new PHP version container
     active_versions = db.get_active_php_versions()
@@ -143,56 +146,25 @@ def add_host(
             env.is_production(),
             db.get_alias_entries(),
             db.get_proxies(),
-            phpmyadmin_target=env.get_phpmyadmin_target(),
+            db_admin_target=env.get_db_admin_target(),
         )
 
         # Keep the LAN DNS server records in step (no-op unless DNS_SERVER=true)
         dns_server.sync(project_dir, env, db)
 
         if need_new_container:
-            # Build and start a new container for this PHP version
-            log_info(f"Building Docker image for PHP {php_version}...")
-            custom_path = env.get("DEFAULT_PROJECT_PATH") or ""
+            # Build the image if needed, then start the new container via compose
+            custom_path = get_project_path(env, db)
+            if not custom_path:
+                raise ServerStateError(
+                    "No project path known: set DEFAULT_PROJECT_PATH in .env "
+                    "or restart the server with --path."
+                )
             docker.build_image_from_env(custom_path, php_version, env)
 
-            # Regenerate compose file with the new version
-            db_engines = parse_db_engines(env.get("DB_ENGINES") or "mariadb") or ["mariadb"]
-            all_versions = active_versions | {php_version}
-            docker.generate_compose_file(
-                all_versions,
-                {},
-                env.is_production(),
-                db_engines,
-                dns_server.get_listen_address(env),
-            )
-
-            # Restart all via compose to start the new container
             log_info(f"Starting PHP {php_version} container...")
 
-            expose = env.get("EXPOSE_SERVICES") == "true"
-            localhost = "" if expose else "127.0.0.1:"
-            db_port = env.get("DB_PORT") or "3306"
-            pma_port = env.get("PMA_PORT") or "8080"
-            redis_port = env.get("REDIS_PORT") or "6379"
-            database_dir = _resolve_path(env.get("DATABASE_DIR"), "./database", project_dir)
-
-            env_vars = {
-                "CUSTOM_PATH": custom_path,
-                "UID": env.require("UID"),
-                "GID": env.require("GID"),
-                "SIMPLE_DB_PORT": db_port,
-                "DB_PORT": f"{localhost}{db_port}:3306",
-                "PMA_PORT": f"{localhost}{pma_port}:80",
-                "REDIS_PORT": f"{localhost}{redis_port}:6379",
-                "WEB_HTTP_PORT": env.get("WEB_HTTP_PORT") or "80",
-                "WEB_HTTPS_PORT": env.get("WEB_HTTPS_PORT") or "443",
-                "MYSQL_MAX_ALLOWED_PACKET": env.get("MYSQL_MAX_ALLOWED_PACKET") or "512M",
-                "PWD": str(project_dir),
-                "CADDY_DIR": str(caddy_dir),
-                "DATABASE_DIR": str(database_dir),
-                **env.build_db_env_vars(db_engines, localhost),
-            }
-            docker.compose_up(env_vars, env.is_production())
+            compose_up(project_dir, docker, env, active_versions | {php_version}, custom_path)
         else:
             # Restart the existing PHP container and the reverse proxy
             container_name = get_container_name(php_version)
@@ -284,7 +256,7 @@ def _add_proxy_hosts(
             env.is_production(),
             db.get_alias_entries(),
             db.get_proxies(),
-            phpmyadmin_target=env.get_phpmyadmin_target(),
+            db_admin_target=env.get_db_admin_target(),
         )
 
         # Keep the LAN DNS server records in step (no-op unless DNS_SERVER=true)

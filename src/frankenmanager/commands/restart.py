@@ -4,30 +4,39 @@ from typing import Optional
 
 from ..core import dns_server
 from ..core.database import DatabaseManager
-from ..core.docker_manager import DB_CONTAINERS, DockerManager, parse_db_engines
+from ..core.docker_manager import (
+    DB_CONTAINERS,
+    PHPMYADMIN_CONTAINER,
+    REDIS_CONTAINER,
+    DockerManager,
+)
 from ..core.environment import EnvironmentManager
 from ..core.password_manager import PasswordManager
 from ..core.php_versions import get_container_name
 from ..core.resources import get_project_dir
 from ..core.ssl_manager import SSLManager
+from ..core.stack import compose_up, get_project_path
 from ..exceptions import ServerStateError
-from ..utils.logging import log_info, log_success
+from ..utils.logging import log_info, log_success, log_warning
 
 # Map friendly names to actual container names (static ones)
 CONTAINER_MAP = {
-    "cache": "franken_redis",
-    "phpmyadmin": "franken_phpmyadmin",
+    "cache": REDIS_CONTAINER,
+    "phpmyadmin": PHPMYADMIN_CONTAINER,
     "dns": dns_server.CONTAINER_NAME,
 }
 
 
-def restart_server(force_ssl: bool, containers: Optional[list[str]] = None) -> None:
+def restart_server(
+    force_ssl: bool, containers: Optional[list[str]] = None, build: bool = False
+) -> None:
     """Restart the FrankenPHP server or specific containers.
 
     Args:
         force_ssl: Whether to force SSL certificate regeneration.
         containers: List of container names to restart (None = restart all).
                    Valid values: "caddy", "database", "cache", "phpmyadmin", "dns"
+        build: Rebuild the PHP images and recreate their containers first.
     """
     project_dir = get_project_dir()
 
@@ -65,15 +74,26 @@ def restart_server(force_ssl: bool, containers: Optional[list[str]] = None) -> N
         log_info("Generating SSL certificates...")
         ssl.generate_all(domains, force_ssl, env.is_production())
 
-    # Parse DB engines
-    db_engines = parse_db_engines(env.get("DB_ENGINES") or "mariadb")
-    if not db_engines:
-        db_engines = ["mariadb"]
+    db_engines = env.get_db_engines()
+    redis = env.is_redis_enabled()
+
+    if build and active_versions:
+        custom_path = get_project_path(env, db)
+        if not custom_path:
+            raise ServerStateError(
+                "No project path known: set DEFAULT_PROJECT_PATH in .env "
+                "or use 'stop' then 'start --build --path <path>'."
+            )
+        docker.build_images(custom_path, active_versions, env, force=True)
+        # Recreate the PHP containers on the new images
+        compose_up(project_dir, docker, env, active_versions, custom_path)
+    elif build:
+        log_info("No PHP domain registered: no image to build.")
 
     # Restart containers
     if restart_all:
         docker.restart_all(
-            active_versions, db_engines, env.is_production(), dns_server.is_enabled(env)
+            active_versions, db_engines, env.is_production(), dns_server.is_enabled(env), redis
         )
     else:
         if containers:
@@ -91,6 +111,8 @@ def restart_server(force_ssl: bool, containers: Optional[list[str]] = None) -> N
                         db_container = DB_CONTAINERS.get(engine)
                         if db_container:
                             docker.restart_container(db_container)
+                elif container_name == "cache" and not redis:
+                    log_warning("Redis is disabled: set REDIS_ENABLED=true in .env to use it.")
                 else:
                     actual_name = CONTAINER_MAP.get(container_name)
                     if actual_name:

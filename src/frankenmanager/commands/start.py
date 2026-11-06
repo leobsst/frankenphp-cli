@@ -7,34 +7,21 @@ from typing import Optional
 from ..core import dns_server
 from ..core.caddyfile import CaddyfileGenerator
 from ..core.database import DatabaseManager
-from ..core.docker_manager import DockerManager, parse_db_engines
+from ..core.docker_manager import DockerManager
 from ..core.environment import EnvironmentManager
 from ..core.hosts_manager import HostsManager
 from ..core.password_manager import PasswordManager
-from ..core.php_versions import resolve_default_php_version, validate_php_version
+from ..core.php_versions import (
+    resolve_default_php_version,
+    validate_php_version,
+    warn_if_deprecated,
+)
 from ..core.resources import ensure_php_version_config, get_project_dir
 from ..core.ssl_manager import SSLManager
+from ..core.stack import PROJECT_PATH_SETTING, compose_up
 from ..exceptions import ServerStateError
 from ..utils.logging import log_error, log_info, log_success, log_warning
 from ..utils.validation import validate_directory, validate_domain
-
-
-def _resolve_path(env_value: Optional[str], default: str, project_dir: Path) -> Path:
-    """Resolve a path from environment variable or default.
-
-    Args:
-        env_value: Value from environment variable (may be empty/None).
-        default: Default relative path.
-        project_dir: Project directory for relative paths.
-
-    Returns:
-        Resolved absolute path.
-    """
-    path_str = env_value if env_value else default
-    path = Path(path_str)
-    if not path.is_absolute():
-        path = project_dir / path
-    return path
 
 
 def start_server(
@@ -42,14 +29,19 @@ def start_server(
     custom_path: Optional[Path],
     force_ssl: bool,
     php_version: Optional[str] = None,
+    build: bool = False,
 ) -> None:
     """Start the FrankenPHP server.
+
+    Starts even without any domain: the reverse proxy and databases come up
+    alone, ready for proxy hosts (add-host <domain> <target>) or PHP hosts.
 
     Args:
         domains: List of domain names to serve (None to use registered domains from database).
         custom_path: Path to the project root (None to use DEFAULT_PROJECT_PATH).
         force_ssl: Whether to force SSL certificate regeneration.
         php_version: Default PHP version for new domains (None = use .env or fallback).
+        build: Rebuild the PHP images even if they are up to date.
     """
     project_dir = get_project_dir()
 
@@ -68,6 +60,7 @@ def start_server(
     if php_version is None:
         php_version = resolve_default_php_version(env.get("DEFAULT_PHP_VERSION"))
     validate_php_version(php_version)
+    warn_if_deprecated(php_version)
 
     # Check required environment variables
     try:
@@ -78,18 +71,11 @@ def start_server(
         log_error("Please set UID and GID in .env file.")
         sys.exit(1)
 
-    # Resolve project path
-    if custom_path is None:
-        default_path = env.get("DEFAULT_PROJECT_PATH")
-        if not default_path:
-            log_error("No project path specified and DEFAULT_PROJECT_PATH is not set in .env")
-            sys.exit(1)
-        custom_path = Path(default_path)
+    # Resolve project path (only required to serve PHP domains)
+    if custom_path is None and env.get("DEFAULT_PROJECT_PATH"):
+        custom_path = Path(env.get("DEFAULT_PROJECT_PATH") or "")
 
-    # Parse DB engines configuration
-    db_engines = parse_db_engines(env.get("DB_ENGINES") or "mariadb")
-    if not db_engines:
-        db_engines = ["mariadb"]
+    db_engines = env.get_db_engines()
 
     # Generate passwords for enabled DB engines
     if "mariadb" in db_engines and not env.get("MARIADB_ROOT_PASSWORD"):
@@ -110,10 +96,10 @@ def start_server(
     env.load()  # Reload to get any new passwords
 
     # Resolve storage paths from environment
-    caddy_dir = _resolve_path(env.get("CADDY_DIR"), "./caddy", project_dir)
+    caddy_dir = env.resolve_dir("CADDY_DIR", "./caddy", project_dir)
     certs_dir = caddy_dir / "certs"
     sites_dir = caddy_dir / "sites"
-    database_dir = _resolve_path(env.get("DATABASE_DIR"), "./database", project_dir)
+    database_dir = env.resolve_dir("DATABASE_DIR", "./database", project_dir)
 
     docker = DockerManager(project_dir)
     db = DatabaseManager(project_dir / "db.sqlite", docker)
@@ -134,13 +120,13 @@ def start_server(
     domains_with_versions: list[tuple[str, str]] = []
 
     if domains is None:
-        # No domains provided, use registered ones
-        if not registered:
-            log_error("No domains provided and no domains registered in database.")
-            log_error('Please provide domains: frankenmanager start "myapp.test"')
-            sys.exit(1)
+        # No domains provided, use registered ones (if any)
         domains_with_versions = list(registered)
-        log_info(f"Using registered domains: {', '.join(registered_domains)}")
+        if registered:
+            log_info(f"Using registered domains: {', '.join(registered_domains)}")
+        else:
+            log_info("No PHP domain registered: starting without PHP container.")
+            log_info('Add hosts later with: frankenmanager add-host "myapp.test"')
     else:
         # Merge provided domains with registered ones
 
@@ -161,8 +147,12 @@ def start_server(
     # Extract flat domain list for validation
     all_domains = [d for d, _ in domains_with_versions]
 
-    # Validate inputs
-    validate_directory(custom_path)
+    # Validate inputs (the project path is only needed by PHP containers)
+    if all_domains:
+        if custom_path is None:
+            log_error("No project path specified and DEFAULT_PROJECT_PATH is not set in .env")
+            sys.exit(1)
+        validate_directory(custom_path)
     for domain in all_domains:
         validate_domain(domain)
 
@@ -218,60 +208,28 @@ def start_server(
             env.is_production(),
             db.get_alias_entries(),
             proxy_entries,
-            phpmyadmin_target=env.get_phpmyadmin_target(),
+            db_admin_target=env.get_db_admin_target(),
         )
 
         # Save domains to database with versions
         db.set_domains_with_versions(domains_with_versions)
+        if custom_path is not None:
+            db.set_setting(PROJECT_PATH_SETTING, str(custom_path))
 
         # LAN DNS server records (no-op unless DNS_SERVER=true)
         dns_server.sync(project_dir, env, db)
         dns_listen = dns_server.get_listen_address(env)
-
-        # Build and start containers
-        log_info("Building Docker images...")
 
         # Fix .my-healthcheck.cnf permissions if world-writable (MySQL ignores such files)
         healthcheck_cnf = database_dir / ".my-healthcheck.cnf"
         if healthcheck_cnf.exists() and (healthcheck_cnf.stat().st_mode & 0o022):
             healthcheck_cnf.chmod(0o640)
 
-        docker.build_images(str(custom_path), active_versions, env)
+        # Build PHP images only when missing, outdated or explicitly requested
+        project_path = str(custom_path) if custom_path is not None else ""
+        docker.build_images(project_path, active_versions, env, force=build)
         docker.compose_down(env.is_production())
-
-        # Generate docker-compose file
-        docker.generate_compose_file(
-            active_versions, {}, env.is_production(), db_engines, dns_listen
-        )
-
-        # Prepare environment variables for docker-compose
-        expose = env.get("EXPOSE_SERVICES") == "true"
-        localhost = "" if expose else "127.0.0.1:"
-
-        # Get port configurations from .env (with defaults)
-        db_port = env.get("DB_PORT") or "3306"
-        pma_port = env.get("PMA_PORT") or "8080"
-        redis_port = env.get("REDIS_PORT") or "6379"
-        web_http_port = env.get("WEB_HTTP_PORT") or "80"
-        web_https_port = env.get("WEB_HTTPS_PORT") or "443"
-
-        env_vars = {
-            "CUSTOM_PATH": str(custom_path),
-            "UID": env.require("UID"),
-            "GID": env.require("GID"),
-            "SIMPLE_DB_PORT": db_port,
-            "DB_PORT": f"{localhost}{db_port}:3306",
-            "PMA_PORT": f"{localhost}{pma_port}:80",
-            "REDIS_PORT": f"{localhost}{redis_port}:6379",
-            "WEB_HTTP_PORT": web_http_port,
-            "WEB_HTTPS_PORT": web_https_port,
-            "MYSQL_MAX_ALLOWED_PACKET": env.get("MYSQL_MAX_ALLOWED_PACKET") or "512M",
-            "PWD": str(project_dir),
-            "CADDY_DIR": str(caddy_dir),
-            "DATABASE_DIR": str(database_dir),
-            **env.build_db_env_vars(db_engines, localhost),
-        }
-        docker.compose_up(env_vars, env.is_production())
+        compose_up(project_dir, docker, env, active_versions, project_path)
 
         # Sync database passwords
         db_passwords = {}
