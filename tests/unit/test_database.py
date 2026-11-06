@@ -3,6 +3,7 @@
 import sqlite3
 import tempfile
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -28,15 +29,34 @@ class TestDatabaseManager:
         # Check that domains table exists
         with sqlite3.connect(db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='domains'"
-            )
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='domains'")
             assert cursor.fetchone() is not None
 
     def test_default_is_running_is_false(self, db_path):
         """Test that default is_running is False without Docker manager."""
         db = DatabaseManager(db_path)
         assert db.is_running is False
+
+    def test_is_running_without_php_domains(self, db_path):
+        """A server with no PHP domain runs the reverse proxy alone."""
+        docker = MagicMock()
+        docker.get_containers_status.return_value = {
+            "franken-caddy-proxy": {"status": "running", "health": "N/A"}
+        }
+        db = DatabaseManager(db_path, docker)
+
+        assert db.is_running is True
+
+        db.set_domains_with_versions([("app.test", "8.4")])
+        assert db.is_running is False
+
+    def test_settings_roundtrip(self, db_path):
+        db = DatabaseManager(db_path)
+
+        assert db.get_setting("project_path") is None
+        db.set_setting("project_path", "/a")
+        db.set_setting("project_path", "/b")
+        assert db.get_setting("project_path") == "/b"
 
     def test_set_domains(self, db_path):
         """Test setting domains."""
