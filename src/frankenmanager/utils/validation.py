@@ -8,9 +8,7 @@ from ..exceptions import ValidationError
 
 # Domain name regex pattern (e.g., myapp.test, s3.api-v2.test, s3.ppd.api.test):
 # one or more labels of letters, digits and inner hyphens, then a letters-only TLD.
-DOMAIN_REGEX = re.compile(
-    r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}$"
-)
+DOMAIN_REGEX = re.compile(r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}$")
 
 # Reserved local hostnames allowed without a TLD
 LOCAL_HOSTNAMES = {"localhost"}
