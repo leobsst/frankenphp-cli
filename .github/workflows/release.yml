@@ -16,14 +16,21 @@ on:
         description: "Version to release, e.g. 1.2.0 or 1.2.0-rc.1 (a leading v is ignored)"
         required: true
         type: string
+      # GitHub has no multiline/Markdown input type: for long notes, tick
+      # "draft" and write them in the release editor before publishing it
       changelog:
         description: >-
-          Optional changelog (Markdown) for the release notes. Type \n for a
-          line break here; `gh workflow run release.yml -f changelog="$(cat notes.md)"`
-          keeps real ones. Defaults to the version's section of CHANGELOG.md.
+          Optional short changelog (Markdown, \n for a line break). For long
+          notes, tick "draft" below and edit the release on GitHub instead.
+          Defaults to the version's section of CHANGELOG.md.
         required: false
         type: string
         default: ""
+      draft:
+        description: "Create a draft release, to write the notes in GitHub's Markdown editor before publishing"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -465,7 +472,7 @@ jobs:
           tag_name: v${{ needs.authorize.outputs.version }}
           target_commitish: ${{ github.sha }}
           name: FrankenManager v${{ needs.authorize.outputs.version }}
-          draft: false
+          draft: ${{ inputs.draft }}
           prerelease: ${{ needs.authorize.outputs.prerelease == 'true' }}
           generate_release_notes: false
           files: |
