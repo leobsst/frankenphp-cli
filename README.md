@@ -26,9 +26,9 @@
 - Automated SSL certificate generation via mkcert
 - Optional extra apt/Composer packages in the PHP image, scoped per PHP version
 - FrankenPHP with Caddy reverse proxy
-- MariaDB database with health checks
-- Redis cache server
-- phpMyAdmin for database management
+- MariaDB, MySQL and/or PostgreSQL databases with health checks
+- Optional Redis cache server (`REDIS_ENABLED=true`)
+- phpMyAdmin / pgAdmin for database management, served at `https://localhost`
 - Automatic `/etc/hosts` management (passwordless after setup)
 - Optional LAN DNS server so other devices reach your domains without editing their hosts file
 - Production and development configurations
@@ -107,9 +107,9 @@ frankenmanager setup --status
 
 | Command | Description |
 |---------|-------------|
-| `frankenmanager start [domains] [--path <path>] [--php <version>]` | Start the development server with optional domains |
+| `frankenmanager start [domains] [--path <path>] [--php <version>] [--build]` | Start the development server with optional domains |
 | `frankenmanager stop` | Stop the development server |
-| `frankenmanager restart [options]` | Restart all or specific containers |
+| `frankenmanager restart [options] [--build]` | Restart all or specific containers |
 | `frankenmanager status` | Show current server and container status |
 | `frankenmanager list` | List all registered domains with their PHP versions |
 | `frankenmanager add-host <domains> [--php <version>]` | Add new domains while server is running |
@@ -141,15 +141,24 @@ frankenmanager start
 
 # Start with new domains + registered domains (merges both)
 frankenmanager start "newdomain.test"
+
+# Force a rebuild of the PHP images
+frankenmanager start --build
 ```
 
 - **domains** (optional): Space-separated list of local domains (quoted)
   - If omitted, uses domains registered in the database from previous runs
+  - If omitted on a fresh install (nothing registered yet), the server starts without any PHP container: only the reverse proxy, the databases and their admin UIs run. Add hosts afterwards with `add-host`, e.g. proxy hosts (`add-host "app.test" 127.0.0.1:3000`) that never need PHP
   - If provided, merges with registered domains (adds new ones to existing)
 - **--path** (optional): Path to the directory containing your project folders
   - Uses `DEFAULT_PROJECT_PATH` from `.env` if not specified
+  - Only required when at least one PHP domain is served
 - **--php** (optional): PHP version for the new domains (`8.2`, `8.3`, `8.4`, `8.5`)
   - Defaults to `DEFAULT_PHP_VERSION` from `.env`, then `8.3`
+  - PHP 8.2 is deprecated: it still works, but a warning is shown
+- **--build** (optional): Rebuild the PHP images even if they are up to date
+
+PHP images are not rebuilt on every start: an image is only built when it is missing or when one of its inputs changed (`Dockerfile`, entrypoint, `PHP_IMAGE_DISTRO`, `EXTRA_*_PACKAGES`, `INSTALL_PDFTK`, project path). Use `--build` to force a rebuild, e.g. to pull the latest FrankenPHP base image.
 
 ### Multi-Domain Setup
 
@@ -220,14 +229,16 @@ The server automatically:
 3. Adds entries to `/etc/hosts` (passwordless if setup was run)
 4. Creates Caddyfile configuration for each domain (HTTP-only worker sites; TLS is handled by the reverse proxy)
 5. Migrates any existing Caddyfiles to the current HTTP-only format automatically
-6. Builds and starts Docker containers
+6. Builds the PHP images that are missing or outdated (all of them with `--build`), then starts the Docker containers
 7. Syncs MariaDB password if changed
 
 ### Multi-PHP Version Support
 
 FrankenManager can run multiple PHP versions simultaneously, each in its own FrankenPHP container. Every domain is assigned a PHP version; the Caddy reverse proxy routes traffic to the correct container automatically.
 
-**Supported versions:** 8.2, 8.3, 8.4, 8.5
+**Supported versions:** 8.2 (deprecated), 8.3, 8.4, 8.5
+
+> PHP 8.2 is deprecated and will be removed in a future release. Using it, through `--php 8.2` or `DEFAULT_PHP_VERSION=8.2`, prints a warning.
 
 #### Assign a PHP version when starting
 
@@ -316,7 +327,7 @@ frankenmanager restart --database
 # or use the short alias
 frankenmanager restart --db
 
-# Restart only the Redis cache
+# Restart only the Redis cache (when REDIS_ENABLED=true)
 frankenmanager restart --cache
 
 # Restart only phpMyAdmin
@@ -332,6 +343,9 @@ frankenmanager restart --cache --pma
 
 # Restart with forced SSL regeneration (for Caddy)
 frankenmanager restart --caddy --force-ssl
+
+# Rebuild the PHP images, recreate their containers, then restart
+frankenmanager restart --build
 ```
 
 **Available container options:**
@@ -340,7 +354,7 @@ frankenmanager restart --caddy --force-ssl
 |--------|-------|-----------|-------------|
 | `--caddy` | - | webserver-and-caddy | Web server with Caddy and FrankenPHP |
 | `--database` | `--db` | franken_mariadb | MariaDB database server |
-| `--cache` | - | franken_redis | Redis cache server |
+| `--cache` | - | franken_redis | Redis cache server (when `REDIS_ENABLED=true`) |
 | `--phpmyadmin` | `--pma` | franken_phpmyadmin | phpMyAdmin database UI |
 | `--dns` | - | franken_dns | LAN DNS server (when `DNS_SERVER=true`) |
 
@@ -348,6 +362,7 @@ frankenmanager restart --caddy --force-ssl
 - When restarting `--caddy`, SSL certificates are regenerated (use `--force-ssl` to force full regeneration)
 - When restarting `--database`, the MariaDB password is automatically synced
 - Multiple containers can be restarted simultaneously by combining options
+- `restart` never rebuilds images unless `--build` is given
 
 ### Check status
 
@@ -674,7 +689,8 @@ You can override this location with the `FRANKENMANAGER_DATA_DIR` environment va
 ```
 ~/.frankenmanager/
 ├── db.sqlite               # Server state database (domains, status, timestamps)
-├── .env                    # Environment configuration
+├── .env                    # Environment configuration, including the database passwords
+├── .db_password_history_*  # Previous database root passwords (used to sync password changes)
 ├── docker-compose.yml      # Docker Compose configuration
 ├── Dockerfile              # Custom FrankenPHP image
 ├── caddy/
@@ -689,6 +705,7 @@ You can override this location with the `FRANKENMANAGER_DATA_DIR` environment va
 │   ├── config/             # Caddy config
 │   └── log/                # Access and error logs
 ├── dns/                    # LAN DNS server config and records (when DNS_SERVER=true)
+├── phpmyadmin/             # Generated phpMyAdmin config (multi-server auto-login)
 ├── php/
 │   ├── php.ini             # PHP configuration
 │   └── php-prod.ini        # Production overrides
@@ -758,7 +775,7 @@ The `.env` file is automatically created in the data directory on first run. Edi
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `APP_ENV` | `dev` | Environment (`dev` or `prod`) |
-| `DEFAULT_PHP_VERSION` | `8.3` | Default PHP version for new domains (`8.2`, `8.3`, `8.4`, `8.5`) |
+| `DEFAULT_PHP_VERSION` | `8.3` | Default PHP version for new domains (`8.2` (deprecated), `8.3`, `8.4`, `8.5`) |
 | `UID` | (auto-filled) | System user ID for file ownership |
 | `GID` | (auto-filled) | System group ID for file ownership |
 | `CERTS_DIR` | `./caddy/certs` | SSL certificates directory |
@@ -766,6 +783,13 @@ The `.env` file is automatically created in the data directory on first run. Edi
 | `EXPOSE_SERVICES` | `false` | Expose services to the network (not just localhost) |
 | `DB_PORT` | `3306` | MariaDB port |
 | `PMA_PORT` | `8080` | phpMyAdmin port |
+| `DB_ENGINES` | `mariadb` | Database engines to run, comma-separated: `mariadb`, `mysql`, `postgresql` |
+| `MYSQL_ROOT_PASSWORD` | (auto-generated) | MySQL root password |
+| `MYSQL_PORT` | `3307` | MySQL port |
+| `POSTGRES_PASSWORD` | (auto-generated) | PostgreSQL password (also the pgAdmin password) |
+| `POSTGRES_PORT` | `5432` | PostgreSQL port |
+| `PGADMIN_PORT` | `8081` | pgAdmin port |
+| `REDIS_ENABLED` | `false` | Run the Redis cache container |
 | `REDIS_PORT` | `6379` | Redis port |
 | `WEB_HTTP_PORT` | `80` | Web server HTTP port |
 | `WEB_HTTPS_PORT` | `443` | Web server HTTPS port |
@@ -805,7 +829,28 @@ EXTRA_COMPOSER_PACKAGES_84=laravel/installer
 
 Composer packages are installed with `composer global require`, so their binaries are available on the container's `PATH`.
 
-Changes take effect on the next image build — run `frankenmanager start` (or trigger a rebuild for the affected version via `add-host`/`restore-host`/`switch-php` when creating a new version container).
+Changes take effect on the next image build: images whose build options changed are rebuilt automatically on the next `frankenmanager start` (or `add-host`/`restore-host`/`switch-php` when they start a new version container). Use `frankenmanager restart --build` to apply them without stopping the server.
+
+### Databases
+
+Enable one or more engines with `DB_ENGINES` (e.g. `DB_ENGINES=mariadb,mysql,postgresql`). Their root passwords are generated on the first start and stored in the `.env` file of the data directory, i.e. `~/.frankenmanager/.env` on macOS/Linux:
+
+| Engine | User | Password variable in `~/.frankenmanager/.env` |
+|--------|------|------------------------------------------------|
+| MariaDB | `root` | `MARIADB_ROOT_PASSWORD` |
+| MySQL | `root` | `MYSQL_ROOT_PASSWORD` |
+| PostgreSQL | `POSTGRES_USER` (`postgres`) | `POSTGRES_PASSWORD` |
+
+```bash
+grep PASSWORD ~/.frankenmanager/.env
+```
+
+Changing a password in `.env` is applied to the running database on the next `start` or `restart --db` (MariaDB/MySQL).
+
+**Admin UIs (dev only).** They are started automatically depending on the enabled engines, and one of them is served at `https://localhost` (unless `localhost` is registered as a host):
+
+- **phpMyAdmin** runs as soon as MariaDB or MySQL is enabled, on `PMA_PORT` (`8080`) and at `https://localhost`. A single phpMyAdmin connects to every enabled MariaDB/MySQL server, already logged in as `root`: when both are enabled, switch between them with phpMyAdmin's server selector (MariaDB is the default).
+- **pgAdmin** runs as soon as PostgreSQL is enabled, on `PGADMIN_PORT` (`8081`). It is served at `https://localhost` when PostgreSQL is the only engine; otherwise `https://localhost` stays on phpMyAdmin. Log in with `PGADMIN_EMAIL` (`admin@admin.com`) and `POSTGRES_PASSWORD`.
 
 ### Production Mode
 
@@ -880,11 +925,14 @@ frankenmanager/
 | FrankenPHP 8.4 | `frankenphp-8.4` | 8480 (internal) | PHP 8.4 worker |
 | FrankenPHP 8.5 | `frankenphp-8.5` | 8580 (internal) | PHP 8.5 worker |
 | MariaDB | `franken_mariadb` | 3306 | Database |
-| Redis | `franken_redis` | 6379 | Cache |
-| phpMyAdmin | `franken_phpmyadmin` | 8080 | Database UI, also served at `https://localhost` in dev (unless `localhost` is registered as a host). With `DB_ENGINES=mysql` only, `localhost` serves `franken_phpmyadmin_mysql` (`PMA_MYSQL_PORT`) instead |
+| MySQL (optional) | `franken_mysql` | 3307 | Database, when `DB_ENGINES` includes `mysql` |
+| PostgreSQL (optional) | `franken_postgresql` | 5432 | Database, when `DB_ENGINES` includes `postgresql` |
+| Redis (optional) | `franken_redis` | 6379 | Cache, when `REDIS_ENABLED=true` |
+| phpMyAdmin | `franken_phpmyadmin` | 8080 | Database UI for MariaDB and MySQL (dev only), also served at `https://localhost` (see [Databases](#databases)) |
+| pgAdmin (optional) | `franken_pgadmin` | 8081 | Database UI for PostgreSQL (dev only), served at `https://localhost` when PostgreSQL is the only engine |
 | CoreDNS (optional) | `franken_dns` | 53 (LAN IP only) | LAN DNS server, when `DNS_SERVER=true` |
 
-Only containers for PHP versions that have at least one domain are started.
+Only containers for PHP versions that have at least one domain are started: with no PHP domain at all, no FrankenPHP container runs.
 
 All ports are configurable via the `.env` file. See [Environment Variables](#environment-variables-env) for details.
 
@@ -920,6 +968,15 @@ ruff check src/
 pip install pyinstaller
 python scripts/build.py --clean --test --release
 ```
+
+### Releasing
+
+Releases are published by the `Release` workflow, run manually from the GitHub Actions UI (*Actions → Release → Run workflow*) or with `gh workflow run release.yml -f version=1.2.0`. Pushing a tag does not publish anything.
+
+- Only repository admins can run it: the workflow stops right away for anyone else.
+- The release and its `v<version>` tag are created in the name of the admin who runs it, with their own token taken from the `RELEASE_TOKENS` secret, a JSON object mapping GitHub logins to fine-grained personal access tokens (this repository only, *Contents: Read and write*): `{"alice": "github_pat_..."}`.
+- `version`: `X.Y.Z`, or `X.Y.Z-suffix` for a pre-release (e.g. `1.2.0-rc.1`).
+- `changelog` (optional): Markdown inserted as the release notes' *What's Changed* section. In the UI field, type `\n` for line breaks; from the CLI, real line breaks are kept: `gh workflow run release.yml -f version=1.2.0 -f changelog="$(cat notes.md)"`. When empty, the version's section of `CHANGELOG.md` is used.
 
 ## Platform Support
 
