@@ -118,6 +118,7 @@ frankenmanager setup --status
 | `frankenmanager remove-host <domains>` | Remove domains (or alternate hosts) while server is running |
 | `frankenmanager restore-host [domains] [--php <version>]` | Restore archived domains |
 | `frankenmanager switch-php <domain> --php <version>` | Switch the PHP version for a domain (live, no downtime for other domains) |
+| `frankenmanager exec <domain> <command>` | Run a command with the domain's PHP version, from the current directory |
 | `frankenmanager reset --db \| --caddyfiles` | Reset configuration and/or Caddyfiles (requires stopped server) |
 | `frankenmanager setup` | Configure passwordless operation |
 | `frankenmanager update` | Update FrankenManager to latest version |
@@ -270,6 +271,27 @@ What happens:
 3. Restarts only the impacted containers
 4. Stops any container that no longer serves any domain
 5. Updates the reverse proxy configuration
+
+#### Run a command with a domain's PHP version
+
+The `exec` command runs a command with a domain's PHP version (and its extensions, `php.ini`, Composer...), in a one-off container of that version's PHP image. It runs from your current directory, wherever it is: the directory is mounted at the same path in the container, along with the projects root. The container uses the host network, like the PHP containers, so databases and other domains are reachable.
+
+Commands always run as the current user, so created files (`vendor/`, caches...) belong to you. On Windows, which has no Unix user IDs, `UID`/`GID` from `.env` are used (`1000:1000` if unset).
+
+```bash
+cd ~/projects/myapp
+frankenmanager exec myapp.test php -v
+frankenmanager exec myapp.test composer install
+frankenmanager exec myapp.test php artisan migrate --force
+
+# Quoted: run through a shell, so pipes and && work
+frankenmanager exec myapp.test "php artisan config:clear && php artisan cache:clear"
+```
+
+- Everything after the domain is passed to the command as-is (options such as `-v` or `--help` included).
+- Alternate hosts (aliases) use their target domain's PHP version; proxy hosts have none.
+- The server doesn't need to be running, but the PHP image of the version must have been built (`start` / `add-host`).
+- A TTY is allocated when run from a terminal (e.g. `php artisan tinker`), and `exec` exits with the command's exit code.
 
 #### Add a host to a specific PHP version
 

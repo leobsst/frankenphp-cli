@@ -327,6 +327,33 @@ def switch_php_cmd(
     switch_php(domain, php)
 
 
+@app.command(
+    name="exec",
+    context_settings={"allow_interspersed_args": False, "ignore_unknown_options": True},
+)
+def exec_cmd(
+    domain: str = typer.Argument(..., help="Domain (or alternate host) whose PHP version to use"),
+    command: list[str] = typer.Argument(
+        ..., help="Command to run, quoted or not (e.g. php artisan migrate)"
+    ),
+) -> None:
+    """Run a command with the PHP version of a domain, from the current directory.
+
+    The command runs as the current user in a one-off container of the
+    domain's PHP image, with the current directory mounted at the same path.
+    A quoted command is run through a shell, so pipes and && work.
+
+    Examples:
+        frankenmanager exec myapp.test php -v
+        frankenmanager exec myapp.test composer install
+        frankenmanager exec myapp.test "php artisan migrate --force"
+        frankenmanager exec legacy.test "php artisan config:clear && php artisan cache:clear"
+    """
+    from .commands.exec_cmd import exec_command
+
+    exec_command(domain, command)
+
+
 @app.command(name="list")
 def list_cmd() -> None:
     """List all registered domains with their PHP versions.

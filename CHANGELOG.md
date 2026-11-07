@@ -68,6 +68,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `on`/`off`/`status` actions, optional `--port` (default `9080`)
   - Serves only the public root certificate, never its private key
   - Lets other devices on the network trust locally-issued `.test` domains without an MDM/GPO push
+- `exec` - Run a command with a domain's PHP version (e.g. `exec myapp.test php artisan migrate`)
+  - Uses the domain's PHP image and `php.ini`; alternate hosts follow their target domain
+  - Runs from the current directory, wherever it is (mounted at the same path in a one-off container)
+  - Always runs as the current user (UID/GID from `.env`, or `1000:1000`, on Windows)
+  - Quoted or unquoted command: a single quoted argument goes through a shell (pipes, `&&`)
+  - Interactive TTY when run from a terminal, exits with the command's exit code
 
 #### Services
 - **FrankenPHP** (webserver-and-caddy) - PHP 8.3 with Caddy web server
