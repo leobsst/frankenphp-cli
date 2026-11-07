@@ -1,8 +1,9 @@
 """Restart command implementation."""
 
+from pathlib import Path
 from typing import Optional
 
-from ..core import dns_server
+from ..core import dns_server, dns_watcher
 from ..core.database import DatabaseManager
 from ..core.docker_manager import (
     DB_CONTAINERS,
@@ -15,7 +16,7 @@ from ..core.password_manager import PasswordManager
 from ..core.php_versions import get_container_name
 from ..core.resources import get_project_dir
 from ..core.ssl_manager import SSLManager
-from ..core.stack import compose_up, get_project_path
+from ..core.stack import compose_up, generate_compose, get_project_path
 from ..exceptions import ServerStateError
 from ..utils.logging import log_info, log_success, log_warning
 
@@ -60,6 +61,7 @@ def restart_server(
     restart_all = containers is None or len(containers) == 0
     restart_caddy = restart_all or (containers is not None and "caddy" in containers)
     restart_db = restart_all or (containers is not None and "database" in containers)
+    restart_dns = restart_all or (containers is not None and "dns" in containers)
 
     if restart_all:
         log_info("Restarting web server...")
@@ -90,6 +92,12 @@ def restart_server(
     elif build:
         log_info("No PHP domain registered: no image to build.")
 
+    if restart_dns:
+        if dns_server.is_enabled(env):
+            _refresh_dns(project_dir, docker, env, db, active_versions)
+        # Picks up DNS_SERVER / DNS_IP changes made in .env since the last start
+        dns_watcher.update(project_dir, env)
+
     # Restart containers
     if restart_all:
         docker.restart_all(
@@ -113,6 +121,8 @@ def restart_server(
                             docker.restart_container(db_container)
                 elif container_name == "cache" and not redis:
                     log_warning("Redis is disabled: set REDIS_ENABLED=true in .env to use it.")
+                elif container_name == "dns" and not dns_server.is_enabled(env):
+                    log_warning("The LAN DNS server is disabled: set DNS_SERVER=true in .env.")
                 else:
                     actual_name = CONTAINER_MAP.get(container_name)
                     if actual_name:
@@ -133,3 +143,26 @@ def restart_server(
     else:
         container_list = ", ".join(containers) if containers else ""
         log_success(f"Container(s) restarted: {container_list}")
+
+
+def _refresh_dns(
+    project_dir: Path,
+    docker: DockerManager,
+    env: EnvironmentManager,
+    db: DatabaseManager,
+    active_versions: set[str],
+) -> None:
+    """Bring the LAN DNS server in line with the current network and .env.
+
+    Rewrites the records with the current LAN IP, then recreates the DNS
+    container if its published address changed since the last start (e.g. an
+    older install bound to one IP, or DNS_LISTEN_IP edited). LAN IP changes
+    while the server runs are handled by dns_watcher, without any restart.
+    """
+    dns_server.sync(project_dir, env, db)
+    generate_compose(docker, env, active_versions)
+    env_vars = env.build_compose_env_vars(
+        project_dir, get_project_path(env, db), env.get_db_engines()
+    )
+    docker.compose_up(env_vars, env.is_production(), services=["dns"])
+    log_info(f"LAN DNS server: domains resolve to {dns_server.resolve_ip(env)}")

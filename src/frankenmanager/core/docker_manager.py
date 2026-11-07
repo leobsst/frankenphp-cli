@@ -693,8 +693,9 @@ class DockerManager:
                 ]
             )
 
-        # LAN DNS server (opt-in): published on the LAN IP only, on its own
-        # default network, since it only needs to reach the upstream resolvers
+        # LAN DNS server (opt-in): published on every interface by default
+        # (see dns_server.get_listen_address), on its own default network,
+        # since it only needs to reach the upstream resolvers
         if dns_listen:
             lines.extend(
                 [
@@ -847,12 +848,19 @@ class DockerManager:
 
         return "\n".join(lines) + "\n"
 
-    def compose_up(self, env_vars: dict[str, str], production: bool = False) -> None:
+    def compose_up(
+        self,
+        env_vars: dict[str, str],
+        production: bool = False,
+        services: Optional[list[str]] = None,
+    ) -> None:
         """Start containers using docker-compose.
 
         Args:
             env_vars: Environment variables for compose.
             production: Whether to use production compose file.
+            services: Only bring these services up to date, leaving the others
+                (and their dependencies) untouched. None for the whole stack.
 
         Raises:
             DockerError: If compose up fails.
@@ -869,8 +877,11 @@ class DockerManager:
             compose_file,
             "up",
             "-d",
-            "--remove-orphans",
         ]
+        if services:
+            cmd.extend(["--no-deps", *services])
+        else:
+            cmd.append("--remove-orphans")
 
         result = subprocess.run(
             cmd,

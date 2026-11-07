@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from ..core import dns_server
+from ..core import dns_server, dns_watcher
 from ..core.caddyfile import CaddyfileGenerator
 from ..core.database import DatabaseManager
 from ..core.docker_manager import DockerManager
@@ -239,6 +239,9 @@ def start_server(
             db_passwords["mysql"] = env.require("MYSQL_ROOT_PASSWORD")
         password_manager.sync_all_passwords(db_engines, db_passwords)
 
+        # Follow LAN IP changes (no-op unless DNS_SERVER=true and DNS_IP unset)
+        dns_watched = dns_watcher.update(project_dir, env)
+
         print()
         log_success("Web server started!")
 
@@ -248,11 +251,14 @@ def start_server(
             log_info(f"  PHP {version}: {', '.join(version_domains)}")
 
         if dns_listen:
+            dns_ip = dns_server.resolve_ip(env)
             log_info(f"LAN DNS server listening on {dns_listen}")
-            log_info("  Set it as the DNS server of your other devices (or of your router).")
-            if dns_listen.startswith("127."):
+            log_info(f"  Set {dns_ip} as the DNS server of your other devices (or of your router).")
+            if dns_watched:
+                log_info("  The domains follow this machine's LAN IP when it changes.")
+            if dns_ip.startswith("127."):
                 log_warning(
-                    "No LAN IP detected: the DNS server is only reachable from this machine. "
+                    "No LAN IP detected: the domains resolve to this machine only. "
                     "Set DNS_IP in .env to this machine's LAN IP."
                 )
 

@@ -14,7 +14,12 @@ from .utils.logging import log_error
 
 # Hidden commands spawned by the CLI itself, plus `update` which queries
 # GitHub on its own: none of them needs the startup update notification.
-_SKIP_UPDATE_CHECK_COMMANDS = {"_serve-ca-internal", "_refresh-update-cache", "update"}
+_SKIP_UPDATE_CHECK_COMMANDS = {
+    "_serve-ca-internal",
+    "_watch-dns-internal",
+    "_refresh-update-cache",
+    "update",
+}
 
 
 class _App(typer.Typer):
@@ -389,6 +394,15 @@ def serve_ca_internal_cmd(
     from .core.ca_server import run_server
 
     run_server(Path(cert_file), port)
+
+
+@app.command(name="_watch-dns-internal", hidden=True)
+def watch_dns_internal_cmd() -> None:
+    """Internal: keep the LAN DNS records on the current LAN IP, spawned by `start`."""
+    from .core import dns_watcher
+    from .core.resources import get_project_dir
+
+    dns_watcher.run(get_project_dir())
 
 
 @app.command(name="_refresh-update-cache", hidden=True)

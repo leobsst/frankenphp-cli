@@ -1,5 +1,6 @@
 """Stop command implementation."""
 
+from ..core import dns_watcher
 from ..core.database import DatabaseManager
 from ..core.docker_manager import DockerManager
 from ..core.environment import EnvironmentManager
@@ -27,6 +28,8 @@ def stop_server() -> None:
         raise ServerStateError("The server is already stopped.")
 
     log_info("Stopping web server...")
+
+    dns_watcher.stop(project_dir)
 
     # Stop containers (compose down handles all containers defined in the generated file)
     docker.compose_down(env.is_production() if env.env_path.exists() else False)

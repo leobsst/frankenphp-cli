@@ -3,7 +3,7 @@
 from rich.console import Console
 from rich.table import Table
 
-from ..core import dns_server
+from ..core import dns_server, dns_watcher
 from ..core.database import DatabaseManager
 from ..core.docker_manager import CONTAINER_NOT_FOUND, DockerManager
 from ..core.environment import EnvironmentManager
@@ -39,7 +39,13 @@ def show_status() -> None:
 
     dns_listen = dns_server.get_listen_address(env)
     if dns_listen:
-        console.print(f"LAN DNS server: {dns_listen}")
+        console.print(
+            f"LAN DNS server: {dns_listen} (domains resolve to {dns_server.resolve_ip(env)})"
+        )
+        if is_running and dns_watcher.is_needed(env):
+            watching = dns_watcher.get_running_pid(project_dir) is not None
+            state = "[green]yes[/]" if watching else "[red]no[/] (run `restart --dns`)"
+            console.print(f"  Follows LAN IP changes: {state}")
 
     # Show domains with PHP versions
     if domains_with_versions:

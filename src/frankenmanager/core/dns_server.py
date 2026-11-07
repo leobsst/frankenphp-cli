@@ -5,8 +5,9 @@ the network then use this machine as their DNS server (set by hand, or handed
 out by the router via DHCP) and reach every registered domain without editing
 their own hosts file. Every other query is forwarded to DNS_UPSTREAM.
 
-The server is a CoreDNS container. It reloads its records file on its own, so
-domain changes made while the server runs only need `sync`, not a restart.
+The server is a CoreDNS container published on every interface. It reloads its
+records file on its own, so domain changes made while the server runs only need
+`sync`, not a restart. LAN IP changes are followed the same way (see dns_watcher).
 """
 
 import ipaddress
@@ -24,6 +25,8 @@ if TYPE_CHECKING:
 CONTAINER_NAME = "franken_dns"
 IMAGE = "coredns/coredns:1.11.3"
 DEFAULT_PORT = "53"
+# Every interface, so a network change (Wi-Fi <-> Ethernet) needs no reconfiguration
+DEFAULT_LISTEN_IP = "0.0.0.0"
 # Public resolvers rather than the host's own: once the router hands this
 # server out via DHCP, the host itself may resolve through it, and forwarding
 # to the host's resolver would then loop back here.
@@ -47,10 +50,10 @@ def get_dns_dir(project_dir: Path) -> Path:
 
 
 def resolve_ip(env: "EnvironmentManager") -> str:
-    """IP the domains resolve to and the server listens on.
+    """IP every registered domain resolves to.
 
     Returns:
-        DNS_IP from .env, or the host's LAN IP when unset.
+        DNS_IP from .env, or the host's current LAN IP when unset.
 
     Raises:
         ConfigurationError: If DNS_IP is not a valid IP address.
@@ -58,24 +61,34 @@ def resolve_ip(env: "EnvironmentManager") -> str:
     configured = env.get("DNS_IP")
     if not configured:
         return get_lan_ip()
+    return _parse_ip("DNS_IP", configured)
+
+
+def _parse_ip(name: str, value: str) -> str:
     try:
-        return str(ipaddress.ip_address(configured))
+        return str(ipaddress.ip_address(value))
     except ValueError as e:
-        raise ConfigurationError(f"Invalid DNS_IP '{configured}': {e}") from e
+        raise ConfigurationError(f"Invalid {name} '{value}': {e}") from e
 
 
 def get_listen_address(env: "EnvironmentManager") -> Optional[str]:
     """Host address the DNS server is published on.
 
-    Binding the LAN IP rather than 0.0.0.0 avoids clashing with a local
-    resolver already listening on port 53 (e.g. systemd-resolved on Linux).
+    Defaults to every interface (0.0.0.0), so the server keeps answering when
+    the host switches network (Wi-Fi to Ethernet, new DHCP lease...).
+    DNS_LISTEN_IP pins it to one address instead, e.g. to avoid clashing with
+    a local resolver already bound to port 53 (systemd-resolved on Linux).
 
     Returns:
         "ip:port", or None when the DNS server is disabled.
+
+    Raises:
+        ConfigurationError: If DNS_LISTEN_IP is not a valid IP address.
     """
     if not is_enabled(env):
         return None
-    ip = resolve_ip(env)
+    configured = env.get("DNS_LISTEN_IP")
+    ip = _parse_ip("DNS_LISTEN_IP", configured) if configured else DEFAULT_LISTEN_IP
     host = f"[{ip}]" if ":" in ip else ip
     return f"{host}:{env.get('DNS_PORT') or DEFAULT_PORT}"
 

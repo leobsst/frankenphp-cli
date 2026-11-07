@@ -18,6 +18,8 @@ db.sqlite
 .DS_Store
 .env
 .ca_server.state
+.dns_watcher.pid
+.dns_watcher.log
 # Python
 .venv/
 __pycache__/
