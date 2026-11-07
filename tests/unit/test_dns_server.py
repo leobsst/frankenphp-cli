@@ -3,8 +3,7 @@
 from pathlib import Path
 
 import pytest
-
-from frankenmanager.core import dns_server
+from frankenmanager.core import dns_server, dns_watcher
 from frankenmanager.core.database import DatabaseManager
 from frankenmanager.core.docker_manager import DockerManager
 from frankenmanager.core.environment import EnvironmentManager
@@ -43,16 +42,27 @@ class TestListenAddress:
     def test_disabled_by_default(self, tmp_path):
         assert dns_server.get_listen_address(_env(tmp_path, "")) is None
 
-    def test_uses_configured_ip_and_port(self, tmp_path):
-        env = _env(tmp_path, "DNS_SERVER=true\nDNS_IP=10.0.0.5\nDNS_PORT=5353\n")
+    def test_listens_on_every_interface_by_default(self, tmp_path):
+        env = _env(tmp_path, "DNS_SERVER=true\nDNS_IP=10.0.0.5\n")
+
+        assert dns_server.get_listen_address(env) == "0.0.0.0:53"
+
+    def test_uses_configured_listen_ip_and_port(self, tmp_path):
+        env = _env(tmp_path, "DNS_SERVER=true\nDNS_LISTEN_IP=10.0.0.5\nDNS_PORT=5353\n")
 
         assert dns_server.get_listen_address(env) == "10.0.0.5:5353"
 
-    def test_rejects_invalid_ip(self, tmp_path):
-        env = _env(tmp_path, "DNS_SERVER=true\nDNS_IP=not-an-ip\n")
+    def test_rejects_invalid_listen_ip(self, tmp_path):
+        env = _env(tmp_path, "DNS_SERVER=true\nDNS_LISTEN_IP=not-an-ip\n")
 
         with pytest.raises(ConfigurationError):
             dns_server.get_listen_address(env)
+
+    def test_rejects_invalid_records_ip(self, tmp_path):
+        env = _env(tmp_path, "DNS_SERVER=true\nDNS_IP=not-an-ip\n")
+
+        with pytest.raises(ConfigurationError):
+            dns_server.resolve_ip(env)
 
 
 class TestSync:
@@ -82,3 +92,36 @@ class TestSync:
         dns_server.sync(tmp_path, env, db)
 
         assert not (tmp_path / "dns").exists()
+
+
+class TestWatcher:
+    """Records follow the host's LAN IP without restarting anything."""
+
+    @pytest.fixture
+    def project(self, tmp_path):
+        (tmp_path / ".env").write_text("DNS_SERVER=true\n")
+        DatabaseManager(tmp_path / "db.sqlite").set_domains_with_versions([("shop.test", "8.3")])
+        return tmp_path
+
+    def _records(self, project: Path) -> list[str]:
+        return (project / "dns" / "hosts").read_text().splitlines()[1:]
+
+    def test_rewrites_records_when_lan_ip_changes(self, project, monkeypatch):
+        monkeypatch.setattr(dns_watcher, "get_lan_ip", lambda: "10.0.0.7")
+        monkeypatch.setattr(dns_server, "get_lan_ip", lambda: "10.0.0.7")
+
+        assert dns_watcher.check_once(project, "10.0.0.5") == "10.0.0.7"
+        assert self._records(project) == ["10.0.0.7 shop.test"]
+
+    def test_keeps_records_while_offline(self, project, monkeypatch):
+        monkeypatch.setattr(dns_watcher, "get_lan_ip", lambda: "127.0.0.1")
+
+        assert dns_watcher.check_once(project, "10.0.0.5") == "10.0.0.5"
+        assert not (project / "dns").exists()
+
+    def test_leaves_fixed_dns_ip_alone(self, project, monkeypatch):
+        (project / ".env").write_text("DNS_SERVER=true\nDNS_IP=10.0.0.5\n")
+        monkeypatch.setattr(dns_watcher, "get_lan_ip", lambda: "10.0.0.7")
+
+        assert dns_watcher.check_once(project, "10.0.0.5") == "10.0.0.5"
+        assert not (project / "dns").exists()
