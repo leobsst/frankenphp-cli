@@ -26,6 +26,9 @@ class TestResolvePhpVersion:
     def test_domain(self, db):
         assert resolve_php_version(db, "app.test") == "8.4"
 
+    def test_php_version_given_directly(self, db):
+        assert resolve_php_version(db, "8.2") == "8.2"
+
     def test_alias_follows_target(self, db):
         assert resolve_php_version(db, "alt.test") == "8.4"
 

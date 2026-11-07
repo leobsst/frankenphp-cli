@@ -1,4 +1,4 @@
-"""Run a command with a domain's PHP version, from the current directory."""
+"""Run a command with a PHP version (or a domain's), from the current directory."""
 
 import os
 import subprocess
@@ -9,7 +9,7 @@ from typing import Optional
 from ..core.database import DatabaseManager
 from ..core.docker_manager import DockerManager
 from ..core.environment import EnvironmentManager
-from ..core.php_versions import get_image_name
+from ..core.php_versions import SUPPORTED_VERSIONS, get_image_name
 from ..core.resources import ensure_php_version_config, get_project_dir
 from ..core.stack import get_project_path
 from ..exceptions import DockerError, ValidationError
@@ -21,18 +21,21 @@ DEFAULT_GID = "1000"
 
 
 def resolve_php_version(db: DatabaseManager, domain: str) -> str:
-    """Get the PHP version serving a domain, following aliases.
+    """Get the PHP version to use: given as-is, or serving a domain (following aliases).
 
     Args:
         db: Database manager.
-        domain: Registered domain or alternate host.
+        domain: Supported PHP version (e.g. "8.4"), registered domain or alternate host.
 
     Returns:
-        The PHP version of the domain.
+        The PHP version.
 
     Raises:
         ValidationError: If the domain is unknown or has no PHP version.
     """
+    if domain in SUPPORTED_VERSIONS:
+        return domain
+
     version = db.get_domain_php_version(domain)
     if version:
         return version
@@ -173,13 +176,14 @@ def build_run_command(
 
 
 def exec_command(domain: str, command: list[str]) -> None:
-    """Run a command with the domain's PHP version, from the current directory.
+    """Run a command with a PHP version, from the current directory.
 
-    Runs as the current user in a one-off container of the domain's PHP image,
+    Runs as the current user in a one-off container of the version's PHP image,
     and exits with the command's exit code.
 
     Args:
-        domain: Registered domain or alternate host.
+        domain: PHP version (e.g. "8.4"), or registered domain / alternate host
+            whose version to use.
         command: Command to run.
     """
     if not command or not any(part.strip() for part in command):
@@ -196,11 +200,11 @@ def exec_command(domain: str, command: list[str]) -> None:
         DockerManager(project_dir).client.images.get(image)
     except DockerError:
         raise
-    except Exception:
+    except Exception as e:
         raise DockerError(
             f"Image '{image}' not found: start the server (or add a host) "
             f"with PHP {php_version} to build it."
-        )
+        ) from e
 
     ensure_php_version_config(project_dir, php_version)
     ini_dir = project_dir / "php" / php_version

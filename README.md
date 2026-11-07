@@ -118,7 +118,7 @@ frankenmanager setup --status
 | `frankenmanager remove-host <domains>` | Remove domains (or alternate hosts) while server is running |
 | `frankenmanager restore-host [domains] [--php <version>]` | Restore archived domains |
 | `frankenmanager switch-php <domain> --php <version>` | Switch the PHP version for a domain (live, no downtime for other domains) |
-| `frankenmanager exec <domain> <command>` | Run a command with the domain's PHP version, from the current directory |
+| `frankenmanager exec <domain\|version> <command>` | Run a command with a PHP version (or the domain's), from the current directory |
 | `frankenmanager reset --db \| --caddyfiles` | Reset configuration and/or Caddyfiles (requires stopped server) |
 | `frankenmanager setup` | Configure passwordless operation |
 | `frankenmanager update` | Update FrankenManager to latest version |
@@ -274,7 +274,7 @@ What happens:
 
 #### Run a command with a domain's PHP version
 
-The `exec` command runs a command with a domain's PHP version (and its extensions, `php.ini`, Composer...), in a one-off container of that version's PHP image. It runs from your current directory, wherever it is: the directory is mounted at the same path in the container, along with the projects root. The container uses the host network, like the PHP containers, so databases and other domains are reachable.
+The `exec` command runs a command with a PHP version (and its extensions, `php.ini`, Composer...), in a one-off container of that version's PHP image. The version is given directly (`8.4`) or taken from a domain. It runs from your current directory, wherever it is: the directory is mounted at the same path in the container, along with the projects root. The container uses the host network, like the PHP containers, so databases and other domains are reachable.
 
 Commands always run as the current user, so created files (`vendor/`, caches...) belong to you. On Windows, which has no Unix user IDs, `UID`/`GID` from `.env` are used (`1000:1000` if unset).
 
@@ -282,6 +282,10 @@ Commands always run as the current user, so created files (`vendor/`, caches...)
 cd ~/projects/myapp
 frankenmanager exec myapp.test php -v
 frankenmanager exec myapp.test composer install
+
+# Or a PHP version directly
+frankenmanager exec 8.4 php -v
+frankenmanager exec 8.2 composer update
 frankenmanager exec myapp.test php artisan migrate --force
 
 # Quoted: run through a shell, so pipes and && work
