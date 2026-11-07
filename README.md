@@ -361,6 +361,7 @@ frankenmanager restart --build
 **Notes:**
 - When restarting `--caddy`, SSL certificates are regenerated (use `--force-ssl` to force full regeneration)
 - When restarting `--database`, the MariaDB password is automatically synced
+- When the LAN DNS server is enabled, `restart` (and `restart --dns`) refreshes its records and applies DNS settings changed in `.env`
 - Multiple containers can be restarted simultaneously by combining options
 - `restart` never rebuilds images unless `--build` is given
 
@@ -559,7 +560,7 @@ frankenmanager trust-ca status
 frankenmanager trust-ca off
 ```
 
-`trust-ca on` prints a URL such as `http://192.168.1.42:9080/` - open it in a browser on the other device to download `rootCA.pem`, then install it as a trusted root certificate (Keychain Access on macOS, Certificate Manager on Windows, Settings > Security on Android/iOS). Turn sharing back off once the other device has installed it.
+`trust-ca on` prints a URL such as `http://192.168.1.42:9080/` - open it in a browser on the other device to download `rootCA.pem`, then install it as a trusted root certificate (Keychain Access on macOS, Certificate Manager on Windows; for iOS and Android, see [iOS and Android devices](#ios-and-android-devices)). Turn sharing back off once the other device has installed it.
 
 ### LAN DNS server
 
@@ -569,7 +570,7 @@ The `/etc/hosts` entries only exist on your machine: other devices on the networ
 DNS_SERVER=true
 ```
 
-On the next `frankenmanager start`, it resolves every registered domain (including alternate and proxy hosts) to your machine's LAN IP, and forwards every other query to `DNS_UPSTREAM`. `start` and `status` print the address it listens on, e.g. `192.168.1.42:53`.
+On the next `frankenmanager start`, it resolves every registered domain (including alternate and proxy hosts) to your machine's LAN IP, and forwards every other query to `DNS_UPSTREAM`. It listens on every network interface (`0.0.0.0:53`), so it keeps answering when you switch from Wi-Fi to Ethernet. `start` and `status` print the IP to give the other devices, e.g. `192.168.1.42`.
 
 Then point the other devices at it, either:
 - per device: set `192.168.1.42` as the DNS server in its Wi-Fi/network settings;
@@ -580,15 +581,105 @@ Domains added or removed with `add-host`, `add-alias`, `remove-host` or `restore
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `DNS_SERVER` | `false` | Run the LAN DNS server |
-| `DNS_IP` | (auto-detected) | IP the domains resolve to and the server listens on. Set it if the detected LAN IP is wrong (several network interfaces, VPN...) |
+| `DNS_IP` | (auto-detected, kept up to date) | IP the domains resolve to. Set it if the detected LAN IP is wrong (several network interfaces, VPN...): it then stays fixed |
+| `DNS_LISTEN_IP` | `0.0.0.0` | Address the server listens on. Set it only if port 53 is already taken on some address (e.g. `systemd-resolved` on Linux): use your LAN IP then |
 | `DNS_PORT` | `53` | Port the server listens on. Keep `53`: most devices can't use another port |
 | `DNS_UPSTREAM` | `1.1.1.1 9.9.9.9` | Space-separated resolvers for every other query. Use your router's or company's DNS if public resolvers are blocked |
 
 **Notes:**
-- The LAN IP is detected on `start`: if it changes (new network, DHCP lease), run `frankenmanager stop` then `start` again.
+- The domains follow your machine's LAN IP: while the server runs, a background process checks it every few seconds and, when it changes (Wi-Fi to Ethernet, new DHCP lease...), updates the records, which CoreDNS reloads on its own. Nothing to restart. `status` shows whether it is active ("Follows LAN IP changes"); it is off when `DNS_IP` is set, since the IP is then fixed.
+- The other devices still reach the DNS server through the IP you gave them: if your machine's IP changes, they lose it too. Reserve a fixed IP for your machine in your router's DHCP settings (one per network interface, e.g. Wi-Fi and Ethernet) to avoid reconfiguring them.
 - `DNS_UPSTREAM` defaults to public resolvers rather than your machine's own: if the router hands this server out, your machine may itself resolve through it, and forwarding to its own resolver would loop.
 - Anyone on your network can query this server while it runs. It only answers for your registered domains and forwards the rest, so it exposes no more than your web server already does.
 - Combine it with [`trust-ca`](#share-the-root-ca-over-your-lan) so the other devices also trust the HTTPS certificates.
+- Setting up a phone, tablet or simulator: see [iOS and Android devices](#ios-and-android-devices).
+
+### iOS and Android devices
+
+Reaching your domains from a phone, a tablet, a simulator or an emulator takes two things:
+1. **The root CA**, so HTTPS works without warnings: turn on [`trust-ca`](#share-the-root-ca-over-your-lan).
+2. **DNS**, so the device resolves your domains to your machine: turn on the [LAN DNS server](#lan-dns-server) (physical devices and Android emulator only).
+
+```bash
+frankenmanager trust-ca on     # prints the download URL, e.g. http://192.168.1.42:9080/
+frankenmanager status          # prints the DNS server IP, e.g. 192.168.1.42
+```
+
+The device and your machine must be on the same network, and your firewall must allow incoming traffic on port 53 (DNS), 9080 (`trust-ca`) and 80/443 (web). Turn `trust-ca off` once your devices have installed the CA.
+
+| | Root CA | DNS |
+|---|---|---|
+| iPhone / iPad | Profile + full trust (below) | Wi-Fi settings or router |
+| iOS Simulator | `xcrun simctl keychain` | Nothing: uses your Mac's `/etc/hosts` |
+| Android device | Settings > Install a certificate | Wi-Fi settings or router |
+| Android Emulator | Settings > Install a certificate | `-dns-server` option |
+
+#### iPhone / iPad
+
+**Root CA**
+1. Open the `trust-ca` URL in **Safari** (other browsers can't install profiles) and download `rootCA.pem`. Allow the configuration profile download.
+2. Open **Settings > General > VPN & Device Management** (or the "Profile Downloaded" entry at the top of Settings), select the mkcert profile and tap **Install**.
+3. Open **Settings > General > About > Certificate Trust Settings** and turn on full trust for the mkcert root certificate. Without this step, the certificate is installed but not trusted.
+
+**DNS**
+1. Open **Settings > Wi-Fi**, tap the **(i)** next to the current network, then **Configure DNS**.
+2. Choose **Manual**, remove the existing servers and add your machine's IP (e.g. `192.168.1.42`). This setting only applies to that Wi-Fi network: there is no equivalent on cellular data.
+3. If domains still don't resolve, turn off **Limit IP Address Tracking** and **iCloud Private Relay** for that network, and check no VPN or DNS profile (e.g. an ad blocker) is active: they bypass the configured DNS server.
+
+#### iOS Simulator
+
+The simulator uses your Mac's network stack, so the `/etc/hosts` entries already apply: no DNS setup needed. Add the root CA to the booted simulator (it is trusted straight away):
+
+```bash
+xcrun simctl keychain booted add-root-cert "$(mkcert -CAROOT)/rootCA.pem"
+```
+
+Alternatively, drag `rootCA.pem` onto the simulator window, then install and trust it as on a physical device. Repeat for each simulator (and after erasing one).
+
+#### Android device
+
+**Root CA**
+1. Open the `trust-ca` URL in the browser and download `rootCA.pem`.
+2. Open **Settings > Security & privacy > More security settings > Encryption & credentials > Install a certificate > CA certificate** (the path varies by vendor: search for "CA certificate" in Settings), confirm **Install anyway** and pick the downloaded file.
+
+This installs a *user* CA: Chrome trusts it, but apps don't by default. To test your own app against your domains, allow user CAs in its debug builds with a [network security config](https://developer.android.com/privacy-and-security/security-config):
+
+```xml
+<!-- res/xml/network_security_config.xml, referenced by
+     android:networkSecurityConfig="@xml/network_security_config" in AndroidManifest.xml -->
+<network-security-config>
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="user" />
+        </trust-anchors>
+    </debug-overrides>
+</network-security-config>
+```
+
+Firefox for Android uses its own certificate store: enable **Settings > About Firefox** (tap the logo 5 times) then **Settings > Secret Settings > Use third party CA certificates**.
+
+**DNS**
+1. Open **Settings > Network & internet > Private DNS** and set it to **Off**: a Private DNS hostname bypasses the configured DNS server.
+2. Open **Settings > Network & internet > Internet**, tap the gear next to the current Wi-Fi network, then **Edit** (pencil icon) **> Advanced options > IP settings > Static**.
+3. Keep the IP address, gateway and prefix length the device currently has, and set **DNS 1** to your machine's IP (e.g. `192.168.1.42`).
+
+Since Android only accepts a custom DNS server with a static IP, setting it in your router's DHCP settings is often simpler when several devices are involved.
+
+#### Android Emulator
+
+The emulator doesn't read your machine's `/etc/hosts`: start it with the LAN DNS server as its resolver.
+
+```bash
+emulator -avd <avd_name> -dns-server 192.168.1.42
+```
+
+List your AVDs with `emulator -list-avds` (the `emulator` binary lives in `$ANDROID_HOME/emulator`). Install the root CA by pushing it to the emulator, then follow the same Settings steps as on a physical device:
+
+```bash
+adb push "$(mkcert -CAROOT)/rootCA.pem" /sdcard/Download/
+```
+
+The same app limitation applies: use the network security config above for your own app.
 
 ### Show version
 
@@ -1023,7 +1114,7 @@ This is expected: mkcert's root CA is only trusted on the machine that installed
 
 ### Another device can't resolve the domains
 
-The domains are only in your machine's `/etc/hosts`. Turn on the [LAN DNS server](#lan-dns-server) and set it as that device's DNS server. If it still fails, check that `frankenmanager status` shows `franken_dns` running and that your firewall allows incoming traffic on port 53 (UDP and TCP).
+The domains are only in your machine's `/etc/hosts`. Turn on the [LAN DNS server](#lan-dns-server) and set it as that device's DNS server (see [iOS and Android devices](#ios-and-android-devices) for phones and emulators). If it still fails, check that `frankenmanager status` shows `franken_dns` running and that your firewall allows incoming traffic on port 53 (UDP and TCP). If your machine's IP changed (new network, Wi-Fi to Ethernet), the records follow it on their own, but update the DNS server set on the device. If `status` shows "Follows LAN IP changes: no", run `frankenmanager restart --dns`.
 
 ### mkcert not found
 
