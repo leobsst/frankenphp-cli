@@ -1,8 +1,11 @@
 """Unit tests for the optional LAN DNS server."""
 
+import plistlib
+import subprocess
 from pathlib import Path
 
 import pytest
+
 from frankenmanager.core import dns_server, dns_watcher
 from frankenmanager.core.database import DatabaseManager
 from frankenmanager.core.docker_manager import DockerManager
@@ -125,6 +128,88 @@ class TestWatcher:
 
         assert dns_watcher.check_once(project, "10.0.0.5") == "10.0.0.5"
         assert not (project / "dns").exists()
+
+
+class TestWatcherService:
+    """The watcher outlives the terminal through the OS service manager."""
+
+    @pytest.fixture
+    def home(self, tmp_path, monkeypatch):
+        home = tmp_path / "home"
+        monkeypatch.setattr(Path, "home", lambda: home)
+        monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+        monkeypatch.setattr(dns_watcher.shutil, "which", lambda _: "/usr/bin/fake")
+        monkeypatch.setattr(dns_watcher.time, "sleep", lambda _: None)
+        return home
+
+    def _fake_run(self, monkeypatch, returncode: int) -> list[list[str]]:
+        calls: list[list[str]] = []
+
+        def run(cmd, **_kwargs):
+            calls.append(cmd)
+            return subprocess.CompletedProcess(cmd, returncode, "", "")
+
+        monkeypatch.setattr(dns_watcher.subprocess, "run", run)
+        return calls
+
+    def _fake_popen(self, monkeypatch) -> list[list[str]]:
+        spawned: list[list[str]] = []
+
+        class Process:
+            pid = 4242
+
+        def popen(cmd, **_kwargs):
+            spawned.append(cmd)
+            return Process()
+
+        monkeypatch.setattr(dns_watcher.subprocess, "Popen", popen)
+        return spawned
+
+    def test_launch_agent_restarts_at_login_and_on_crash(self, tmp_path):
+        plist = plistlib.loads(dns_watcher.build_launchd_plist(tmp_path, ["fm", "_watch"]))
+
+        assert plist["ProgramArguments"] == ["fm", "_watch"]
+        assert plist["RunAtLoad"] is True
+        assert plist["KeepAlive"] is True
+
+    def test_systemd_unit_restarts_at_login_and_on_crash(self, tmp_path):
+        unit = dns_watcher.build_systemd_unit(tmp_path, ["/opt/my fm", "_watch"])
+
+        assert 'ExecStart="/opt/my fm" "_watch"' in unit
+        assert "Restart=always" in unit
+        assert "WantedBy=default.target" in unit
+
+    def test_starts_as_launch_agent_on_macos(self, tmp_path, home, monkeypatch):
+        monkeypatch.setattr(dns_watcher, "_service_backend", lambda: "launchd")
+        calls = self._fake_run(monkeypatch, 0)
+        spawned = self._fake_popen(monkeypatch)
+
+        dns_watcher.start(tmp_path)
+
+        assert dns_watcher._launchd_plist().exists()
+        assert any(cmd[:2] == ["launchctl", "bootstrap"] for cmd in calls)
+        assert spawned == []
+
+    def test_falls_back_to_detached_process_without_systemd(self, tmp_path, home, monkeypatch):
+        monkeypatch.setattr(dns_watcher, "_service_backend", lambda: "systemd")
+        self._fake_run(monkeypatch, 1)
+        spawned = self._fake_popen(monkeypatch)
+
+        dns_watcher.start(tmp_path)
+
+        assert not dns_watcher._systemd_unit_file().exists()
+        assert len(spawned) == 1
+        assert (tmp_path / ".dns_watcher.pid").read_text() == "4242"
+
+    def test_stop_removes_the_service(self, tmp_path, home, monkeypatch):
+        calls = self._fake_run(monkeypatch, 0)
+        unit = dns_watcher._systemd_unit_file()
+        unit.parent.mkdir(parents=True)
+        unit.write_text("")
+
+        assert dns_watcher.stop(tmp_path) is True
+        assert not unit.exists()
+        assert ["systemctl", "--user", "disable", "--now", dns_watcher.SYSTEMD_UNIT] in calls
 
 
 class TestServerAddresses:
