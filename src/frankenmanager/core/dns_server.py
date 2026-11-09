@@ -12,6 +12,10 @@ records file on its own, so domain changes made while the server runs only need
 
 import ipaddress
 import os
+import re
+import shutil
+import socket
+import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
@@ -34,6 +38,19 @@ DEFAULT_LISTEN_IP = "0.0.0.0"
 DEFAULT_UPSTREAM = "1.1.1.1 9.9.9.9"
 # Kept short so that removed domains stop resolving quickly on client devices
 RECORDS_TTL = 30
+# Interfaces of containers and VMs (Docker, libvirt, VirtualBox, VMware...):
+# their IPs are not reachable from the other devices on the LAN
+VIRTUAL_INTERFACE_PREFIXES = (
+    "docker",
+    "br-",
+    "veth",
+    "virbr",
+    "vboxnet",
+    "vmnet",
+    "cni",
+    "flannel",
+    "podman",
+)
 
 
 def is_enabled(env: "EnvironmentManager") -> bool:
@@ -92,6 +109,144 @@ def get_listen_address(env: "EnvironmentManager") -> Optional[str]:
     ip = _parse_ip("DNS_LISTEN_IP", configured) if configured else DEFAULT_LISTEN_IP
     host = f"[{ip}]" if ":" in ip else ip
     return f"{host}:{env.get('DNS_PORT') or DEFAULT_PORT}"
+
+
+def parse_ip_addr(output: str) -> list[tuple[str, str]]:
+    """Parse `ip -o -4 addr show` (Linux).
+
+    Returns:
+        (interface, IPv4) pairs, in output order.
+    """
+    return re.findall(r"^\d+:\s+(\S+)\s+inet\s+([\d.]+)/", output, re.M)
+
+
+def parse_ifconfig(output: str) -> list[tuple[str, str]]:
+    """Parse `ifconfig` (macOS, BSD).
+
+    Returns:
+        (interface, IPv4) pairs, in output order.
+    """
+    pairs: list[tuple[str, str]] = []
+    interface = ""
+    for line in output.splitlines():
+        header = re.match(r"^(\S+?):?\s", line)
+        if header:
+            interface = header.group(1)
+            continue
+        inet = re.match(r"^\s+inet\s+(?:addr:)?([\d.]+)", line)
+        if inet and interface:
+            pairs.append((interface, inet.group(1)))
+    return pairs
+
+
+def _run(cmd: list[str]) -> Optional[str]:
+    """Run a command, returning its output (None if missing or failed)."""
+    if not shutil.which(cmd[0]):
+        return None
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return result.stdout if result.returncode == 0 else None
+
+
+def _is_lan_candidate(interface: str, ip: str) -> bool:
+    """Whether another device could reach this host through this address."""
+    if interface.startswith(VIRTUAL_INTERFACE_PREFIXES):
+        return False
+    try:
+        address = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    return not (address.is_loopback or address.is_link_local or address.is_unspecified)
+
+
+def list_interface_ips() -> list[tuple[str, str]]:
+    """List this host's IPv4 addresses reachable from the LAN.
+
+    Reads `ip` (Linux) or `ifconfig` (macOS, BSD), falling back to the host
+    name resolution (Windows), where the interface name is unknown ("").
+    Loopback, link-local and container/VM interfaces are left out.
+
+    Returns:
+        De-duplicated (interface, IPv4) pairs.
+    """
+    output = _run(["ip", "-o", "-4", "addr", "show"])
+    if output is not None:
+        pairs = parse_ip_addr(output)
+    else:
+        output = _run(["ifconfig"])
+        if output is not None:
+            pairs = parse_ifconfig(output)
+        else:
+            try:
+                infos = socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET)
+            except OSError:
+                infos = []
+            pairs = [("", str(info[4][0])) for info in infos]
+
+    seen: set[str] = set()
+    result: list[tuple[str, str]] = []
+    for interface, ip in pairs:
+        if ip not in seen and _is_lan_candidate(interface, ip):
+            seen.add(ip)
+            result.append((interface, ip))
+    return result
+
+
+def get_server_addresses(env: "EnvironmentManager") -> list[tuple[str, str]]:
+    """Addresses the other devices can use as their DNS server.
+
+    Every LAN address of this host when listening on every interface (the
+    default), only DNS_LISTEN_IP otherwise. The address the domains resolve
+    to comes first, as it is on the network the host currently routes through.
+
+    Returns:
+        (interface, IPv4) pairs, interface "" when unknown.
+    """
+    configured = env.get("DNS_LISTEN_IP")
+    if configured and _parse_ip("DNS_LISTEN_IP", configured) != DEFAULT_LISTEN_IP:
+        return [("", _parse_ip("DNS_LISTEN_IP", configured))]
+
+    addresses = list_interface_ips()
+    records_ip = resolve_ip(env)
+    addresses.sort(key=lambda pair: pair[1] != records_ip)
+    if not addresses and not records_ip.startswith("127."):
+        addresses = [("", records_ip)]
+    return addresses
+
+
+def describe_server_addresses(addresses: list[tuple[str, str]], records_ip: str) -> list[str]:
+    """Lines telling which addresses to give the other devices as DNS server.
+
+    Shared by `start` and `status`, so both show the same list.
+
+    Args:
+        addresses: (interface, IP) pairs, from get_server_addresses().
+        records_ip: IP the domains resolve to.
+
+    Returns:
+        Lines to print (indented), empty when no address is known.
+    """
+    if not addresses:
+        return []
+    if len(addresses) == 1:
+        return [
+            f"  Set {addresses[0][1]} as the DNS server of your other devices (or of your router)."
+        ]
+
+    lines = ["  Set one of these IPs as the DNS server of your other devices (or of your router):"]
+    for interface, ip in addresses:
+        details = [interface] if interface else []
+        if ip == records_ip:
+            details.append("domains resolve to it")
+        suffix = f" ({', '.join(details)})" if details else ""
+        lines.append(f"    - {ip}{suffix}")
+    lines.append(
+        "  On the same network, set two of them as primary and secondary DNS servers: "
+        "the devices keep resolving if one interface goes down."
+    )
+    return lines
 
 
 def build_corefile(upstream: str) -> str:

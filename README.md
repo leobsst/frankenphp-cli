@@ -642,7 +642,7 @@ The `/etc/hosts` entries only exist on your machine: other devices on the networ
 DNS_SERVER=true
 ```
 
-On the next `frankenmanager start`, it resolves every registered domain (including alternate and proxy hosts) to your machine's LAN IP, and forwards every other query to `DNS_UPSTREAM`. It listens on every network interface (`0.0.0.0:53`), so it keeps answering when you switch from Wi-Fi to Ethernet. `start` and `status` print the IP to give the other devices, e.g. `192.168.1.42`.
+On the next `frankenmanager start`, it resolves every registered domain (including alternate and proxy hosts) to your machine's LAN IP, and forwards every other query to `DNS_UPSTREAM`. It listens on every network interface (`0.0.0.0:53`), so it keeps answering when you switch from Wi-Fi to Ethernet. `start` and `status` print the IP to give the other devices, e.g. `192.168.1.42`. When your machine is connected through several interfaces (e.g. Wi-Fi and Ethernet at once), `start` and `status` list every address the server answers on: on the same network, set two of them as primary and secondary DNS servers so that the devices keep resolving if one interface goes down.
 
 Then point the other devices at it, either:
 - per device: set `192.168.1.42` as the DNS server in its Wi-Fi/network settings;

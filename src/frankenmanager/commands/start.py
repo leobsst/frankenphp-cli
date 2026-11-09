@@ -267,7 +267,10 @@ def start_server(
         if dns_listen:
             dns_ip = dns_server.resolve_ip(env)
             log_info(f"LAN DNS server listening on {dns_listen}")
-            log_info(f"  Set {dns_ip} as the DNS server of your other devices (or of your router).")
+            for line in dns_server.describe_server_addresses(
+                dns_server.get_server_addresses(env), dns_ip
+            ):
+                log_info(line)
             if dns_watched:
                 log_info("  The domains follow this machine's LAN IP when it changes.")
             if dns_ip.startswith("127."):

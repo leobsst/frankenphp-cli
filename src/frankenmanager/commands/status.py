@@ -39,9 +39,12 @@ def show_status() -> None:
 
     dns_listen = dns_server.get_listen_address(env)
     if dns_listen:
-        console.print(
-            f"LAN DNS server: {dns_listen} (domains resolve to {dns_server.resolve_ip(env)})"
-        )
+        records_ip = dns_server.resolve_ip(env)
+        console.print(f"LAN DNS server: {dns_listen} (domains resolve to {records_ip})")
+        for line in dns_server.describe_server_addresses(
+            dns_server.get_server_addresses(env), records_ip
+        ):
+            console.print(line, markup=False, highlight=False)
         if is_running and dns_watcher.is_needed(env):
             watching = dns_watcher.get_running_pid(project_dir) is not None
             state = "[green]yes[/]" if watching else "[red]no[/] (run `restart --dns`)"
