@@ -24,6 +24,8 @@ import os
 import sys
 from pathlib import Path
 
+from PyInstaller.utils.hooks import collect_submodules
+
 block_cipher = None
 
 # Read code signing identity from environment variable (set during CI builds)
@@ -65,6 +67,10 @@ a = Analysis(
         "rich.progress",
         "rich.markup",
         "rich.text",
+        # Unicode width tables, loaded with import_module (e.g. unicode17-0-0)
+        # and so invisible to the static analysis: without them, every table
+        # (status, list...) fails with ModuleNotFoundError
+        *collect_submodules("rich._unicode_data"),
         # Docker SDK
         "docker",
         "docker.api",
