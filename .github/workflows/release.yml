@@ -218,6 +218,7 @@ jobs:
           # Verify signatures
           codesign --verify --verbose dist/frankenmanager/frankenmanager
           codesign --verify --verbose "$LEGACY_PATH"
+          codesign --verify --deep --strict --verbose dist/frankenmanager/FrankenManager.app
           echo "Binary signatures verified"
 
           # Parse notary credentials
@@ -256,6 +257,11 @@ jobs:
           ln -s "$TEST_DIR/frankenmanager/frankenmanager" "$TEST_DIR/bin/frankenmanager"
           "$TEST_DIR/bin/frankenmanager" --version
           "$TEST_DIR/bin/frankenmanager" --help
+
+          # macOS: the app launcher used by the LaunchAgent reaches the CLI
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            "$TEST_DIR/frankenmanager/FrankenManager.app/Contents/MacOS/frankenmanager-agent" --version
+          fi
 
           LEGACY_PATH=$(ls dist/frankenmanager-* | grep -v '\.tar\.gz$')
           chmod +x "$LEGACY_PATH"
