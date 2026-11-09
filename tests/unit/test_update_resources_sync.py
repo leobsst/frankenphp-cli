@@ -112,7 +112,8 @@ class TestSyncResourcesWith:
 
         updater._sync_resources_with(executable)
 
-        assert "next command" in capsys.readouterr().out
+        # Rich wraps long lines at the terminal width
+        assert "next command" in " ".join(capsys.readouterr().out.split())
 
     def test_silent_when_there_is_nothing_to_sync(self, executable, mocker, capsys):
         mocker.patch.object(
