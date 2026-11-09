@@ -125,3 +125,82 @@ class TestWatcher:
 
         assert dns_watcher.check_once(project, "10.0.0.5") == "10.0.0.5"
         assert not (project / "dns").exists()
+
+
+class TestServerAddresses:
+    """Every LAN address the DNS server answers on, shown on start."""
+
+    IFCONFIG = (
+        "lo0: flags=8049<UP,LOOPBACK,RUNNING,MULTICAST> mtu 16384\n"
+        "\tinet 127.0.0.1 netmask 0xff000000\n"
+        "en0: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500\n"
+        "\tinet6 fe80::1%en0 prefixlen 64 scopeid 0x4\n"
+        "\tinet 192.168.1.10 netmask 0xffffff00 broadcast 192.168.1.255\n"
+        "en1: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500\n"
+        "\tinet 169.254.3.4 netmask 0xffff0000\n"
+        "\tinet 192.168.1.11 netmask 0xffffff00 broadcast 192.168.1.255\n"
+        "bridge100: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500\n"
+    )
+    IP_ADDR = (
+        "1: lo    inet 127.0.0.1/8 scope host lo\\       valid_lft forever\n"
+        "2: eth0    inet 192.168.1.10/24 brd 192.168.1.255 scope global eth0\\       valid_lft\n"
+        "3: wlan0    inet 192.168.1.11/24 brd 192.168.1.255 scope global wlan0\\       valid_lft\n"
+        "4: docker0    inet 172.17.0.1/16 brd 172.17.255.255 scope global docker0\\       valid\n"
+    )
+
+    def test_parses_ifconfig(self):
+        assert dns_server.parse_ifconfig(self.IFCONFIG) == [
+            ("lo0", "127.0.0.1"),
+            ("en0", "192.168.1.10"),
+            ("en1", "169.254.3.4"),
+            ("en1", "192.168.1.11"),
+        ]
+
+    def test_parses_ip_addr(self):
+        assert dns_server.parse_ip_addr(self.IP_ADDR) == [
+            ("lo", "127.0.0.1"),
+            ("eth0", "192.168.1.10"),
+            ("wlan0", "192.168.1.11"),
+            ("docker0", "172.17.0.1"),
+        ]
+
+    def test_keeps_only_lan_reachable_addresses(self, monkeypatch):
+        monkeypatch.setattr(
+            dns_server, "_run", lambda cmd: self.IP_ADDR if cmd[0] == "ip" else None
+        )
+
+        assert dns_server.list_interface_ips() == [
+            ("eth0", "192.168.1.10"),
+            ("wlan0", "192.168.1.11"),
+        ]
+
+    def test_records_ip_comes_first(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            dns_server, "_run", lambda cmd: self.IFCONFIG if cmd[0] == "ifconfig" else None
+        )
+        env = _env(tmp_path, "DNS_SERVER=true\nDNS_IP=192.168.1.11\n")
+
+        assert dns_server.get_server_addresses(env) == [
+            ("en1", "192.168.1.11"),
+            ("en0", "192.168.1.10"),
+        ]
+
+    def test_only_the_pinned_listen_ip(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(dns_server, "_run", lambda cmd: self.IP_ADDR)
+        env = _env(tmp_path, "DNS_SERVER=true\nDNS_LISTEN_IP=192.168.1.11\n")
+
+        assert dns_server.get_server_addresses(env) == [("", "192.168.1.11")]
+
+    def test_describes_every_address_and_marks_the_records_one(self):
+        lines = dns_server.describe_server_addresses(
+            [("en0", "192.168.1.10"), ("en1", "192.168.1.11")], "192.168.1.10"
+        )
+
+        assert "    - 192.168.1.10 (en0, domains resolve to it)" in lines
+        assert "    - 192.168.1.11 (en1)" in lines
+        assert "primary and secondary" in lines[-1]
+
+    def test_describes_a_single_address_in_one_line(self):
+        assert dns_server.describe_server_addresses([("", "10.0.0.5")], "10.0.0.5") == [
+            "  Set 10.0.0.5 as the DNS server of your other devices (or of your router)."
+        ]
