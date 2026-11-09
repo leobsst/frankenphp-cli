@@ -14,6 +14,10 @@ LaunchAgent on macOS, a systemd user unit on Linux): it then outlives the
 terminal, comes back after a reboot or a login like the containers do
 (`restart: always`), and is relaunched if it crashes. Elsewhere (Windows, or
 no systemd user instance) it falls back to a detached background process.
+
+On macOS, release builds ship FrankenManager.app inside the bundle (see
+scripts/build.py): the LaunchAgent runs through it, so that Login Items show
+"FrankenManager" rather than the name on the code signing certificate.
 """
 
 import os
@@ -39,6 +43,15 @@ POLL_INTERVAL = 5.0
 
 LAUNCHD_LABEL = "dev.frankenmanager.dns-watcher"
 SYSTEMD_UNIT = "frankenmanager-dns-watcher.service"
+
+# Keep in sync with scripts/build.py
+MACOS_APP_NAME = "FrankenManager.app"
+MACOS_APP_BUNDLE_ID = "dev.frankenmanager"
+MACOS_APP_EXECUTABLE = "frankenmanager-agent"
+LSREGISTER = Path(
+    "/System/Library/Frameworks/CoreServices.framework/Frameworks/"
+    "LaunchServices.framework/Support/lsregister"
+)
 
 Backend = Literal["launchd", "systemd"]
 
@@ -158,21 +171,39 @@ def _start_detached(project_dir: Path) -> None:
 # --- macOS: LaunchAgent ------------------------------------------------------
 
 
-def build_launchd_plist(project_dir: Path, command: list[str]) -> bytes:
-    """LaunchAgent starting the watcher at login and relaunching it if it dies."""
-    log = str(_log_file(project_dir))
-    return plistlib.dumps(
-        {
-            "Label": LAUNCHD_LABEL,
-            "ProgramArguments": command,
-            "WorkingDirectory": str(project_dir),
-            "RunAtLoad": True,
-            "KeepAlive": True,
-            "ProcessType": "Background",
-            "StandardOutPath": "/dev/null",
-            "StandardErrorPath": log,
-        }
-    )
+def _macos_app() -> Optional[Path]:
+    """FrankenManager.app shipped next to the running binary, if any.
+
+    Absent from source installs and from builds predating the app.
+    """
+    if not getattr(sys, "frozen", False):
+        return None
+    app = Path(sys.executable).resolve().parent / MACOS_APP_NAME
+    return app if (app / "Contents" / "MacOS" / MACOS_APP_EXECUTABLE).is_file() else None
+
+
+def build_launchd_plist(project_dir: Path, command: list[str], app: Optional[Path] = None) -> bytes:
+    """LaunchAgent starting the watcher at login and relaunching it if it dies.
+
+    With `app`, the watcher is started through the app's launcher and the
+    agent is tied to the app's bundle identifier: Login Items then show the
+    app's name instead of the name on the signing certificate.
+    """
+    if app is not None:
+        command = [str(app / "Contents" / "MacOS" / MACOS_APP_EXECUTABLE), *command[1:]]
+    agent: dict[str, object] = {
+        "Label": LAUNCHD_LABEL,
+        "ProgramArguments": command,
+        "WorkingDirectory": str(project_dir),
+        "RunAtLoad": True,
+        "KeepAlive": True,
+        "ProcessType": "Background",
+        "StandardOutPath": "/dev/null",
+        "StandardErrorPath": str(_log_file(project_dir)),
+    }
+    if app is not None:
+        agent["AssociatedBundleIdentifiers"] = [MACOS_APP_BUNDLE_ID]
+    return plistlib.dumps(agent)
 
 
 def _launchd_domain() -> str:
@@ -183,11 +214,25 @@ def _launchctl(*args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["launchctl", *args], capture_output=True, text=True)
 
 
+def _register_app(app: Path) -> None:
+    """Make the app known to Launch Services, outside /Applications.
+
+    macOS resolves AssociatedBundleIdentifiers through Launch Services: an
+    app it has never seen would leave the agent shown under the signer's
+    name. Best effort: the agent works either way.
+    """
+    if LSREGISTER.is_file():
+        subprocess.run([str(LSREGISTER), "-f", str(app)], capture_output=True)
+
+
 def _start_launchd(project_dir: Path) -> bool:
     plist = _launchd_plist()
+    app = _macos_app()
+    if app is not None:
+        _register_app(app)
     try:
         plist.parent.mkdir(parents=True, exist_ok=True)
-        plist.write_bytes(build_launchd_plist(project_dir, _command()))
+        plist.write_bytes(build_launchd_plist(project_dir, _command(), app))
     except OSError:
         return False
 
