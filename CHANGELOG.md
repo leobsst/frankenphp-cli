@@ -97,6 +97,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Records kept in sync on every domain change (add, remove, restore, alias, proxy host) without restarting the container, with a short TTL (30 s)
   - Follows LAN IP changes (e.g. Wi-Fi to Ethernet) while the server runs, unless `DNS_IP` is set
     - The watcher runs as a LaunchAgent on macOS and a systemd user unit on Linux: independent of the terminal, back after a reboot or login, relaunched if it crashes (detached background process elsewhere)
+    - macOS: shown as "FrankenManager" in Login Items, through a minimal `FrankenManager.app` shipped in the bundle, instead of the name on the signing certificate
   - `start` and `status` list every LAN address the server answers on (e.g. Wi-Fi and Ethernet at once), to set as primary and secondary DNS servers on the other devices
   - `restart --dns` refreshes the records and applies the DNS settings changed in `.env`
 
