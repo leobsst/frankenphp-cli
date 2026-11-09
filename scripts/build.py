@@ -12,11 +12,15 @@ Options:
     --test     Run the built binary to verify it works
     --release  Package the bundle as dist/frankenmanager-<platform>.tar.gz and
                also build the legacy single-file dist/frankenmanager-<platform>
+
+On macOS, the bundle also gets FrankenManager.app (see build_macos_app),
+signed with $CODESIGN_IDENTITY when set.
 """
 
 import argparse
 import os
 import platform
+import plistlib
 import shutil
 import subprocess
 import sys
@@ -24,6 +28,11 @@ import tarfile
 from pathlib import Path
 
 BUNDLE_NAME = "frankenmanager"
+
+# Keep in sync with src/frankenmanager/core/dns_watcher.py
+MACOS_APP_NAME = "FrankenManager.app"
+MACOS_APP_BUNDLE_ID = "dev.frankenmanager"
+MACOS_APP_EXECUTABLE = "frankenmanager-agent"
 
 
 def get_platform_suffix() -> str:
@@ -112,6 +121,98 @@ def build_binary(project_root: Path, legacy_onefile: bool = False) -> Path:
 
     print(f"Binary built successfully: {binary_path}")
     return binary_path
+
+
+def _bundle_version() -> str:
+    """Version stamped in the app's Info.plist (CI pins it for release builds)."""
+    version = os.environ.get("SETUPTOOLS_SCM_PRETEND_VERSION")
+    if version:
+        return version
+    try:
+        from importlib.metadata import version as dist_version
+
+        return dist_version(BUNDLE_NAME)
+    except Exception:
+        return "0.0.0"
+
+
+def build_macos_app(project_root: Path, bundle_dir: Path) -> Path:
+    """Add FrankenManager.app to the onedir bundle (macOS only).
+
+    A minimal background-only app whose executable just replaces itself with
+    the CLI next to it (scripts/macos_app/launcher.c). The LAN DNS watcher's
+    LaunchAgent runs through it so that macOS shows "FrankenManager" in Login
+    Items instead of the name on the signing certificate. Living inside the
+    bundle, it ships in the same archive: install.sh and `update` need no
+    change.
+
+    Returns:
+        Path to the app.
+    """
+    print(f"Building {MACOS_APP_NAME}...")
+    app = bundle_dir / MACOS_APP_NAME
+    if app.exists():
+        shutil.rmtree(app)
+    macos_dir = app / "Contents" / "MacOS"
+    macos_dir.mkdir(parents=True)
+
+    version = _bundle_version()
+    info = {
+        "CFBundleDevelopmentRegion": "en",
+        "CFBundleDisplayName": "FrankenManager",
+        "CFBundleExecutable": MACOS_APP_EXECUTABLE,
+        "CFBundleIdentifier": MACOS_APP_BUNDLE_ID,
+        "CFBundleInfoDictionaryVersion": "6.0",
+        "CFBundleName": "FrankenManager",
+        "CFBundlePackageType": "APPL",
+        "CFBundleShortVersionString": version,
+        "CFBundleVersion": version,
+        "LSBackgroundOnly": True,
+        "LSMinimumSystemVersion": "11.0",
+    }
+    (app / "Contents" / "Info.plist").write_bytes(plistlib.dumps(info))
+
+    # Universal: the same bundle layout works on Apple silicon and Intel
+    subprocess.run(
+        [
+            "cc",
+            "-Wall",
+            "-Wextra",
+            "-O2",
+            "-arch",
+            "arm64",
+            "-arch",
+            "x86_64",
+            "-mmacosx-version-min=11.0",
+            str(project_root / "scripts" / "macos_app" / "launcher.c"),
+            "-o",
+            str(macos_dir / MACOS_APP_EXECUTABLE),
+        ],
+        check=True,
+    )
+
+    identity = os.environ.get("CODESIGN_IDENTITY")
+    if identity:
+        # Hardened runtime + secure timestamp: required for notarization
+        subprocess.run(
+            [
+                "codesign",
+                "--force",
+                "--options",
+                "runtime",
+                "--timestamp",
+                "--sign",
+                identity,
+                str(app),
+            ],
+            check=True,
+        )
+    else:
+        # Ad-hoc signature, so the bundle seal is valid on unsigned builds too
+        subprocess.run(["codesign", "--force", "--sign", "-", str(app)], check=True)
+
+    print(f"App built: {app}")
+    return app
 
 
 def package_for_release(binary_path: Path) -> Path:
@@ -214,6 +315,9 @@ def main() -> None:
         clean_build_artifacts(project_root)
 
     binary_path = build_binary(project_root, legacy_onefile=args.release)
+
+    if platform.system() == "Darwin":
+        build_macos_app(project_root, binary_path.parent)
 
     if args.test:
         if not test_binary(binary_path):
