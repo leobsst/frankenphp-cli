@@ -830,6 +830,8 @@ sudo frankenmanager update --force
 
 **Note**: the binary is installed in a system directory (e.g. `/usr/local/lib`), so `frankenmanager update` and `frankenmanager update --force` need to be run with `sudo` (or as an administrator). `frankenmanager update --check` does not modify anything and does not require elevated privileges.
 
+Once the new version is installed, `update` also refreshes the static files of your data directory (`Dockerfile`, `docker-compose*.yml`, `docker/entrypoint.sh`, `caddy/Caddyfile.worker`, `caddy/Caddyfile.template`, `php/php.ini`, `php/php-prod.ini`, `.env.example`), as your user even under `sudo`. Generated files (`caddy/Caddyfile`, `docker-compose-generated.yml`, per-site Caddyfiles) and the per-version `php/<version>/php.ini` are left untouched.
+
 Updating an install made with an older single-file binary (`/usr/local/bin/frankenmanager`) migrates it to the bundle layout: the bundle goes to `/usr/local/lib/frankenmanager` and `/usr/local/bin/frankenmanager` becomes a symlink to it.
 
 FrankenManager also notifies you when a new version is available. This check never slows a command down: the latest release found on GitHub is cached for 6 hours (in `update_check.json` in the data directory) and refreshed in the background, so a new release is announced from the next command on.

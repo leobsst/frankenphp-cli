@@ -316,6 +316,27 @@ def _sync_static_resources(app_dir: Path) -> None:
     chown_to_sudo_user(version_file)
 
 
+def sync_installed_resources() -> bool:
+    """Resync the static templates of an existing data directory right away.
+
+    Run by the freshly installed binary at the end of `update` (see
+    updater._sync_resources_with), under the same conditions as on any other
+    command: only when the installed package version changed. A data
+    directory that was never initialized is left alone, as its first command
+    extracts every resource anyway.
+
+    Returns:
+        True if the static templates are now in sync with this version.
+    """
+    if _is_development_mode():
+        return False
+    app_dir = get_app_data_dir()
+    if not (app_dir / ".initialized").exists():
+        return False
+    _sync_static_resources(app_dir)
+    return True
+
+
 def _cleanup_incorrect_directories(app_dir: Path) -> None:
     """Remove directories that should be files.
 

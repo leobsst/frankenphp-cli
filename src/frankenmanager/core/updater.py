@@ -40,6 +40,13 @@ UPDATE_RETRY_DELAY = 10 * 60
 # Hidden CLI command run in a detached process to refresh the cache.
 REFRESH_COMMAND = "_refresh-update-cache"
 
+# Hidden CLI command the newly installed binary runs at the end of `update`
+# to resync the static resources of the data directory.
+SYNC_RESOURCES_COMMAND = "_sync-resources-internal"
+SYNC_RESOURCES_TIMEOUT = 60
+# Exit code of that command when there is no data directory to sync yet
+SYNC_RESOURCES_NOTHING_TO_DO = 3
+
 
 class UpdateCheckError(Exception):
     """Raised when release information cannot be fetched or parsed."""
@@ -417,8 +424,74 @@ def update_binary(force: bool = False) -> bool:
             return False
 
     log_success(f"Successfully updated to version {latest['version']}!")
+    executable = install_dir / (f"{BUNDLE_NAME}.exe" if sys.platform == "win32" else BUNDLE_NAME)
+    _sync_resources_with(executable)
     log_info("Please restart FrankenManager to use the new version.")
     return True
+
+
+def _real_user_options(env: dict[str, str]) -> dict[str, Any]:
+    """subprocess options to run as the user who invoked sudo, if any.
+
+    `update` usually runs under sudo, while the data directory belongs to
+    the real user (and on Linux, sudo also points HOME at /root). Updates
+    `env` in place with that user's HOME and drops the SUDO_* variables.
+
+    Returns:
+        Keyword arguments for subprocess.run, empty outside sudo.
+    """
+    sudo_uid = env.get("SUDO_UID")
+    if not sudo_uid or not hasattr(os, "geteuid") or os.geteuid() != 0:
+        return {}
+
+    import pwd  # noqa: PLC0415 (Unix only)
+
+    try:
+        user = pwd.getpwuid(int(sudo_uid))
+    except (KeyError, ValueError):
+        return {}
+    gid = int(env.get("SUDO_GID") or user.pw_gid)
+
+    env.update({"HOME": user.pw_dir, "USER": user.pw_name, "LOGNAME": user.pw_name})
+    for key in ("SUDO_UID", "SUDO_GID", "SUDO_USER", "SUDO_COMMAND"):
+        env.pop(key, None)
+    return {"user": user.pw_uid, "group": gid, "extra_groups": []}
+
+
+def _sync_resources_with(executable: Path) -> None:
+    """Resync the static resources right away, with the new binary.
+
+    This (old) binary does not know which templates the new version ships,
+    so the new one does the work (resources.sync_installed_resources), as
+    the real user when run under sudo. On failure, the resync simply happens
+    on the next command, as before.
+
+    Args:
+        executable: Executable of the newly installed bundle.
+    """
+    if not executable.exists():
+        log_warning("Static files will be updated on the next command.")
+        return
+
+    env = dict(os.environ)
+    try:
+        result = subprocess.run(
+            [str(executable), "--no-update-check", SYNC_RESOURCES_COMMAND],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=SYNC_RESOURCES_TIMEOUT,
+            **_real_user_options(env),
+        )
+    except (OSError, subprocess.SubprocessError):
+        result = None
+
+    if result is not None and result.returncode == SYNC_RESOURCES_NOTHING_TO_DO:
+        return
+    if result is None or result.returncode != 0:
+        log_warning("Could not update the static files now: they will be on the next command.")
+    else:
+        log_info("Static files (Dockerfile, compose and Caddy templates, php.ini) updated.")
 
 
 def _spawn_cache_refresh() -> None:

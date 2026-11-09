@@ -64,6 +64,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `--check` option to check for updates without installing
   - `--force` option to force reinstall latest version
   - Automatic update notifications on command execution
+  - Refreshes the static files of the data directory right after installing the new version (as the real user under `sudo`)
 - `trust-ca` - Share the local mkcert root CA over the LAN (off by default)
   - `on`/`off`/`status` actions, optional `--port` (default `9080`)
   - Serves only the public root certificate, never its private key

@@ -18,6 +18,7 @@ _SKIP_UPDATE_CHECK_COMMANDS = {
     "_serve-ca-internal",
     "_watch-dns-internal",
     "_refresh-update-cache",
+    "_sync-resources-internal",
     "update",
 }
 
@@ -448,6 +449,16 @@ def watch_dns_internal_cmd() -> None:
     from .core.resources import get_project_dir
 
     dns_watcher.run(get_project_dir())
+
+
+@app.command(name="_sync-resources-internal", hidden=True)
+def sync_resources_internal_cmd() -> None:
+    """Internal: resync the static resources, run by `update` with the new binary."""
+    from .core.resources import sync_installed_resources
+    from .core.updater import SYNC_RESOURCES_NOTHING_TO_DO
+
+    if not sync_installed_resources():
+        raise typer.Exit(SYNC_RESOURCES_NOTHING_TO_DO)
 
 
 @app.command(name="_refresh-update-cache", hidden=True)
