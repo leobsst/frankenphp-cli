@@ -2,22 +2,31 @@
 
 The DNS container can't detect the host's IP itself: on macOS and Windows,
 Docker runs in a VM and containers only ever see the VM's address. So a small
-detached process on the host polls the LAN IP and, when it changes (Wi-Fi to
+process on the host polls the LAN IP and, when it changes (Wi-Fi to
 Ethernet, new DHCP lease...), rewrites the records file. CoreDNS reloads that
 file on its own within seconds: nothing has to be restarted.
 
 Only runs while the server runs, with DNS_SERVER=true and DNS_IP unset (a
 fixed DNS_IP never changes, so there is nothing to watch).
+
+The process is handed to the OS service manager when there is one (a
+LaunchAgent on macOS, a systemd user unit on Linux): it then outlives the
+terminal, comes back after a reboot or a login like the containers do
+(`restart: always`), and is relaunched if it crashes. Elsewhere (Windows, or
+no systemd user instance) it falls back to a detached background process.
 """
 
 import os
+import plistlib
+import shutil
 import signal
 import subprocess
 import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from types import FrameType
+from typing import TYPE_CHECKING, Literal, Optional
 
 from . import dns_server
 from .ca_server import get_lan_ip
@@ -28,6 +37,11 @@ if TYPE_CHECKING:
 COMMAND = "_watch-dns-internal"
 POLL_INTERVAL = 5.0
 
+LAUNCHD_LABEL = "dev.frankenmanager.dns-watcher"
+SYSTEMD_UNIT = "frankenmanager-dns-watcher.service"
+
+Backend = Literal["launchd", "systemd"]
+
 
 def _state_file(project_dir: Path) -> Path:
     return project_dir / ".dns_watcher.pid"
@@ -35,6 +49,15 @@ def _state_file(project_dir: Path) -> Path:
 
 def _log_file(project_dir: Path) -> Path:
     return project_dir / ".dns_watcher.log"
+
+
+def _launchd_plist() -> Path:
+    return Path.home() / "Library" / "LaunchAgents" / f"{LAUNCHD_LABEL}.plist"
+
+
+def _systemd_unit_file() -> Path:
+    config_home = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+    return Path(config_home) / "systemd" / "user" / SYSTEMD_UNIT
 
 
 def is_needed(env: "EnvironmentManager") -> bool:
@@ -69,45 +92,187 @@ def get_running_pid(project_dir: Path) -> Optional[int]:
     return pid
 
 
-def start(project_dir: Path) -> int:
-    """(Re)start the watcher as a detached background process.
-
-    Returns:
-        The PID of the spawned watcher.
-    """
-    stop(project_dir)
-
+def _command() -> list[str]:
     # --no-update-check is a top-level option and must precede the subcommand
     if getattr(sys, "frozen", False):
-        cmd = [sys.executable, "--no-update-check", COMMAND]
-    else:
-        cmd = [sys.executable, "-m", "frankenmanager", "--no-update-check", COMMAND]
+        return [sys.executable, "--no-update-check", COMMAND]
+    return [sys.executable, "-m", "frankenmanager", "--no-update-check", COMMAND]
 
+
+def _service_backend() -> Optional[Backend]:
+    """The OS service manager able to keep the watcher alive, if any."""
+    if sys.platform == "darwin" and shutil.which("launchctl"):
+        return "launchd"
+    if sys.platform.startswith("linux") and shutil.which("systemctl"):
+        return "systemd"
+    return None
+
+
+def start(project_dir: Path) -> None:
+    """(Re)start the watcher, as an OS service when possible."""
+    stop(project_dir)
+
+    backend = _service_backend()
+    if backend == "launchd" and _start_launchd(project_dir):
+        return
+    if backend == "systemd" and _start_systemd(project_dir):
+        return
+    _start_detached(project_dir)
+
+
+def stop(project_dir: Path) -> bool:
+    """Stop the watcher and remove its OS service. Returns False if it wasn't running."""
+    stopped = _stop_launchd() | _stop_systemd()
+
+    # Detached watcher (fallback, or started by a version without services)
+    pid = get_running_pid(project_dir)
+    if pid is not None:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass
+        stopped = True
+    _state_file(project_dir).unlink(missing_ok=True)
+    return stopped
+
+
+# --- Detached process (fallback) ---------------------------------------------
+
+
+def _start_detached(project_dir: Path) -> None:
     # stderr goes to a file, not a pipe: the launcher exits right away and the
     # watcher would otherwise die on its first write to a closed pipe
     with open(_log_file(project_dir), "wb") as log:
         process = subprocess.Popen(
-            cmd,
+            _command(),
+            cwd=project_dir,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=log,
             start_new_session=True,
         )
+    # Written here too (the watcher writes its own) so `status` sees it at once
     _state_file(project_dir).write_text(str(process.pid))
-    return process.pid
 
 
-def stop(project_dir: Path) -> bool:
-    """Stop the watcher. Returns False if it wasn't running."""
-    pid = get_running_pid(project_dir)
-    if pid is None:
-        return False
+# --- macOS: LaunchAgent ------------------------------------------------------
+
+
+def build_launchd_plist(project_dir: Path, command: list[str]) -> bytes:
+    """LaunchAgent starting the watcher at login and relaunching it if it dies."""
+    log = str(_log_file(project_dir))
+    return plistlib.dumps(
+        {
+            "Label": LAUNCHD_LABEL,
+            "ProgramArguments": command,
+            "WorkingDirectory": str(project_dir),
+            "RunAtLoad": True,
+            "KeepAlive": True,
+            "ProcessType": "Background",
+            "StandardOutPath": "/dev/null",
+            "StandardErrorPath": log,
+        }
+    )
+
+
+def _launchd_domain() -> str:
+    return f"gui/{os.getuid()}"
+
+
+def _launchctl(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(["launchctl", *args], capture_output=True, text=True)
+
+
+def _start_launchd(project_dir: Path) -> bool:
+    plist = _launchd_plist()
     try:
-        os.kill(pid, signal.SIGTERM)
+        plist.parent.mkdir(parents=True, exist_ok=True)
+        plist.write_bytes(build_launchd_plist(project_dir, _command()))
     except OSError:
-        pass
-    _state_file(project_dir).unlink(missing_ok=True)
+        return False
+
+    # Right after a bootout, launchd may still be tearing the old job down
+    # and refuse the bootstrap for a moment
+    for _ in range(5):
+        if _launchctl("bootstrap", _launchd_domain(), str(plist)).returncode == 0:
+            return True
+        time.sleep(0.5)
+    plist.unlink(missing_ok=True)
+    return False
+
+
+def _stop_launchd() -> bool:
+    plist = _launchd_plist()
+    if not plist.exists():
+        return False
+    if shutil.which("launchctl"):
+        _launchctl("bootout", f"{_launchd_domain()}/{LAUNCHD_LABEL}")
+    plist.unlink(missing_ok=True)
     return True
+
+
+# --- Linux: systemd user unit ------------------------------------------------
+
+
+def _systemd_quote(arg: str) -> str:
+    return '"' + arg.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def build_systemd_unit(project_dir: Path, command: list[str]) -> str:
+    """User unit starting the watcher at login and relaunching it if it dies."""
+    return (
+        "[Unit]\n"
+        "Description=FrankenManager LAN DNS watcher\n"
+        "\n"
+        "[Service]\n"
+        f"ExecStart={' '.join(_systemd_quote(arg) for arg in command)}\n"
+        f"WorkingDirectory={project_dir}\n"
+        "StandardOutput=null\n"
+        f"StandardError=append:{_log_file(project_dir)}\n"
+        "Restart=always\n"
+        "RestartSec=5\n"
+        "\n"
+        "[Install]\n"
+        "WantedBy=default.target\n"
+    )
+
+
+def _systemctl(*args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(["systemctl", "--user", *args], capture_output=True, text=True)
+
+
+def _start_systemd(project_dir: Path) -> bool:
+    unit = _systemd_unit_file()
+    try:
+        unit.parent.mkdir(parents=True, exist_ok=True)
+        unit.write_text(build_systemd_unit(project_dir, _command()))
+    except OSError:
+        return False
+
+    # Fails without a user systemd instance (WSL without systemd, containers...)
+    if (
+        _systemctl("daemon-reload").returncode == 0
+        and _systemctl("enable", "--now", SYSTEMD_UNIT).returncode == 0
+    ):
+        return True
+    unit.unlink(missing_ok=True)
+    _systemctl("daemon-reload")
+    return False
+
+
+def _stop_systemd() -> bool:
+    unit = _systemd_unit_file()
+    if not unit.exists():
+        return False
+    if shutil.which("systemctl"):
+        _systemctl("disable", "--now", SYSTEMD_UNIT)
+    unit.unlink(missing_ok=True)
+    if shutil.which("systemctl"):
+        _systemctl("daemon-reload")
+    return True
+
+
+# --- Watcher process ---------------------------------------------------------
 
 
 def check_once(project_dir: Path, last_ip: Optional[str]) -> Optional[str]:
@@ -140,8 +305,30 @@ def check_once(project_dir: Path, last_ip: Optional[str]) -> Optional[str]:
     return ip
 
 
+def _register_pid(project_dir: Path) -> None:
+    """Record this process's PID, and forget it when stopped.
+
+    The watcher writes it itself: when launched by launchd or systemd (at
+    login, or after a crash), nobody else knows its PID.
+    """
+    state_file = _state_file(project_dir)
+    pid = str(os.getpid())
+    state_file.write_text(pid)
+
+    def _on_sigterm(_signum: int, _frame: Optional[FrameType]) -> None:
+        try:
+            if state_file.read_text().strip() == pid:
+                state_file.unlink()
+        except OSError:
+            pass
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, _on_sigterm)
+
+
 def run(project_dir: Path) -> None:
-    """Blocking poll loop. Meant to run as its own subprocess (see `start`)."""
+    """Blocking poll loop. Meant to run as its own process (see `start`)."""
+    _register_pid(project_dir)
     last_ip: Optional[str] = None
     while True:
         try:
