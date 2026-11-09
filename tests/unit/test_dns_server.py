@@ -171,6 +171,17 @@ class TestWatcherService:
         assert plist["ProgramArguments"] == ["fm", "_watch"]
         assert plist["RunAtLoad"] is True
         assert plist["KeepAlive"] is True
+        assert "AssociatedBundleIdentifiers" not in plist
+
+    def test_launch_agent_runs_through_the_app_to_show_its_name(self, tmp_path):
+        app = tmp_path / "FrankenManager.app"
+        plist = plistlib.loads(
+            dns_watcher.build_launchd_plist(tmp_path, ["/opt/fm/frankenmanager", "_watch"], app)
+        )
+
+        launcher = app / "Contents" / "MacOS" / dns_watcher.MACOS_APP_EXECUTABLE
+        assert plist["ProgramArguments"] == [str(launcher), "_watch"]
+        assert plist["AssociatedBundleIdentifiers"] == [dns_watcher.MACOS_APP_BUNDLE_ID]
 
     def test_systemd_unit_restarts_at_login_and_on_crash(self, tmp_path):
         unit = dns_watcher.build_systemd_unit(tmp_path, ["/opt/my fm", "_watch"])
