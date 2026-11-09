@@ -1278,4 +1278,4 @@ rm -rf ~/.frankenmanager
 
 ## License
 
-MIT
+Distributed under the MIT License. See [LICENSE](LICENSE) for details.
