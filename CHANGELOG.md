@@ -22,8 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Merge registered domains with newly provided domains
   - Support for `--force-ssl` flag to regenerate certificates
 - `stop` - Stop all running containers
-- `restart` - Restart all or specific containers (caddy, database, cache, phpmyadmin, soketi)
-  - Support for individual service restart with `--caddy`, `--db`, `--cache`, `--pma`, `--soketi` flags
+- `restart` - Restart all or specific containers (caddy, database, cache, phpmyadmin, dns, soketi)
+  - Support for individual service restart with `--caddy`, `--db`, `--cache`, `--pma`, `--dns`, `--soketi` flags
   - `--force-ssl` option for certificate regeneration during restart
 - `status` - Display current server and container status with real-time Docker state
 - `add-host` - Add new domains dynamically without full server restart
@@ -90,6 +90,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Default app configured through `SOKETI_DEFAULT_APP_ID`, `SOKETI_DEFAULT_APP_KEY` and `SOKETI_DEFAULT_APP_SECRET` (generated on start when empty)
   - Reachable by the PHP apps at `127.0.0.1:SOKETI_PORT` (default `6001`), restartable with `restart --soketi`
 - **phpMyAdmin** (franken_phpmyadmin) - Web-based database management UI
+- **CoreDNS** (franken_dns) - Optional LAN DNS server (`DNS_SERVER=true`), so other devices on the network reach the `.test` domains without editing their hosts file
+  - Resolves every registered domain, alternate host, proxy host and the Soketi host to this machine's LAN IP (or `DNS_IP`); every other query is forwarded to `DNS_UPSTREAM`
+  - Listens on every network interface by default (`0.0.0.0:53`), `DNS_LISTEN_IP` and `DNS_PORT` to pin it
+  - Records kept in sync on every domain change (add, remove, restore, alias, proxy host) without restarting the container, with a short TTL (30 s)
+  - Follows LAN IP changes (e.g. Wi-Fi to Ethernet) while the server runs, unless `DNS_IP` is set
+  - `start` and `status` list every LAN address the server answers on (e.g. Wi-Fi and Ethernet at once), to set as primary and secondary DNS servers on the other devices
+  - `restart --dns` refreshes the records and applies the DNS settings changed in `.env`
 
 #### Custom Docker Image
 - Composer bundled in the custom FrankenPHP image
