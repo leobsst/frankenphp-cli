@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 from ..exceptions import ConfigurationError
+from . import soketi
 from .ca_server import get_lan_ip
 
 if TYPE_CHECKING:
@@ -160,6 +161,7 @@ def sync(project_dir: Path, env: "EnvironmentManager", db: "DatabaseManager") ->
         db.get_domains()
         + [alias for alias, _ in db.get_aliases()]
         + [domain for domain, _ in db.get_proxies()]
+        + soketi.get_domains(env)
     )
     _write_atomic(dns_dir / "Corefile", build_corefile(env.get("DNS_UPSTREAM") or DEFAULT_UPSTREAM))
     _write_atomic(dns_dir / "hosts", build_records(resolve_ip(env), domains))

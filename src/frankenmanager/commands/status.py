@@ -3,7 +3,7 @@
 from rich.console import Console
 from rich.table import Table
 
-from ..core import dns_server, dns_watcher
+from ..core import dns_server, dns_watcher, soketi
 from ..core.database import DatabaseManager
 from ..core.docker_manager import CONTAINER_NOT_FOUND, DockerManager
 from ..core.environment import EnvironmentManager
@@ -77,6 +77,7 @@ def show_status() -> None:
         production=env.is_production(),
         dns=dns_listen is not None,
         redis=env.is_redis_enabled(),
+        websocket=soketi.is_enabled(env),
     ):
         # Skip PHP containers (already shown above)
         if container.startswith("frankenphp-"):

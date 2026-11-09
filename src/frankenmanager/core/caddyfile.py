@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..utils.logging import log_info, log_success, log_warning
+from . import soketi
 from .php_versions import get_internal_ports
 
 
@@ -490,6 +491,7 @@ class CaddyfileGenerator:
         raw_proxies: Optional[list[tuple[str, str]]] = None,
         *,
         db_admin_target: Optional[str] = None,
+        websocket_target: Optional[str] = None,
     ) -> None:
         """Generate the main Caddyfile that reverse-proxies to FrankenPHP containers.
 
@@ -509,6 +511,10 @@ class CaddyfileGenerator:
                 pgAdmin, e.g. "127.0.0.1:8080"). When set, https://localhost
                 proxies to it, unless localhost is already registered as a
                 domain, alias or proxy host.
+            websocket_target: Optional Soketi upstream (e.g. "127.0.0.1:6001").
+                When set, and once its certificate exists, https://ws.frankenmanager.test
+                proxies to it (Caddy forwards WebSocket upgrades as-is), unless
+                that host is already registered as a domain, alias or proxy host.
         """
         lines: list[str] = [
             "{",
@@ -535,6 +541,12 @@ class CaddyfileGenerator:
         if db_admin_target and "localhost" not in registered:
             # Certificate generated at startup by SSLManager.generate_localhost_cert()
             lines.extend(self._build_raw_proxy_block("localhost", db_admin_target))
+        # Certificate generated on start (see soketi.get_domains): skipped until
+        # then, e.g. SOKETI_ENABLED turned on while running, so that Caddy never
+        # loads a block whose certificate is missing
+        ws_cert = caddy_dir / "certs" / f"{soketi.DOMAIN}.pem"
+        if websocket_target and soketi.DOMAIN not in registered and ws_cert.exists():
+            lines.extend(self._build_raw_proxy_block(soketi.DOMAIN, websocket_target))
 
         main_caddyfile = caddy_dir / "Caddyfile"
         main_caddyfile.write_text("\n".join(lines) + "\n")

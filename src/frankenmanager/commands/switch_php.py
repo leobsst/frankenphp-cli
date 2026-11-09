@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Optional
 
+from ..core import soketi
 from ..core.caddyfile import CaddyfileGenerator
 from ..core.database import DatabaseManager
 from ..core.docker_manager import REVERSE_PROXY_CONTAINER, DockerManager
@@ -123,6 +124,7 @@ def switch_php(domain: str, php_version: str) -> None:
             db.get_alias_entries(),
             db.get_proxies(),
             db_admin_target=env.get_db_admin_target(),
+            websocket_target=soketi.get_target(env),
         )
 
         log_info("Restarting reverse proxy...")

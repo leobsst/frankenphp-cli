@@ -153,6 +153,12 @@ def restart(
         False, "--phpmyadmin", "--pma", help="Restart only the phpMyAdmin container"
     ),
     dns: bool = typer.Option(False, "--dns", help="Restart only the LAN DNS server container"),
+    websocket: bool = typer.Option(
+        False,
+        "--soketi",
+        "--ws",
+        help="Restart only the Soketi WebSocket server (SOKETI_ENABLED=true)",
+    ),
     build: bool = typer.Option(
         False, "--build", help="Rebuild the PHP images and recreate their containers"
     ),
@@ -165,6 +171,7 @@ def restart(
         frankenmanager restart --database         # Restart only database
         frankenmanager restart --cache --pma      # Restart Redis and phpMyAdmin
         frankenmanager restart --dns              # Restart the LAN DNS server
+        frankenmanager restart --soketi           # Restart the Soketi WebSocket server
         frankenmanager restart --build            # Rebuild PHP images, then restart
     """
     from .commands.restart import restart_server
@@ -181,6 +188,8 @@ def restart(
         containers.append("phpmyadmin")
     if dns:
         containers.append("dns")
+    if websocket:
+        containers.append("soketi")
 
     restart_server(force_ssl, containers if containers else None, build)
 

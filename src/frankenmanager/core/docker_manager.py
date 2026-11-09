@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Optional
 
 from ..exceptions import DockerError
 from ..utils.logging import log_info
-from . import dns_server
+from . import dns_server, soketi
 from .php_versions import (
     DEFAULT_IMAGE_DISTRO,
     get_container_name,
@@ -150,6 +150,7 @@ class DockerManager:
         production: bool = False,
         dns: bool = False,
         redis: bool = False,
+        websocket: bool = False,
     ) -> list[str]:
         """Get the list of all container names including PHP version containers.
 
@@ -159,6 +160,7 @@ class DockerManager:
             production: Whether in production mode (no admin UIs).
             dns: Whether the LAN DNS server is enabled.
             redis: Whether the Redis cache is enabled.
+            websocket: Whether the Soketi WebSocket server is enabled.
 
         Returns:
             List of container names.
@@ -169,6 +171,8 @@ class DockerManager:
         containers = list(self.BASE_INFRA_CONTAINERS)
         if redis:
             containers.append(REDIS_CONTAINER)
+        if websocket:
+            containers.append(soketi.CONTAINER_NAME)
 
         # Add DB containers
         for engine in db_engines:
@@ -348,6 +352,7 @@ class DockerManager:
         db_engines: Optional[list[str]] = None,
         dns_listen: Optional[str] = None,
         redis: bool = False,
+        websocket: bool = False,
     ) -> Path:
         """Generate a docker-compose file with services for each PHP version.
 
@@ -358,6 +363,7 @@ class DockerManager:
             db_engines: List of database engines to include. Defaults to ["mariadb"].
             dns_listen: "ip:port" to publish the LAN DNS server on, None to leave it out.
             redis: Whether to include the Redis cache.
+            websocket: Whether to include the Soketi WebSocket server.
 
         Returns:
             Path to the generated compose file.
@@ -370,7 +376,7 @@ class DockerManager:
             (pma_dir / "config.user.inc.php").write_text(PHPMYADMIN_USER_CONFIG)
         compose_path = self.project_dir / "docker-compose-generated.yml"
         content = self._build_compose_content(
-            php_versions, production, db_engines, dns_listen, redis
+            php_versions, production, db_engines, dns_listen, redis, websocket
         )
         compose_path.write_text(content)
         return compose_path
@@ -631,6 +637,7 @@ class DockerManager:
         db_engines: Optional[list[str]] = None,
         dns_listen: Optional[str] = None,
         redis: bool = False,
+        websocket: bool = False,
     ) -> str:
         """Build the docker-compose YAML content.
 
@@ -640,6 +647,7 @@ class DockerManager:
             db_engines: List of database engines. Defaults to ["mariadb"].
             dns_listen: "ip:port" to publish the LAN DNS server on, None to leave it out.
             redis: Whether to include the Redis cache.
+            websocket: Whether to include the Soketi WebSocket server.
 
         Returns:
             YAML content as string.
@@ -692,6 +700,10 @@ class DockerManager:
                     "",
                 ]
             )
+
+        # Soketi WebSocket server (opt-in, SOKETI_ENABLED=true)
+        if websocket:
+            lines.extend(soketi.build_service(production))
 
         # LAN DNS server (opt-in): published on every interface by default
         # (see dns_server.get_listen_address), on its own default network,
@@ -941,6 +953,7 @@ class DockerManager:
         production: bool = False,
         dns: bool = False,
         redis: bool = False,
+        websocket: bool = False,
     ) -> None:
         """Restart all containers.
 
@@ -950,8 +963,11 @@ class DockerManager:
             production: Whether in production mode.
             dns: Whether the LAN DNS server is enabled.
             redis: Whether the Redis cache is enabled.
+            websocket: Whether the Soketi WebSocket server is enabled.
         """
-        for name in self.get_all_containers(php_versions, db_engines, production, dns, redis):
+        for name in self.get_all_containers(
+            php_versions, db_engines, production, dns, redis, websocket
+        ):
             self.restart_container(name)
 
     def get_containers_status(self) -> dict[str, dict[str, str]]:

@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from . import dns_server
+from . import dns_server, soketi
 from .database import DatabaseManager
 from .docker_manager import DockerManager
 from .environment import EnvironmentManager
@@ -43,6 +43,7 @@ def generate_compose(
         env.get_db_engines(),
         dns_server.get_listen_address(env),
         env.is_redis_enabled(),
+        soketi.is_enabled(env),
     )
 
 

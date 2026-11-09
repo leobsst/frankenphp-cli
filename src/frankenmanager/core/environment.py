@@ -8,6 +8,7 @@ from typing import Optional
 
 from ..exceptions import ConfigurationError
 from ..utils.logging import log_warning
+from . import soketi
 from .php_versions import resolve_image_distro
 
 
@@ -302,6 +303,7 @@ class EnvironmentManager:
             "CADDY_DIR": str(self.resolve_dir("CADDY_DIR", "./caddy", project_dir)),
             "DATABASE_DIR": str(self.resolve_dir("DATABASE_DIR", "./database", project_dir)),
             **self.build_db_env_vars(db_engines, localhost),
+            **soketi.build_compose_env_vars(self, localhost),
         }
 
     def get_certs_dir(self) -> Path:

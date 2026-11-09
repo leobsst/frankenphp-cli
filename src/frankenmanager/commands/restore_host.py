@@ -6,7 +6,7 @@ from typing import Optional
 from rich.console import Console
 from rich.table import Table
 
-from ..core import dns_server
+from ..core import dns_server, soketi
 from ..core.caddyfile import CaddyfileGenerator
 from ..core.database import DatabaseManager
 from ..core.docker_manager import DockerManager
@@ -194,6 +194,7 @@ def restore_host(domains: list[str], force_ssl: bool, php_version: Optional[str]
             db.get_alias_entries(),
             db.get_proxies(),
             db_admin_target=env.get_db_admin_target(),
+            websocket_target=soketi.get_target(env),
         )
 
         from ..core.docker_manager import REVERSE_PROXY_CONTAINER  # noqa: PLC0415

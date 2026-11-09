@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from ..core import dns_server, dns_watcher
+from ..core import dns_server, dns_watcher, soketi
 from ..core.caddyfile import CaddyfileGenerator
 from ..core.database import DatabaseManager
 from ..core.docker_manager import DockerManager
@@ -92,6 +92,10 @@ def start_server(
         password = env.generate_db_password()
         env.set("POSTGRES_PASSWORD", password)
         log_info("PostgreSQL password generated and saved to .env")
+
+    generated = soketi.ensure_credentials(env)
+    if generated:
+        log_info(f"Soketi {', '.join(generated)} generated and saved to .env")
 
     env.load()  # Reload to get any new passwords
 
@@ -182,16 +186,19 @@ def start_server(
     proxy_entries = db.get_proxies()
     proxy_domains = [domain for domain, _ in proxy_entries]
 
+    # The Soketi WebSocket host (when enabled) is served by the reverse proxy too
+    websocket_domains = [d for d in soketi.get_domains(env) if d not in all_domains]
+
     hosts_added: list[str] = []
 
     try:
-        # Generate SSL certificates (real domains + aliases + proxies)
-        ssl.generate_all(
-            all_domains + alias_domains + proxy_domains, force_ssl, env.is_production()
-        )
+        served_domains = all_domains + alias_domains + proxy_domains + websocket_domains
 
-        # Add hosts entries (real domains + aliases + proxies)
-        for domain in all_domains + alias_domains + proxy_domains:
+        # Generate SSL certificates (real domains + aliases + proxies + WebSocket)
+        ssl.generate_all(served_domains, force_ssl, env.is_production())
+
+        # Add hosts entries (real domains + aliases + proxies + WebSocket)
+        for domain in served_domains:
             hosts.add_entry("127.0.0.1", domain)
             hosts_added.append(domain)
 
@@ -209,6 +216,7 @@ def start_server(
             db.get_alias_entries(),
             proxy_entries,
             db_admin_target=env.get_db_admin_target(),
+            websocket_target=soketi.get_target(env),
         )
 
         # Save domains to database with versions
@@ -249,6 +257,12 @@ def start_server(
         for version in sorted(active_versions):
             version_domains = [d for d, v in domains_with_versions if v == version]
             log_info(f"  PHP {version}: {', '.join(version_domains)}")
+
+        if soketi.is_enabled(env):
+            log_info(
+                f"Soketi WebSocket server: wss://{soketi.DOMAIN} "
+                f"(apps: 127.0.0.1:{soketi.get_port(env)})"
+            )
 
         if dns_listen:
             dns_ip = dns_server.resolve_ip(env)

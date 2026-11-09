@@ -28,6 +28,7 @@
 - FrankenPHP with Caddy reverse proxy
 - MariaDB, MySQL and/or PostgreSQL databases with health checks
 - Optional Redis cache server (`REDIS_ENABLED=true`)
+- Optional Soketi WebSocket server (`SOKETI_ENABLED=true`), served over TLS at `wss://ws.frankenmanager.test`
 - phpMyAdmin / pgAdmin for database management, served at `https://localhost`
 - Automatic `/etc/hosts` management (passwordless after setup)
 - Optional LAN DNS server so other devices reach your domains without editing their hosts file
@@ -364,6 +365,9 @@ frankenmanager restart --pma
 # Restart only the LAN DNS server (when DNS_SERVER=true)
 frankenmanager restart --dns
 
+# Restart only the Soketi WebSocket server (when SOKETI_ENABLED=true)
+frankenmanager restart --soketi
+
 # Restart multiple specific containers
 frankenmanager restart --cache --pma
 
@@ -383,6 +387,7 @@ frankenmanager restart --build
 | `--cache` | - | franken_redis | Redis cache server (when `REDIS_ENABLED=true`) |
 | `--phpmyadmin` | `--pma` | franken_phpmyadmin | phpMyAdmin database UI |
 | `--dns` | - | franken_dns | LAN DNS server (when `DNS_SERVER=true`) |
+| `--soketi` | `--ws` | franken_soketi | Soketi WebSocket server (when `SOKETI_ENABLED=true`) |
 
 **Notes:**
 - When restarting `--caddy`, SSL certificates are regenerated (use `--force-ssl` to force full regeneration)
@@ -525,6 +530,8 @@ If the custom template at `caddy/Caddyfile.template` is unreadable, FrankenManag
 
 #### WebSocket support
 
+For a ready-to-use Pusher-compatible WebSocket server shared by every app, see [WebSocket server (Soketi)](#websocket-server-soketi). The steps below are for an app that runs its own WebSocket server.
+
 The generated Caddyfile includes commented-out WebSocket configuration. To enable it for a site:
 
 1. Open the site's Caddyfile (`~/.frankenmanager/caddy/sites/custom/<domain>_Caddyfile`)
@@ -587,6 +594,45 @@ frankenmanager trust-ca off
 ```
 
 `trust-ca on` prints a URL such as `http://192.168.1.42:9080/` - open it in a browser on the other device to download `rootCA.pem`, then install it as a trusted root certificate (Keychain Access on macOS, Certificate Manager on Windows; for iOS and Android, see [iOS and Android devices](#ios-and-android-devices)). Turn sharing back off once the other device has installed it.
+
+### WebSocket server (Soketi)
+
+Apps that need WebSockets (e.g. Laravel broadcasting with Echo) can use an optional [Soketi](https://docs.soketi.app) server, compatible with the Pusher protocol. Turn it on in `.env`:
+
+```bash
+SOKETI_ENABLED=true
+# Optional: left empty, they are generated on start and saved to .env
+SOKETI_DEFAULT_APP_ID=
+SOKETI_DEFAULT_APP_KEY=
+SOKETI_DEFAULT_APP_SECRET=
+```
+
+On the next `frankenmanager start` (a `restart` does not pick up the change), the `franken_soketi` container runs and:
+
+- browsers connect to `wss://ws.frankenmanager.test` (port 443): the reverse proxy terminates TLS with a mkcert certificate and forwards the WebSocket traffic to Soketi. The hosts entry (and the LAN DNS record, when `DNS_SERVER=true`) is added for you;
+- PHP apps publish events to its HTTP API at `127.0.0.1:6001` (`SOKETI_PORT`), with no TLS.
+
+Every app shares the default app: use its credentials in each project. For a Laravel app (`BROADCAST_CONNECTION=pusher`, or `BROADCAST_DRIVER` before Laravel 11):
+
+```bash
+PUSHER_APP_ID=<SOKETI_DEFAULT_APP_ID>
+PUSHER_APP_KEY=<SOKETI_DEFAULT_APP_KEY>
+PUSHER_APP_SECRET=<SOKETI_DEFAULT_APP_SECRET>
+# Server side: PHP -> Soketi
+PUSHER_HOST=127.0.0.1
+PUSHER_PORT=6001
+PUSHER_SCHEME=http
+PUSHER_APP_CLUSTER=mt1
+
+# Browser side: Laravel Echo -> reverse proxy
+VITE_PUSHER_APP_KEY="${PUSHER_APP_KEY}"
+VITE_PUSHER_HOST=ws.frankenmanager.test
+VITE_PUSHER_PORT=443
+VITE_PUSHER_SCHEME=https
+VITE_PUSHER_APP_CLUSTER="${PUSHER_APP_CLUSTER}"
+```
+
+Changing a credential in `.env` takes effect on the next `stop`/`start`. Turning Soketi off removes the container and the `ws.frankenmanager.test` host on the next `start`.
 
 ### LAN DNS server
 
@@ -908,6 +954,11 @@ The `.env` file is automatically created in the data directory on first run. Edi
 | `PGADMIN_PORT` | `8081` | pgAdmin port |
 | `REDIS_ENABLED` | `false` | Run the Redis cache container |
 | `REDIS_PORT` | `6379` | Redis port |
+| `SOKETI_ENABLED` | `false` | Run the Soketi WebSocket server (see [WebSocket server (Soketi)](#websocket-server-soketi)) |
+| `SOKETI_PORT` | `6001` | Soketi port the PHP apps reach (browsers use `wss://ws.frankenmanager.test`) |
+| `SOKETI_DEFAULT_APP_ID` | (auto-generated) | Soketi default app ID |
+| `SOKETI_DEFAULT_APP_KEY` | (auto-generated) | Soketi default app key |
+| `SOKETI_DEFAULT_APP_SECRET` | (auto-generated) | Soketi default app secret |
 | `WEB_HTTP_PORT` | `80` | Web server HTTP port |
 | `WEB_HTTPS_PORT` | `443` | Web server HTTPS port |
 | `DNS_SERVER` | `false` | Run the LAN DNS server (see [LAN DNS server](#lan-dns-server)) |
@@ -1045,6 +1096,7 @@ frankenmanager/
 | MySQL (optional) | `franken_mysql` | 3307 | Database, when `DB_ENGINES` includes `mysql` |
 | PostgreSQL (optional) | `franken_postgresql` | 5432 | Database, when `DB_ENGINES` includes `postgresql` |
 | Redis (optional) | `franken_redis` | 6379 | Cache, when `REDIS_ENABLED=true` |
+| Soketi (optional) | `franken_soketi` | 6001 | WebSocket server, when `SOKETI_ENABLED=true`, served at `wss://ws.frankenmanager.test` |
 | phpMyAdmin | `franken_phpmyadmin` | 8080 | Database UI for MariaDB and MySQL (dev only), also served at `https://localhost` (see [Databases](#databases)) |
 | pgAdmin (optional) | `franken_pgadmin` | 8081 | Database UI for PostgreSQL (dev only), served at `https://localhost` when PostgreSQL is the only engine |
 | CoreDNS (optional) | `franken_dns` | 53 (LAN IP only) | LAN DNS server, when `DNS_SERVER=true` |

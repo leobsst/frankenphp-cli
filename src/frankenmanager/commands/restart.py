@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Optional
 
-from ..core import dns_server, dns_watcher
+from ..core import dns_server, dns_watcher, soketi
 from ..core.database import DatabaseManager
 from ..core.docker_manager import (
     DB_CONTAINERS,
@@ -25,6 +25,7 @@ CONTAINER_MAP = {
     "cache": REDIS_CONTAINER,
     "phpmyadmin": PHPMYADMIN_CONTAINER,
     "dns": dns_server.CONTAINER_NAME,
+    "soketi": soketi.CONTAINER_NAME,
 }
 
 
@@ -36,7 +37,8 @@ def restart_server(
     Args:
         force_ssl: Whether to force SSL certificate regeneration.
         containers: List of container names to restart (None = restart all).
-                   Valid values: "caddy", "database", "cache", "phpmyadmin", "dns"
+                   Valid values: "caddy", "database", "cache", "phpmyadmin", "dns",
+                   "soketi"
         build: Rebuild the PHP images and recreate their containers first.
     """
     project_dir = get_project_dir()
@@ -71,13 +73,14 @@ def restart_server(
 
     # Regenerate SSL if requested and restarting Caddy
     if restart_caddy:
-        domains = db.get_domains()
+        domains = db.get_domains() + soketi.get_domains(env)
         print()
         log_info("Generating SSL certificates...")
         ssl.generate_all(domains, force_ssl, env.is_production())
 
     db_engines = env.get_db_engines()
     redis = env.is_redis_enabled()
+    websocket = soketi.is_enabled(env)
 
     if build and active_versions:
         custom_path = get_project_path(env, db)
@@ -101,7 +104,12 @@ def restart_server(
     # Restart containers
     if restart_all:
         docker.restart_all(
-            active_versions, db_engines, env.is_production(), dns_server.is_enabled(env), redis
+            active_versions,
+            db_engines,
+            env.is_production(),
+            dns_server.is_enabled(env),
+            redis,
+            websocket,
         )
     else:
         if containers:
@@ -121,6 +129,8 @@ def restart_server(
                             docker.restart_container(db_container)
                 elif container_name == "cache" and not redis:
                     log_warning("Redis is disabled: set REDIS_ENABLED=true in .env to use it.")
+                elif container_name == "soketi" and not websocket:
+                    log_warning("Soketi is disabled: set SOKETI_ENABLED=true in .env to use it.")
                 elif container_name == "dns" and not dns_server.is_enabled(env):
                     log_warning("The LAN DNS server is disabled: set DNS_SERVER=true in .env.")
                 else:

@@ -22,8 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Merge registered domains with newly provided domains
   - Support for `--force-ssl` flag to regenerate certificates
 - `stop` - Stop all running containers
-- `restart` - Restart all or specific containers (caddy, database, cache, phpmyadmin)
-  - Support for individual service restart with `--caddy`, `--db`, `--cache`, `--pma` flags
+- `restart` - Restart all or specific containers (caddy, database, cache, phpmyadmin, soketi)
+  - Support for individual service restart with `--caddy`, `--db`, `--cache`, `--pma`, `--soketi` flags
   - `--force-ssl` option for certificate regeneration during restart
 - `status` - Display current server and container status with real-time Docker state
 - `add-host` - Add new domains dynamically without full server restart
@@ -85,6 +85,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Automatic password sync between containers
   - Configurable max packet size (default 512M)
 - **Redis** (franken_redis) - Cache server
+- **Soketi** (franken_soketi) - Optional Pusher-compatible WebSocket server (`SOKETI_ENABLED=true`)
+  - Served over TLS by the reverse proxy at `wss://ws.frankenmanager.test` (certificate, hosts entry and LAN DNS record handled automatically)
+  - Default app configured through `SOKETI_DEFAULT_APP_ID`, `SOKETI_DEFAULT_APP_KEY` and `SOKETI_DEFAULT_APP_SECRET` (generated on start when empty)
+  - Reachable by the PHP apps at `127.0.0.1:SOKETI_PORT` (default `6001`), restartable with `restart --soketi`
 - **phpMyAdmin** (franken_phpmyadmin) - Web-based database management UI
 
 #### Custom Docker Image

@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Optional
 
-from ..core import dns_server
+from ..core import dns_server, soketi
 from ..core.caddyfile import CaddyfileGenerator
 from ..core.database import DatabaseManager
 from ..core.docker_manager import DockerManager
@@ -179,6 +179,7 @@ def remove_host(domains: list[str]) -> None:
             db.get_alias_entries(),
             db.get_proxies(),
             db_admin_target=env.get_db_admin_target(),
+            websocket_target=soketi.get_target(env),
         )
 
         # Keep the LAN DNS server records in step (no-op unless DNS_SERVER=true)

@@ -1,6 +1,6 @@
 """Stop command implementation."""
 
-from ..core import dns_watcher
+from ..core import dns_watcher, soketi
 from ..core.database import DatabaseManager
 from ..core.docker_manager import DockerManager
 from ..core.environment import EnvironmentManager
@@ -42,6 +42,13 @@ def stop_server() -> None:
             hosts.remove_entry("127.0.0.1", domain)
         except Exception:
             pass  # Ignore errors when removing hosts entries
+
+    # Soketi host, also when SOKETI_ENABLED was turned off while running
+    try:
+        if hosts.has_entry("127.0.0.1", soketi.DOMAIN):
+            hosts.remove_entry("127.0.0.1", soketi.DOMAIN)
+    except Exception:
+        pass
 
     print()
     log_success("Web server stopped!")
