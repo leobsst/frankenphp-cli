@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -86,14 +87,14 @@ func TestSetupUnix(t *testing.T) {
 	if data, _ := os.ReadFile(m.HelperPath); string(data) != HelperScript(m.HostsPath) {
 		t.Error("helper not written")
 	}
-	if info, _ := os.Stat(m.HelperPath); info.Mode().Perm() != 0o755 {
+	if info, _ := os.Stat(m.HelperPath); runtime.GOOS != "windows" && info.Mode().Perm() != 0o755 { // Windows keeps no Unix mode
 		t.Errorf("helper mode %v", info.Mode())
 	}
 	data, _ := os.ReadFile(m.SudoersPath)
 	if string(data) != SudoersContent("leo", m.HelperPath, m.SudoersPath) {
 		t.Errorf("sudoers:\n%s", data)
 	}
-	if info, _ := os.Stat(m.SudoersPath); info.Mode().Perm() != 0o440 {
+	if info, _ := os.Stat(m.SudoersPath); runtime.GOOS != "windows" && info.Mode().Perm() != 0o440 {
 		t.Errorf("sudoers mode %v", info.Mode())
 	}
 	entries, _ := os.ReadDir(filepath.Dir(m.SudoersPath))

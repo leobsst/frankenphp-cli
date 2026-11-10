@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -336,7 +337,7 @@ func TestUpdate(t *testing.T) {
 	if got := installed(t, dir); !mapsEqual(got, want) {
 		t.Errorf("installed:\n%v", got)
 	}
-	if info, _ := os.Stat(u.Exe); info.Mode().Perm() != 0o755 {
+	if info, _ := os.Stat(u.Exe); runtime.GOOS != "windows" && info.Mode().Perm() != 0o755 { // Windows keeps no Unix mode
 		t.Errorf("exe mode = %v", info.Mode())
 	}
 	if synced != u.Exe {
@@ -439,8 +440,9 @@ func TestUpdateDownloadAndPermissionErrors(t *testing.T) {
 		t.Errorf("log = %v", log.Lines)
 	}
 
-	if os.Geteuid() == 0 {
-		t.Skip("root ignores directory permissions")
+	// A read-only directory: root ignores it, Windows has no such mode
+	if os.Geteuid() == 0 || runtime.GOOS == "windows" {
+		t.Skip("directory permissions not enforced")
 	}
 	dir := filepath.Dir(u.Exe)
 	if err := os.Chmod(dir, 0o555); err != nil {
@@ -457,6 +459,9 @@ func TestUpdateDownloadAndPermissionErrors(t *testing.T) {
 
 // A failed swap puts back what it had already replaced.
 func TestSwapRollback(t *testing.T) {
+	if os.Geteuid() == 0 || runtime.GOOS == "windows" {
+		t.Skip("directory permissions not enforced (root, Windows)")
+	}
 	dir := t.TempDir()
 	bundle, target := filepath.Join(dir, "bundle"), filepath.Join(dir, "install")
 	writeFiles(t, bundle, map[string]string{"a": "new a", "b/file": "new b"})

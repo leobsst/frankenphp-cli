@@ -1,0 +1,4 @@
+# Check out every text file with LF line endings, on Windows too: the
+# testdata reference files and the resources embedded in the executable
+# must stay byte for byte what the code writes and ships.
+* text=auto eol=lf

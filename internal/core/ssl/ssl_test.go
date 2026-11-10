@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -80,7 +81,7 @@ func TestGenerateAll(t *testing.T) {
 	}
 	entries, _ := os.ReadDir(m.Dir)
 	for _, e := range entries {
-		if info, _ := e.Info(); info.Mode().Perm() != 0o750 {
+		if info, _ := e.Info(); runtime.GOOS != "windows" && info.Mode().Perm() != 0o750 { // Windows keeps no Unix mode
 			t.Errorf("%s mode %v", e.Name(), info.Mode())
 		}
 	}

@@ -76,7 +76,7 @@ func TestGenerateCA(t *testing.T) {
 		t.Error(err)
 	}
 	for name, mode := range map[string]os.FileMode{"rootCA.pem": 0o644, "rootCA-key.pem": 0o600} {
-		if info, _ := os.Stat(filepath.Join(dir, name)); info.Mode().Perm() != mode {
+		if info, _ := os.Stat(filepath.Join(dir, name)); runtime.GOOS != "windows" && info.Mode().Perm() != mode { // Windows keeps no Unix mode
 			t.Errorf("%s mode %v", name, info.Mode())
 		}
 	}
@@ -175,7 +175,7 @@ func TestInstallLinux(t *testing.T) {
 			if got != "https://github.com/FiloSottile/mkcert/releases/download/v1.4.4/mkcert-v1.4.4-linux-"+tc.asset {
 				t.Errorf("url = %s", got)
 			}
-			if info, err := os.Stat(filepath.Join(in.BinDir, "mkcert")); err != nil || info.Mode().Perm() != 0o755 {
+			if info, err := os.Stat(filepath.Join(in.BinDir, "mkcert")); err != nil || (runtime.GOOS != "windows" && info.Mode().Perm() != 0o755) {
 				t.Errorf("mkcert not installed: %v", err)
 			}
 			want := []string{"sudo apt-get update", "sudo apt-get install -y libnss3-tools"}

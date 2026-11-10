@@ -2,14 +2,15 @@ package cli
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/leobsst/frankenphp-cli/internal/core/docker"
+	"github.com/leobsst/frankenphp-cli/internal/core/env"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
 )
 
@@ -40,7 +41,7 @@ func TestExecMounts(t *testing.T) {
 	}
 	link := filepath.Join(root, "link")
 	if err := os.Symlink(real, link); err != nil {
-		t.Fatal(err)
+		t.Skip("symlinks not available:", err) // Windows without the privilege
 	}
 	other := filepath.Join(root, "other")
 
@@ -87,12 +88,12 @@ func TestExec(t *testing.T) {
 	}
 	want := []string{
 		"docker", "run", "--rm", "-i", "--network", "host",
-		"--user", fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()), "--entrypoint", "",
+		"--user", execUser(runtime.GOOS, e.loadEnv()), "--entrypoint", "",
 		"-e", "HOME=/tmp", "-e", "COMPOSER_CACHE_DIR=/tmp/composer-cache",
 		"-e", "GIT_CONFIG_COUNT=1", "-e", "GIT_CONFIG_KEY_0=safe.directory", "-e", "GIT_CONFIG_VALUE_0=*",
-		"-v", cwd + ":" + cwd,
+		"-v", cwd + ":" + containerPath(cwd),
 		"-v", filepath.Join(e.dir, "php", "8.4", "php.ini") + ":/usr/local/etc/php/php.ini:ro",
-		"-w", cwd, "custom-frankenphp:8.4", "php", "-v", "--help",
+		"-w", containerPath(cwd), "custom-frankenphp:8.4", "php", "-v", "--help",
 	}
 	if !slices.Equal(*ran, want) {
 		t.Errorf("docker run:\n%s\nwant:\n%s", strings.Join(*ran, " "), strings.Join(want, " "))
@@ -122,7 +123,7 @@ func TestExecDomainAliasAndShell(t *testing.T) {
 	got := strings.Join(*ran, " ")
 	for _, part := range []string{
 		"docker run --rm -i -t --network host",
-		"-v " + projects + ":" + projects + " -v ",
+		"-v " + projects + ":" + containerPath(projects) + " -v ",
 		":/usr/local/etc/php/conf.d/99-production.ini:ro",
 		"custom-frankenphp:8.3 sh -c php artisan migrate && php artisan cache:clear",
 	} {
@@ -188,7 +189,7 @@ func TestExecDomain(t *testing.T) {
 		t.Errorf("code %d", code)
 	}
 	if got := strings.Join(*ran, " "); !strings.Contains(got, " custom-frankenphp:8.5 php -v") ||
-		!strings.Contains(got, "/php/8.5/php.ini:/usr/local/etc/php/php.ini:ro") {
+		!strings.Contains(got, filepath.Join("php", "8.5", "php.ini")+":/usr/local/etc/php/php.ini:ro") {
 		t.Errorf("docker run: %s", got)
 	}
 }
@@ -212,4 +213,14 @@ func TestExecAfterRootOption(t *testing.T) {
 	if len(e.notified) != 1 {
 		t.Errorf("notified %v", e.notified)
 	}
+}
+
+// loadEnv reads the .env of the test data directory.
+func (e *testEnv) loadEnv() *env.Env {
+	e.t.Helper()
+	v := env.New(filepath.Join(e.dir, ".env"), "")
+	if err := v.Load(); err != nil {
+		e.t.Fatal(err)
+	}
+	return v
 }

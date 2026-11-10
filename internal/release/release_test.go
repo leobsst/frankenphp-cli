@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -107,7 +108,7 @@ func TestStageAndPack(t *testing.T) {
 			if !h.ModTime.Equal(mtime) || h.Uid != 0 || h.Gid != 0 || h.Uname != "" {
 				t.Errorf("%s: %v %d:%d %q", h.Name, h.ModTime, h.Uid, h.Gid, h.Uname)
 			}
-			if h.Name == "frankenmanager/"+target.Exe() && h.Mode != 0o755 {
+			if h.Name == "frankenmanager/"+target.Exe() && runtime.GOOS != "windows" && h.Mode != 0o755 { // Windows keeps no execute bit
 				t.Errorf("executable mode %o", h.Mode)
 			}
 		}

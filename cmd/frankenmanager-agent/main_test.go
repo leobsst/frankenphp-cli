@@ -27,7 +27,7 @@ func TestCLIPath(t *testing.T) {
 	// Reached through a symlink: the real path decides, like realpath()
 	link := filepath.Join(root, "agent-link")
 	if err := os.Symlink(agent, link); err != nil {
-		t.Fatal(err)
+		t.Skip("symlinks not available:", err) // Windows without the privilege
 	}
 	if got, err := cliPath(link); got != want || err != nil {
 		t.Errorf("through a symlink: %q, %v", got, err)
