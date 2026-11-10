@@ -48,6 +48,7 @@ func NewRootCmd(out, errOut io.Writer, deps Deps) *cobra.Command {
 		},
 		// The startup update notice, before every command but a few
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			a.verbose, _ = cmd.Flags().GetBool("verbose")
 			if cmd.HasParent() {
 				a.notify(cmd, args)
 			}
@@ -68,6 +69,8 @@ func NewRootCmd(out, errOut io.Writer, deps Deps) *cobra.Command {
 	// must precede the subcommand: `frankenmanager --no-update-check <cmd>`.
 	root.PersistentFlags().Bool("no-update-check", false, "Skip checking for updates on startup")
 	_ = root.PersistentFlags().MarkHidden("no-update-check")
+	// Before or after the subcommand: `frankenmanager start --verbose`
+	root.PersistentFlags().Bool("verbose", false, "Show the logs of the Docker image builds")
 
 	root.AddCommand(newStartCmd(a), newStopCmd(a), newRestartCmd(a),
 		newAddHostCmd(a), newAddAliasCmd(a), newRemoveHostCmd(a), newRestoreHostCmd(a), newSwitchPHPCmd(a),

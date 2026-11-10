@@ -130,6 +130,8 @@ type app struct {
 	errOut io.Writer
 	log    *ui.Logger
 	con    *ui.Console
+	// verbose shows the logs of the image builds (--verbose)
+	verbose bool
 }
 
 // projectDir returns the data directory, prepared for a command: tree
@@ -160,6 +162,9 @@ func (a *app) openStore(dir string) (*store.Store, error) {
 func (a *app) docker(dir string) *docker.Manager {
 	m := docker.New(dir, a.log)
 	m.Runner = a.deps.Docker
+	if a.verbose {
+		m.BuildOutput = a.out
+	}
 	return m
 }
 

@@ -799,6 +799,14 @@ frankenmanager reset --help
 frankenmanager setup --help
 ```
 
+### Show the image build logs
+
+PHP images are built quietly. Add `--verbose`, before or after the command, to follow the `docker build` logs whenever a command builds an image (`start`, `start --build`, `restart --build`, or `add-host` / `restore-host` / `switch-php` on a new PHP version):
+
+```bash
+frankenmanager start --build --verbose
+```
+
 ### Reset configuration and/or Caddyfiles
 
 Reset specific FrankenManager components to their default state. This is useful when you want to start fresh or clean up your configuration.
@@ -1127,7 +1135,7 @@ All ports are configurable via the `.env` file. See [Environment Variables](#env
 
 ## Development
 
-Requires [Go](https://go.dev) 1.26 or later, and [golangci-lint](https://golangci-lint.run) for linting.
+Requires [Go](https://go.dev) 1.26 or later.
 
 ### Build
 
@@ -1147,7 +1155,8 @@ The tests never reach the network, Docker or your real data directory: external 
 ### Linting
 
 ```bash
-make lint
+make lint     # golangci-lint, the version of the CI (fetched by go run)
+make hooks    # once per clone: lint the changed Go code before each commit
 ```
 
 ### Release archives

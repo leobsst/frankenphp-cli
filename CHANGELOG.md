@@ -153,6 +153,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Color-coded console output and tables, plain when the output is not a terminal
 - Detailed error messages and troubleshooting hints
 - Comprehensive help system for all commands
+- `--verbose` global option: shows the `docker build` logs whenever a command builds a PHP image
 - Input validation for domain names and paths
 - Platform-specific path handling
 

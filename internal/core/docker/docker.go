@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -52,8 +53,33 @@ type Runner interface {
 	Run(ctx context.Context, dir string, env map[string]string, args ...string) (Result, error)
 }
 
+// Streamer is a Runner that can also run a command with its output shown
+// live, on out, instead of captured.
+type Streamer interface {
+	// Stream runs `docker <args>` in dir with its stdout and stderr on out
+	// and returns its exit code. err is set only when it could not run.
+	Stream(ctx context.Context, dir string, out io.Writer, args ...string) (int, error)
+}
+
 // ExecRunner runs the real docker command.
 type ExecRunner struct{}
+
+// Stream implements Streamer. When out is the terminal, docker sees it and
+// shows its interactive progress.
+func (ExecRunner) Stream(ctx context.Context, dir string, out io.Writer, args ...string) (int, error) {
+	cmd := exec.CommandContext(ctx, "docker", args...)
+	cmd.Dir = dir
+	cmd.Stdout, cmd.Stderr = out, out
+	err := cmd.Run()
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return exitErr.ExitCode(), nil
+	}
+	if err != nil {
+		return -1, err
+	}
+	return 0, nil
+}
 
 // Run implements Runner.
 func (ExecRunner) Run(ctx context.Context, dir string, env map[string]string, args ...string) (Result, error) {
@@ -91,6 +117,10 @@ type Manager struct {
 	Dir    string // data directory: compose project and build context
 	Runner Runner
 	Log    Logger
+	// BuildOutput, when set, receives the logs of the image builds, shown
+	// live (`--verbose`) instead of a quiet build. It needs a Runner that
+	// is a Streamer.
+	BuildOutput io.Writer
 }
 
 // New returns a Manager using the real docker command.
@@ -307,7 +337,13 @@ func (m *Manager) BuildImage(ctx context.Context, b Build) (bool, error) {
 	}
 
 	m.Log.Info(fmt.Sprintf("Building Docker image for PHP %s...", b.PHPVersion))
-	cmd := []string{"build", "--quiet", "--pull", "--rm", "--tag", image, "--label", BuildHashLabel + "=" + hash}
+	streamer, verbose := m.Runner.(Streamer)
+	verbose = verbose && m.BuildOutput != nil
+	cmd := []string{"build"}
+	if !verbose {
+		cmd = append(cmd, "--quiet")
+	}
+	cmd = append(cmd, "--pull", "--rm", "--tag", image, "--label", BuildHashLabel+"="+hash)
 	for _, k := range slices.Sorted(func(yield func(string) bool) {
 		for k := range args {
 			if !yield(k) {
@@ -318,6 +354,17 @@ func (m *Manager) BuildImage(ctx context.Context, b Build) (bool, error) {
 		cmd = append(cmd, "--build-arg", k+"="+args[k])
 	}
 	cmd = append(cmd, m.Dir)
+	if verbose {
+		// The error is in the logs just shown: the exit code is enough here
+		code, err := streamer.Stream(ctx, m.Dir, m.BuildOutput, cmd...)
+		if err == nil && code != 0 {
+			err = fmt.Errorf("docker build exited with code %d (see the logs above)", code)
+		}
+		if err != nil {
+			return false, &Error{fmt.Sprintf("Failed to build image for PHP %s: %v", b.PHPVersion, err)}
+		}
+		return true, nil
+	}
 	res, err := m.run(ctx, cmd...)
 	if err == nil && res.ExitCode != 0 {
 		err = errors.New(strings.TrimSpace(string(res.Stderr)))

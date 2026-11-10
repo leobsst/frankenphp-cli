@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"maps"
 	"os"
 	"path/filepath"
@@ -318,5 +319,58 @@ func TestIsRunning(t *testing.T) {
 		if got := IsRunning(tc.s, tc.versions); got != tc.want {
 			t.Errorf("IsRunning(%v, %v) = %v", tc.s, tc.versions, got)
 		}
+	}
+}
+
+// streamingRunner is a fakeRunner that also streams: Stream records the
+// call like Run and writes fake build logs.
+type streamingRunner struct {
+	*fakeRunner
+	exitCode int
+}
+
+func (s *streamingRunner) Stream(_ context.Context, dir string, out io.Writer, args ...string) (int, error) {
+	s.calls = append(s.calls, call{dir, nil, args})
+	_, _ = io.WriteString(out, "#1 [internal] load build definition from Dockerfile\n")
+	return s.exitCode, nil
+}
+
+// --verbose: the build is not quiet and its logs go to BuildOutput.
+func TestBuildImageVerbose(t *testing.T) {
+	m, r, _ := newManager(t, func([]string) (Result, error) { return Result{ExitCode: 1}, nil }) // no image
+	s := &streamingRunner{fakeRunner: r}
+	var logs strings.Builder
+	m.Runner, m.BuildOutput = s, &logs
+
+	built, err := m.BuildImage(context.Background(), Build{CustomPath: "/sites", PHPVersion: "8.4"})
+	if err != nil || !built {
+		t.Fatalf("built=%v err=%v", built, err)
+	}
+	lines := r.argLines()
+	if len(lines) != 2 || !strings.HasPrefix(lines[1], "build --pull --rm --tag custom-frankenphp:8.4 ") {
+		t.Errorf("calls = %v", lines)
+	}
+	if logs.String() != "#1 [internal] load build definition from Dockerfile\n" {
+		t.Errorf("logs = %q", logs.String())
+	}
+
+	// A failed build: the error is in the logs, the message gives the code
+	s.exitCode = 3
+	_, err = m.BuildImage(context.Background(), Build{PHPVersion: "8.4", Force: true})
+	var dErr *Error
+	if !errors.As(err, &dErr) || dErr.Msg != "Failed to build image for PHP 8.4: docker build exited with code 3 (see the logs above)" {
+		t.Errorf("err = %v", err)
+	}
+}
+
+// A Runner that cannot stream keeps the quiet build, BuildOutput or not.
+func TestBuildImageVerboseNeedsAStreamer(t *testing.T) {
+	m, r, _ := newManager(t, nil)
+	m.BuildOutput = io.Discard
+	if _, err := m.BuildImage(context.Background(), Build{PHPVersion: "8.4", Force: true}); err != nil {
+		t.Fatal(err)
+	}
+	if lines := r.argLines(); len(lines) != 1 || !strings.HasPrefix(lines[0], "build --quiet ") {
+		t.Errorf("calls = %v", lines)
 	}
 }

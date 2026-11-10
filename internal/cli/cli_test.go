@@ -45,6 +45,14 @@ func (f *fakeDocker) Run(_ context.Context, _ string, _ map[string]string, args 
 	return docker.Result{}, nil
 }
 
+// Stream records the call like Run, marked "stream", and writes fake
+// build logs: the docker runner of --verbose builds.
+func (f *fakeDocker) Stream(_ context.Context, _ string, out io.Writer, args ...string) (int, error) {
+	f.calls = append(f.calls, append([]string{"stream"}, args...))
+	_, _ = io.WriteString(out, "#1 [internal] load build definition from Dockerfile\n")
+	return 0, nil
+}
+
 type quietLog struct{}
 
 func (quietLog) Info(string)    {}

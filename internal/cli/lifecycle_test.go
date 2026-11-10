@@ -302,3 +302,45 @@ func TestRestartBuildWithoutProjectPath(t *testing.T) {
 		t.Errorf("code %d, out:\n%s", code, out)
 	}
 }
+
+// --verbose, before or after the command: the builds show their logs.
+func TestStartVerboseShowsBuildLogs(t *testing.T) {
+	for _, args := range [][]string{{"--verbose", "start"}, {"start", "--verbose"}} {
+		e := newEnv(t)
+		e.initEnv("")
+		e.docker.handle = func(a []string) docker.Result {
+			if a[0] == "image" {
+				return docker.Result{ExitCode: 1} // no image yet
+			}
+			return docker.Result{}
+		}
+		code, out, _ := e.run(append(args, "app.test", "-p", e.projects())...)
+		if code != 0 {
+			t.Fatalf("%v: code %d, out:\n%s", args, code, out)
+		}
+		mustContain(t, out, "-- Building Docker image for PHP 8.3...\n#1 [internal] load build definition from Dockerfile\n")
+		var build []string
+		for _, c := range e.docker.calls {
+			if slices.Contains(c, "build") {
+				build = c
+			}
+		}
+		if len(build) < 2 || build[0] != "stream" || slices.Contains(build, "--quiet") {
+			t.Errorf("%v: build call %v", args, build)
+		}
+	}
+
+	// Without --verbose: quiet build, no logs
+	e := newEnv(t)
+	e.initEnv("")
+	e.docker.handle = func(a []string) docker.Result {
+		if a[0] == "image" {
+			return docker.Result{ExitCode: 1}
+		}
+		return docker.Result{}
+	}
+	_, out, _ := e.run("start", "app.test", "-p", e.projects())
+	if strings.Contains(out, "load build definition") {
+		t.Errorf("logs without --verbose:\n%s", out)
+	}
+}
