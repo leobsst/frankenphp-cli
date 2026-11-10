@@ -267,6 +267,7 @@ func installed(t *testing.T, dir string) map[string]string {
 			return err
 		}
 		rel, _ := filepath.Rel(dir, p)
+		rel = filepath.ToSlash(rel) // the expectations use / on every OS
 		switch {
 		case d.Type()&os.ModeSymlink != 0:
 			target, _ := os.Readlink(p)

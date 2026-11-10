@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -258,10 +259,11 @@ func (w *Watcher) stopLaunchd(ctx context.Context) bool {
 // LaunchdPlist is the LaunchAgent starting the watcher at login and
 // relaunching it when it dies, byte for byte the one written by earlier
 // releases (keys sorted). With app, the watcher runs through the app's
-// launcher and the agent is tied to its bundle identifier.
+// launcher and the agent is tied to its bundle identifier. Its paths are
+// joined with slashes: the file only exists on macOS.
 func LaunchdPlist(dataDir string, command []string, app string) []byte {
 	if app != "" {
-		command = append([]string{filepath.Join(app, "Contents", "MacOS", MacOSAppExecutable)}, command[1:]...)
+		command = append([]string{path.Join(app, "Contents", "MacOS", MacOSAppExecutable)}, command[1:]...)
 	}
 	var b strings.Builder
 	b.WriteString(`<?xml version="1.0" encoding="UTF-8"?>
@@ -292,7 +294,7 @@ func LaunchdPlist(dataDir string, command []string, app string) []byte {
 	key("RunAtLoad")
 	b.WriteString("\t<true/>\n")
 	key("StandardErrorPath")
-	str("\t", filepath.Join(dataDir, logName))
+	str("\t", path.Join(dataDir, logName))
 	key("StandardOutPath")
 	str("\t", "/dev/null")
 	key("WorkingDirectory")
@@ -315,7 +317,8 @@ func systemdQuote(arg string) string {
 }
 
 // SystemdUnitContent is the user unit starting the watcher at login and
-// relaunching it when it dies.
+// relaunching it when it dies. Its paths are joined with slashes: the file
+// only exists on Linux.
 func SystemdUnitContent(dataDir string, command []string) string {
 	quoted := make([]string, len(command))
 	for i, arg := range command {
@@ -328,7 +331,7 @@ func SystemdUnitContent(dataDir string, command []string) string {
 		"ExecStart=" + strings.Join(quoted, " ") + "\n" +
 		"WorkingDirectory=" + dataDir + "\n" +
 		"StandardOutput=null\n" +
-		"StandardError=append:" + filepath.Join(dataDir, logName) + "\n" +
+		"StandardError=append:" + path.Join(dataDir, logName) + "\n" +
 		"Restart=always\n" +
 		"RestartSec=5\n" +
 		"\n" +
