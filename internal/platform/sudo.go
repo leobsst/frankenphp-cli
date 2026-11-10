@@ -8,6 +8,10 @@ import (
 	"strings"
 )
 
+// Chown sets the owner of a file (os.Chown), replaced in tests. On
+// Windows, nothing calls it: ChownToSudoUser does nothing there.
+var Chown = os.Chown
+
 // MakeUserDir creates path and its missing parents (mkdir -p), then hands
 // every directory it created back to the user who invoked sudo. Directories
 // that already existed are left untouched (e.g. MariaDB data owned by the

@@ -10,9 +10,6 @@ import (
 	"syscall"
 )
 
-// Chown sets the owner of a file (os.Chown), replaced in tests.
-var Chown = os.Chown
-
 // ChownToSudoUser gives path back to the real user when running under sudo.
 //
 // Under sudo, HOME may still point to the invoking user's home (macOS), so
