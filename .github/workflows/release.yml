@@ -306,6 +306,23 @@ jobs:
           test "$(./bundle-test/frankenmanager/frankenmanager.exe --version | tr -d '\r')" = "FrankenManager version $VERSION"
           ./bundle-test/frankenmanager/frankenmanager.exe --help > /dev/null
 
+      - name: Checkout install.ps1
+        uses: actions/checkout@v7
+        with:
+          path: repo
+          sparse-checkout: install.ps1
+          sparse-checkout-cone-mode: false
+
+      - name: Install with install.ps1
+        shell: pwsh
+        env:
+          DOWNLOAD_BASE: ${{ github.workspace }}
+          FRANKENMANAGER_INSTALL_DIR: ${{ runner.temp }}\fm
+        run: |
+          Get-Content ./repo/install.ps1 -Raw | Invoke-Expression
+          $v = & "$env:FRANKENMANAGER_INSTALL_DIR\frankenmanager.exe" --version
+          if ($v -ne "FrankenManager version $env:VERSION") { throw "unexpected version: $v" }
+
   create-release:
     name: Create GitHub Release
     needs: [authorize, build, macos, windows]
@@ -380,6 +397,12 @@ jobs:
 
           ```bash
           VERSION=${{ needs.authorize.outputs.version }} curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/refs/heads/main/install.sh | bash
+          ```
+
+          ### Quick Install (Windows, PowerShell)
+
+          ```powershell
+          irm https://raw.githubusercontent.com/${{ github.repository }}/refs/heads/main/install.ps1 | iex
           ```
 
           ### Archives

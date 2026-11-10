@@ -79,7 +79,17 @@ On macOS, keep the extracted `frankenmanager/` directory whole: the DNS watcher 
 
 #### Windows
 
-Extract `frankenmanager.exe` from `frankenmanager-windows-x86_64.tar.gz` (or download the bare `frankenmanager-windows-x86_64.exe`) into a directory of your PATH, then run FrankenManager from an Administrator terminal whenever it changes the hosts file.
+In PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/leobsst/frankenphp-cli/refs/heads/main/install.ps1 | iex
+```
+
+It installs `frankenmanager.exe` in `%LOCALAPPDATA%\Programs\FrankenManager` (no Administrator rights needed), adds that directory to your user PATH, and checks the archive against `SHA256SUMS.txt`. Set `$env:VERSION = "x.y.z"` first to pin a version.
+
+To install manually, extract `frankenmanager.exe` from `frankenmanager-windows-x86_64.tar.gz` (or `-arm64`), or download the bare `frankenmanager-windows-x86_64.exe`, into a directory of your PATH.
+
+Either way, run FrankenManager from an Administrator terminal whenever it changes the hosts file.
 
 ### Option 3: From Source
 
@@ -1089,7 +1099,8 @@ frankenphp-cli/
 ├── Dockerfile                  Custom FrankenPHP image
 ├── caddy/                      Caddy configuration
 ├── php/                        PHP configuration
-└── install.sh                  Installer (macOS, Linux)
+├── install.sh                  Installer (macOS, Linux)
+└── install.ps1                 Installer (Windows)
 ```
 
 ## Services

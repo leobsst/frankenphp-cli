@@ -9,6 +9,7 @@ on:
       - "docker/**"
       - ".env.example"
       - "install.sh"
+      - "install.ps1"
       - "Dockerfile"
       - "docker-compose*.yml"
       - "**.go"
@@ -92,6 +93,51 @@ jobs:
           actual="$(bin/frankenmanager-linux-amd64 --version)"
           echo "$actual"
           test "$actual" = "$expected"
+
+  install-windows:
+    name: Install script (Windows)
+    runs-on: windows-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: "1.27.x"
+
+      - name: Package the Windows archive
+        run: go run ./cmd/release all -version 0.0.0-ci -out dist -targets windows/amd64
+
+      # Run the way users do (irm | iex): through Invoke-Expression
+      - name: Install, then reinstall over it
+        shell: pwsh
+        env:
+          VERSION: 0.0.0-ci
+          DOWNLOAD_BASE: ${{ github.workspace }}\dist\assets
+          FRANKENMANAGER_INSTALL_DIR: ${{ runner.temp }}\fm
+        run: |
+          Get-Content ./install.ps1 -Raw | Invoke-Expression
+          $v = & "$env:FRANKENMANAGER_INSTALL_DIR\frankenmanager.exe" --version
+          if ($v -ne 'FrankenManager version 0.0.0-ci') { throw "unexpected version: $v" }
+          Get-Content ./install.ps1 -Raw | Invoke-Expression
+          if (-not ([Environment]::GetEnvironmentVariable('Path', 'User') -split ';' -contains $env:FRANKENMANAGER_INSTALL_DIR)) { throw 'not added to the user PATH' }
+
+      - name: Reject a tampered archive
+        shell: pwsh
+        env:
+          VERSION: 0.0.0-ci
+          DOWNLOAD_BASE: ${{ runner.temp }}\bad
+          FRANKENMANAGER_INSTALL_DIR: ${{ runner.temp }}\fm-bad
+        run: |
+          New-Item -ItemType Directory -Path $env:DOWNLOAD_BASE | Out-Null
+          Copy-Item dist/assets/frankenmanager-windows-x86_64.tar.gz $env:DOWNLOAD_BASE
+          "0000000000000000000000000000000000000000000000000000000000000000  frankenmanager-windows-x86_64.tar.gz" | Set-Content "$env:DOWNLOAD_BASE\SHA256SUMS.txt"
+          $failed = $false
+          try { Get-Content ./install.ps1 -Raw | Invoke-Expression } catch { $failed = $_.Exception.Message -like 'Checksum mismatch*' }
+          if (-not $failed) { throw 'a tampered archive was installed' }
+          if (Test-Path "$env:FRANKENMANAGER_INSTALL_DIR\frankenmanager.exe") { throw 'something was installed' }
 
   hadolint:
     name: Hadolint (Dockerfile)
