@@ -1,0 +1,30 @@
+[
+  {
+    "dockerfile": "FROM dunglas/frankenphp:${PHP_IMAGE_TAG}\n",
+    "entrypoint": "#!/bin/sh\nexec \"$@\"\n",
+    "args": {
+      "CUSTOM_PATH": "/Users/me/Sites",
+      "PHP_IMAGE_TAG": "1-php8.3-alpine"
+    },
+    "hash": "7e6b7c4190ca7b0b68615c5e74fe4ea3cbbe481b3e0b28a5e09192da5f44a296"
+  },
+  {
+    "dockerfile": "FROM scratch\n",
+    "entrypoint": null,
+    "args": {
+      "PHP_IMAGE_TAG": "1-php8.5-trixie",
+      "CUSTOM_PATH": "/home/élodie/projets \"web\"\\x",
+      "WWWGROUP": "1000",
+      "EXTRA_SYSTEM_PACKAGES": "git\tvim\nzip  日本 🐘",
+      "EXTRA_COMPOSER_PACKAGES": "laravel/installer",
+      "INSTALL_PDFTK": "true"
+    },
+    "hash": "5f9edc5b3c6384b0e54dcf901bf60d7ec320cc5962f9fa9ad7973e262547a7c8"
+  },
+  {
+    "dockerfile": null,
+    "entrypoint": null,
+    "args": {},
+    "hash": "617d0ccb45e0be7e7006b1e65105fa54616bfdab88f26c92662a2bd72e8d42be"
+  }
+]

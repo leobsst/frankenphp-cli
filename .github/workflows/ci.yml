@@ -2,90 +2,96 @@ name: CI
 
 on:
   push:
-    branches: [main, develop, python]
+    branches: [main, develop]
     paths:
-      - "src/**"
-      - "tests/**"
-      - "pyproject.toml"
+      - "caddy/**"
+      - "php/**"
+      - "docker/**"
+      - ".env.example"
+      - "install.sh"
       - "Dockerfile"
       - "docker-compose*.yml"
+      - "**.go"
+      - "go.mod"
+      - "go.sum"
+      - ".golangci.yml"
+      - "Makefile"
       - ".github/workflows/ci.yml"
   pull_request:
     branches: [main]
   workflow_dispatch:
 
 jobs:
-  lint:
-    name: Lint (Python)
+  go-lint:
+    name: Lint (Go)
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - uses: actions/checkout@v7
 
-      - name: Set up Python
-        uses: actions/setup-python@v7
+      - name: Set up Go
+        uses: actions/setup-go@v7
         with:
-          python-version: "3.11"
+          go-version: "1.27.x"
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install ruff
-
-      - name: Run Ruff linter
-        run: ruff check src/
-
-      - name: Run Ruff formatter check
-        run: ruff format --check src/
-
-  typecheck:
-    name: Type Check (mypy)
-    runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Set up Python
-        uses: actions/setup-python@v7
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v9
         with:
-          python-version: "3.11"
+          version: v2.15.0
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-
-      - name: Run mypy
-        run: mypy src/ --ignore-missing-imports
-
-  test:
-    name: Test (Python ${{ matrix.python-version }})
-    # Pinned: Python 3.9 builds are not available for ubuntu-latest (26.04)
-    runs-on: ubuntu-24.04
+  go-test:
+    name: Test (Go, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
+        os: [ubuntu-latest, macos-latest, windows-latest]
 
     steps:
       - uses: actions/checkout@v7
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v7
+      - name: Set up Go
+        uses: actions/setup-go@v7
         with:
-          python-version: ${{ matrix.python-version }}
+          go-version: "1.27.x"
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+      - name: Vet
+        run: go vet ./...
 
       - name: Run tests
-        run: pytest tests/ -v --tb=short
+        run: go test ./...
+
+  go-build:
+    name: Build (Go, 7 targets)
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # git describe needs the tags for the injected version
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: "1.27.x"
+
+      - name: Cross-compile every target without cgo
+        run: make build-all
+
+      - name: Package a release (dry run, Linux x86_64 and macOS arm64)
+        run: go run ./cmd/release all -version 0.0.0-ci -targets linux/amd64,darwin/arm64
+
+      - name: Check the injected version
+        run: |
+          expected="FrankenManager version $(git describe --tags --always --dirty | sed 's/^v//')"
+          actual="$(bin/frankenmanager-linux-amd64 --version)"
+          echo "$actual"
+          test "$actual" = "$expected"
 
   hadolint:
     name: Hadolint (Dockerfile)
@@ -134,30 +140,3 @@ jobs:
           MARIADB_ROOT_PASSWORD=test \
           PWD=$(pwd) \
           docker compose -f docker-compose-prod.yml config -q
-
-  build:
-    name: Build Package
-    runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: "3.11"
-
-      - name: Install build tools
-        run: |
-          python -m pip install --upgrade pip
-          pip install build
-
-      - name: Build package
-        run: python -m build
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: dist
-          path: dist/

@@ -1,0 +1,122 @@
+[
+  {
+    "latest": "1.2.4",
+    "current": "1.2.3",
+    "newer": true
+  },
+  {
+    "latest": "1.2.3",
+    "current": "1.2.3",
+    "newer": false
+  },
+  {
+    "latest": "1.2.3",
+    "current": "1.2.4",
+    "newer": false
+  },
+  {
+    "latest": "1.2.4",
+    "current": "1.2.4.dev5",
+    "newer": false
+  },
+  {
+    "latest": "1.2.4.dev5",
+    "current": "1.2.3",
+    "newer": true
+  },
+  {
+    "latest": "1.2.4.dev5",
+    "current": "1.2.4",
+    "newer": false
+  },
+  {
+    "latest": "1.2.0",
+    "current": "1.2",
+    "newer": true
+  },
+  {
+    "latest": "1.2",
+    "current": "1.2.0",
+    "newer": false
+  },
+  {
+    "latest": "1.10.0",
+    "current": "1.9.9",
+    "newer": true
+  },
+  {
+    "latest": "2.0.0rc1",
+    "current": "1.9.9",
+    "newer": true
+  },
+  {
+    "latest": "v1.3.0",
+    "current": "1.2.0",
+    "newer": true
+  },
+  {
+    "latest": "1.2.3.4",
+    "current": "1.2.3",
+    "newer": false
+  },
+  {
+    "latest": "1.2.4+local.1",
+    "current": "1.2.3",
+    "newer": true
+  },
+  {
+    "latest": "1.2.4.post1",
+    "current": "1.2.4",
+    "newer": false
+  },
+  {
+    "latest": "1.2.4-1",
+    "current": "1.2.3",
+    "newer": true
+  },
+  {
+    "latest": "1!1.0",
+    "current": "2.0",
+    "newer": false
+  },
+  {
+    "latest": "1.2.4a",
+    "current": "1.2.3",
+    "newer": true
+  },
+  {
+    "latest": "0.1.56",
+    "current": "0.1.55.dev8",
+    "newer": true
+  },
+  {
+    "latest": "1.2.4",
+    "current": "garbage",
+    "newer": false
+  },
+  {
+    "latest": "garbage",
+    "current": "1.0",
+    "newer": false
+  },
+  {
+    "latest": "",
+    "current": "1.0",
+    "newer": false
+  },
+  {
+    "latest": "1.2.4",
+    "current": "dev",
+    "newer": false
+  },
+  {
+    "latest": "1.2.4",
+    "current": "1.2.4-beta",
+    "newer": false
+  },
+  {
+    "latest": "1.2.4..1",
+    "current": "1.0",
+    "newer": false
+  }
+]

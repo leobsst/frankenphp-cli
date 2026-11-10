@@ -1,0 +1,248 @@
+services:
+  db-postgresql:
+    container_name: franken_postgresql
+    image: postgres:${POSTGRES_VERSION:-16}-alpine
+    restart: always
+    env_file: .env
+    volumes:
+      - ${DATABASE_DIR:-./database}/postgresql:/var/lib/postgresql/data
+    ports:
+      - ${POSTGRES_PORT:-127.0.0.1:5432:5432}
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    networks:
+      - franken_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  pgadmin:
+    container_name: franken_pgadmin
+    image: dpage/pgadmin4:latest
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@admin.com}
+      PGADMIN_DEFAULT_PASSWORD: ${POSTGRES_PASSWORD}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - ${PGADMIN_PORT:-127.0.0.1:8081:80}
+    depends_on:
+      db-postgresql:
+        condition: service_healthy
+    networks:
+      - franken_network
+
+  db-mysql:
+    container_name: franken_mysql
+    image: mysql:${MYSQL_VERSION:-8.0}
+    restart: always
+    command: --max-allowed-packet=${MYSQL_MAX_ALLOWED_PACKET:-512M}
+    user: ${UID}:${GID}
+    env_file: .env
+    volumes:
+      - ${DATABASE_DIR:-./database}/mysql:/var/lib/mysql
+    ports:
+      - ${MYSQL_PORT:-127.0.0.1:3307:3306}
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    networks:
+      - franken_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  db-mariadb:
+    container_name: franken_mariadb
+    image: mariadb:${MARIADB_VERSION:-10.11.9}
+    restart: always
+    command: --max-allowed-packet=${MYSQL_MAX_ALLOWED_PACKET:-512M}
+    user: ${UID}:${GID}
+    env_file: .env
+    volumes:
+      - ${DATABASE_DIR:-./database}/mariadb:/var/lib/mysql
+    ports:
+      - ${DB_PORT:-127.0.0.1:3306:3306}
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+    networks:
+      - franken_network
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  phpmyadmin:
+    container_name: franken_phpmyadmin
+    image: phpmyadmin:latest
+    restart: always
+    environment:
+      PMA_HOSTS: franken_mariadb,franken_mysql
+      PMA_VERBOSES: MariaDB,MySQL
+      PMA_PORTS: 3306,3306
+      FRANKEN_PASSWORD_FRANKEN_MARIADB: ${MARIADB_ROOT_PASSWORD}
+      FRANKEN_PASSWORD_FRANKEN_MYSQL: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - ./phpmyadmin/config.user.inc.php:/etc/phpmyadmin/config.user.inc.php:ro
+    ports:
+      - ${PMA_PORT:-127.0.0.1:8080:80}
+    depends_on:
+      db-mariadb:
+        condition: service_healthy
+      db-mysql:
+        condition: service_healthy
+    networks:
+      - franken_network
+
+  cache:
+    container_name: franken_redis
+    image: redis:alpine
+    restart: always
+    command: redis-server
+    ports:
+      - ${REDIS_PORT:-127.0.0.1:6379:6379}
+    networks:
+      - franken_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  soketi:
+    container_name: franken_soketi
+    image: quay.io/soketi/soketi:1.6-16-alpine
+    restart: always
+    environment:
+      SOKETI_DEFAULT_APP_ID: ${SOKETI_DEFAULT_APP_ID}
+      SOKETI_DEFAULT_APP_KEY: ${SOKETI_DEFAULT_APP_KEY}
+      SOKETI_DEFAULT_APP_SECRET: ${SOKETI_DEFAULT_APP_SECRET}
+      SOKETI_PORT: '6001'
+    ports:
+      - ${SOKETI_PUBLISH:-127.0.0.1:6001:6001}
+    networks:
+      - franken_network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:$${SOKETI_PORT}/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  dns:
+    container_name: franken_dns
+    image: coredns/coredns:1.11.3
+    restart: always
+    command: -conf /etc/coredns/Corefile
+    volumes:
+      - ./dns:/etc/coredns:ro
+    ports:
+      - "0.0.0.0:53:53/udp"
+      - "0.0.0.0:53:53/tcp"
+
+  caddy-proxy:
+    container_name: franken-caddy-proxy
+    image: caddy:2-alpine
+    restart: always
+    network_mode: host
+    volumes:
+      - ${CADDY_DIR:-./caddy}/Caddyfile:/etc/caddy/Caddyfile
+      - ${CADDY_DIR:-./caddy}/certs:/certs
+      - ${CADDY_DIR:-./caddy}/data:/data
+      - ${CADDY_DIR:-./caddy}/config:/config
+      - ${CADDY_DIR:-./caddy}/log:/var/log
+    depends_on:
+      franken-php-82:
+        condition: service_started
+      franken-php-84:
+        condition: service_started
+      franken-php-85:
+        condition: service_started
+
+  franken-php-82:
+    container_name: frankenphp-8.2
+    image: custom-frankenphp:8.2
+    restart: always
+    network_mode: host
+    environment:
+      WEB_HTTP_PORT: '8280'
+      WEB_HTTPS_PORT: '8243'
+    volumes:
+      - ${CUSTOM_PATH}:/${CUSTOM_PATH}
+      - ${CADDY_DIR:-./caddy}/Caddyfile.worker:/etc/caddy/Caddyfile
+      - ${CADDY_DIR:-./caddy}/sites/php-8.2:/etc/caddy/sites/custom
+      - ${CADDY_DIR:-./caddy}/certs:/certs
+      - ${CADDY_DIR:-./caddy}/log:/var/log
+      - ./php/8.2/php.ini:/usr/local/etc/php/php.ini
+    depends_on:
+      db-postgresql:
+        condition: service_healthy
+      db-mysql:
+        condition: service_healthy
+      db-mariadb:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+
+  franken-php-84:
+    container_name: frankenphp-8.4
+    image: custom-frankenphp:8.4
+    restart: always
+    network_mode: host
+    environment:
+      WEB_HTTP_PORT: '8480'
+      WEB_HTTPS_PORT: '8443'
+    volumes:
+      - ${CUSTOM_PATH}:/${CUSTOM_PATH}
+      - ${CADDY_DIR:-./caddy}/Caddyfile.worker:/etc/caddy/Caddyfile
+      - ${CADDY_DIR:-./caddy}/sites/php-8.4:/etc/caddy/sites/custom
+      - ${CADDY_DIR:-./caddy}/certs:/certs
+      - ${CADDY_DIR:-./caddy}/log:/var/log
+      - ./php/8.4/php.ini:/usr/local/etc/php/php.ini
+    depends_on:
+      db-postgresql:
+        condition: service_healthy
+      db-mysql:
+        condition: service_healthy
+      db-mariadb:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+
+  franken-php-85:
+    container_name: frankenphp-8.5
+    image: custom-frankenphp:8.5
+    restart: always
+    network_mode: host
+    environment:
+      WEB_HTTP_PORT: '8580'
+      WEB_HTTPS_PORT: '8543'
+    volumes:
+      - ${CUSTOM_PATH}:/${CUSTOM_PATH}
+      - ${CADDY_DIR:-./caddy}/Caddyfile.worker:/etc/caddy/Caddyfile
+      - ${CADDY_DIR:-./caddy}/sites/php-8.5:/etc/caddy/sites/custom
+      - ${CADDY_DIR:-./caddy}/certs:/certs
+      - ${CADDY_DIR:-./caddy}/log:/var/log
+      - ./php/8.5/php.ini:/usr/local/etc/php/php.ini
+    depends_on:
+      db-postgresql:
+        condition: service_healthy
+      db-mysql:
+        condition: service_healthy
+      db-mariadb:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+
+networks:
+  franken_network:
+    driver: bridge

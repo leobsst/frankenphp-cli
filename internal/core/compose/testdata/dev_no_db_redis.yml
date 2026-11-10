@@ -1,0 +1,54 @@
+services:
+  cache:
+    container_name: franken_redis
+    image: redis:alpine
+    restart: always
+    command: redis-server
+    ports:
+      - ${REDIS_PORT:-127.0.0.1:6379:6379}
+    networks:
+      - franken_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  caddy-proxy:
+    container_name: franken-caddy-proxy
+    image: caddy:2-alpine
+    restart: always
+    network_mode: host
+    volumes:
+      - ${CADDY_DIR:-./caddy}/Caddyfile:/etc/caddy/Caddyfile
+      - ${CADDY_DIR:-./caddy}/certs:/certs
+      - ${CADDY_DIR:-./caddy}/data:/data
+      - ${CADDY_DIR:-./caddy}/config:/config
+      - ${CADDY_DIR:-./caddy}/log:/var/log
+    depends_on:
+      franken-php-83:
+        condition: service_started
+
+  franken-php-83:
+    container_name: frankenphp-8.3
+    image: custom-frankenphp:8.3
+    restart: always
+    network_mode: host
+    environment:
+      WEB_HTTP_PORT: '8380'
+      WEB_HTTPS_PORT: '8343'
+    volumes:
+      - ${CUSTOM_PATH}:/${CUSTOM_PATH}
+      - ${CADDY_DIR:-./caddy}/Caddyfile.worker:/etc/caddy/Caddyfile
+      - ${CADDY_DIR:-./caddy}/sites/php-8.3:/etc/caddy/sites/custom
+      - ${CADDY_DIR:-./caddy}/certs:/certs
+      - ${CADDY_DIR:-./caddy}/log:/var/log
+      - ./php/8.3/php.ini:/usr/local/etc/php/php.ini
+    depends_on:
+      cache:
+        condition: service_healthy
+
+networks:
+  franken_network:
+    driver: bridge

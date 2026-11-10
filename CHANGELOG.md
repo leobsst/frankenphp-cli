@@ -13,8 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Multi-site PHP development environment management using Docker and FrankenPHP
 - Automatic HTTPS with locally-trusted certificates via mkcert
 - Passwordless `/etc/hosts` management (after initial setup)
-- Cross-platform support for macOS (arm64/x86_64), Linux (x86_64), and Windows (x86_64)
-- Pre-built binaries requiring no Python installation
+- Cross-platform support for macOS (arm64/x86_64), Linux (x86_64/arm64/armv7), and Windows (x86_64/arm64)
+- A single executable per platform, with nothing else to install: commands start instantly
 
 #### Commands
 - `start` - Start the development server with optional domains and project path
@@ -65,6 +65,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `--force` option to force reinstall latest version
   - Automatic update notifications on command execution
   - Refreshes the static files of the data directory right after installing the new version (as the real user under `sudo`)
+  - Works on Windows too, from an Administrator terminal: the running `.exe` is moved aside and removed by the next update
 - `trust-ca` - Share the local mkcert root CA over the LAN (off by default)
   - `on`/`off`/`status` actions, optional `--port` (default `9080`)
   - Serves only the public root certificate, never its private key
@@ -149,7 +150,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Proxy host support in the reverse proxy Caddyfile: dedicated TLS block per proxy host, forwarding straight to a raw upstream address with no separate per-site Caddyfile
 
 #### Developer Experience
-- Rich console output with color-coded messages
+- Color-coded console output and tables, plain when the output is not a terminal
 - Detailed error messages and troubleshooting hints
 - Comprehensive help system for all commands
 - Input validation for domain names and paths
@@ -169,20 +170,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Logrotate configuration for host-level log management
 - Container-specific logs accessible via Docker
 
-#### Package Management
-- Python package with Typer CLI framework
-- PyInstaller-based binary compilation
-- Self-contained executables with embedded resources
+#### Distribution
+- Release archives for 7 targets (`frankenmanager-<platform>.tar.gz`), each holding a `frankenmanager/` directory with the executable (plus `FrankenManager.app` on macOS), bare executables, and `SHA256SUMS.txt`
+- macOS executables and app signed with a Developer ID and notarized
+- `install.sh` for macOS and Linux: installs in `/usr/local/lib/frankenmanager` with a `/usr/local/bin/frankenmanager` link, picks the arm64 build on Apple Silicon even from a Rosetta shell, and checks the archive against `SHA256SUMS.txt`
 - Version checking and display
-- Static resource templates (Dockerfile, docker-compose files, Caddyfile templates, base php.ini) automatically resync on update when the installed version changes, leaving generated/live files (Caddyfile, docker-compose-generated.yml, per-domain site configs) untouched
+- Static resource templates (Dockerfile, docker-compose files, Caddyfile templates, base php.ini) embedded in the executable and automatically resynced on update when the installed version changes, leaving generated/live files (Caddyfile, docker-compose-generated.yml, per-domain site configs) untouched
 
 ### Technical Details
-- Built with Python 3.9+
-- Docker SDK for Python integration
-- Rich library for terminal UI
-- Typer for CLI framework
-- SQLite for state management
-- Cross-platform pathlib usage
+- Written in Go, built without cgo: every target cross-compiles from one machine
+- `cobra` for the CLI, `lipgloss` for the terminal output
+- Docker driven through the `docker` CLI
+- SQLite for state management (pure Go driver)
+
+### Upgrading from 0.1.x
+- `sudo frankenmanager update` from 0.1.x installs 1.0.0 by itself, at the same place. The data directory (`~/.frankenmanager`), privilege setup, hosts entries, certificates, PHP images and the LAN DNS watcher service are picked up as they are: nothing to redo.
+- To go back, reinstall 0.1.63 (`VERSION=0.1.63 install.sh`): the data directory stays compatible both ways.
+- What changes:
+  - `list` and `status` show bare domain names (`app.test`) in their tables
+  - A failed `start`, `add-host`, `add-alias` or `restore-host` prints its error once, cleans up, and exits with code 1
+  - `restore-host --list` sorts the archived hosts by name
+  - Windows: `setup` requires an Administrator terminal and edits the hosts file directly; the PowerShell helper script is removed
+  - The Python package (wheel, sdist) is no longer published
+  - Updating an install older than the bundle layout (a single file in `/usr/local/bin`) in place, the fallback on `docker-compose.yml` / `docker-compose-prod.yml` when the generated compose file is missing, and the migration of the legacy `.config` file are removed
+- Fixed since 0.1.x:
+  - The hosts helper script could not remove entries on Linux; `setup` replaces an outdated helper
+  - Windows: checking whether the CA server or the DNS watcher runs no longer kills it, and the first `start` no longer fails when creating `.env`
+  - `restart` generated certificates in `CERTS_DIR` instead of `CADDY_DIR/certs`
+  - The site template ignored a custom `CADDY_DIR`; the built-in fallback site had doubled braces
+  - The default `DNS_UPSTREAM` matches `.env.example` (`1.1.1.1 8.8.8.8`)
+  - An invalid `--php` printed a traceback instead of an error
+  - `switch-php` on an unknown domain exited with code 0
+  - mkcert is installed automatically on Linux armv7 too
+  - `start` wrote generated passwords and Soketi credentials to `.env` even when the server was already running
+  - Linux: under `sudo`, mkcert could put its CA in root's home directory
+  - A failed `add-host` or `restore-host` left its domains registered; `restore-host` also moves the site file back to the archive
 
 ### Documentation
 - Comprehensive README with quick start guide

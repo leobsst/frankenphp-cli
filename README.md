@@ -1,6 +1,6 @@
 # FrankenManager
 
-[![Python](https://img.shields.io/badge/Python-3.9+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev)
 [![PHP](https://img.shields.io/badge/PHP-8.2%20|%208.3%20|%208.4%20|%208.5-777BB4?style=flat-square&logo=php&logoColor=white)](https://php.net)
 [![Docker](https://img.shields.io/badge/Docker-Required-2496ED?style=flat-square&logo=docker&logoColor=white)](https://docker.com)
 [![FrankenPHP](https://img.shields.io/badge/FrankenPHP-Caddy-00ADD8?style=flat-square&logo=go&logoColor=white)](https://frankenphp.dev)
@@ -14,7 +14,7 @@
 - No manual `/etc/hosts` editing (passwordless after setup)
 - One command to start/stop your entire development stack
 - Multiple PHP versions running side-by-side, switchable per domain
-- Pre-built binaries - no Python installation required
+- A single executable, nothing else to install
 
 ## Features
 
@@ -38,21 +38,35 @@
 - Security headers (HSTS, X-Frame-Options, etc.)
 - WebSocket support (pre-configured, opt-in)
 - Cross-platform support (macOS, Linux, Windows)
-- Pre-built binaries (no Python required)
+- A single executable for macOS, Linux and Windows (arm64 and x86_64, plus Linux armv7)
 
 ## Installation
 
-### Option 1: Pre-built Binaries (Recommended)
+### Option 1: Install script (Recommended)
 
-The quickest way is the install script, which downloads the latest release for your platform:
+The install script downloads the latest release for your platform, checks it against the published `SHA256SUMS.txt`, and installs it:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/leobsst/frankenphp-cli/refs/heads/main/install.sh | bash
 ```
 
-It installs the bundle (the `frankenmanager` executable plus its `_internal/` directory) in `/usr/local/lib/frankenmanager` and links it as `/usr/local/bin/frankenmanager`. Set `VERSION=x.y.z` to pin a version.
+It installs the bundle (the `frankenmanager` executable, plus `FrankenManager.app` on macOS) in `/usr/local/lib/frankenmanager` and links it as `/usr/local/bin/frankenmanager`. Set `VERSION=x.y.z` to pin a version. On Apple Silicon, it picks the arm64 build even from a Rosetta shell.
 
-To install manually, download the archive for your platform from the [Releases](https://github.com/leobsst/frankenphp-cli/releases) page (`frankenmanager-macos-arm64.tar.gz`, `frankenmanager-macos-x86_64.tar.gz` or `frankenmanager-linux-x86_64.tar.gz`), e.g. on macOS (Apple Silicon):
+### Option 2: Manual install
+
+Download the archive for your platform from the [Releases](https://github.com/leobsst/frankenphp-cli/releases) page:
+
+| Platform | Architecture | Archive |
+|----------|--------------|---------|
+| macOS | Apple Silicon | `frankenmanager-macos-arm64.tar.gz` |
+| macOS | Intel | `frankenmanager-macos-x86_64.tar.gz` |
+| Linux | x86_64 | `frankenmanager-linux-x86_64.tar.gz` |
+| Linux | arm64 | `frankenmanager-linux-arm64.tar.gz` |
+| Linux | armv7 | `frankenmanager-linux-armv7.tar.gz` |
+| Windows | x86_64 | `frankenmanager-windows-x86_64.tar.gz` |
+| Windows | arm64 | `frankenmanager-windows-arm64.tar.gz` |
+
+e.g. on macOS (Apple Silicon):
 
 ```bash
 curl -fsSL https://github.com/leobsst/frankenphp-cli/releases/latest/download/frankenmanager-macos-arm64.tar.gz | tar -xz -C /tmp
@@ -61,20 +75,20 @@ sudo mv /tmp/frankenmanager /usr/local/lib/frankenmanager
 sudo ln -sfn /usr/local/lib/frankenmanager/frankenmanager /usr/local/bin/frankenmanager
 ```
 
-Keep the extracted `frankenmanager/` directory whole: the executable needs its `_internal/` directory next to it.
+On macOS, keep the extracted `frankenmanager/` directory whole: the DNS watcher service runs through the `FrankenManager.app` next to the executable. Elsewhere, the executable alone is enough.
 
 #### Windows
 
-Download `frankenmanager-windows-x86_64.exe` from the releases page and add it to your PATH.
+Extract `frankenmanager.exe` from `frankenmanager-windows-x86_64.tar.gz` (or download the bare `frankenmanager-windows-x86_64.exe`) into a directory of your PATH, then run FrankenManager from an Administrator terminal whenever it changes the hosts file.
 
-### Option 2: From Source
+### Option 3: From Source
+
+Requires [Go](https://go.dev) 1.26 or later:
 
 ```bash
 git clone https://github.com/leobsst/frankenphp-cli.git
 cd frankenphp-cli
-python3 -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-pip install -e .
+make build            # bin/frankenmanager
 ```
 
 ## First-Time Setup
@@ -833,7 +847,7 @@ sudo frankenmanager update --force
 
 Once the new version is installed, `update` also refreshes the static files of your data directory (`Dockerfile`, `docker-compose*.yml`, `docker/entrypoint.sh`, `caddy/Caddyfile.worker`, `caddy/Caddyfile.template`, `php/php.ini`, `php/php-prod.ini`, `.env.example`), as your user even under `sudo`. Generated files (`caddy/Caddyfile`, `docker-compose-generated.yml`, per-site Caddyfiles) and the per-version `php/<version>/php.ini` are left untouched.
 
-Updating an install made with an older single-file binary (`/usr/local/bin/frankenmanager`) migrates it to the bundle layout: the bundle goes to `/usr/local/lib/frankenmanager` and `/usr/local/bin/frankenmanager` becomes a symlink to it.
+On Windows, run `frankenmanager update` from an Administrator terminal: the running `frankenmanager.exe` is moved aside and removed by the next update.
 
 FrankenManager also notifies you when a new version is available. This check never slows a command down: the latest release found on GitHub is cached for 6 hours (in `update_check.json` in the data directory) and refreshed in the background, so a new release is announced from the next command on.
 
@@ -1038,52 +1052,44 @@ Set `APP_ENV=prod` in `.env` to enable:
 ### Source Code Structure
 
 ```
-frankenmanager/
-├── pyproject.toml              Python package configuration
-├── frankenmanager.spec         PyInstaller build spec
+frankenphp-cli/
+├── cmd/
+│   ├── frankenmanager/         The CLI
+│   ├── frankenmanager-agent/   Executable of FrankenManager.app (macOS)
+│   └── release/                Builds the release archives
+├── internal/
+│   ├── cli/                    Commands (cobra)
+│   ├── core/                   Everything the commands rely on
+│   │   ├── caddyfile/          Caddyfile generation and migration
+│   │   ├── caserver/           Root CA sharing (trust-ca)
+│   │   ├── compose/            docker-compose-generated.yml
+│   │   ├── dns/                LAN DNS server (CoreDNS) config
+│   │   ├── dnswatcher/         LAN IP watcher (LaunchAgent, systemd unit)
+│   │   ├── docker/             docker CLI wrapper, image builds
+│   │   ├── env/                .env handling
+│   │   ├── hosts/              Hosts file management
+│   │   ├── mkcert/             mkcert install and CA
+│   │   ├── password/           Database password sync
+│   │   ├── phpversions/        PHP versions and port assignments
+│   │   ├── privilege/          Passwordless hosts helper (sudoers)
+│   │   ├── resources/          Data directory and embedded resources
+│   │   ├── soketi/             Soketi WebSocket server
+│   │   ├── ssl/                Site certificates
+│   │   ├── stack/              Compose helpers shared by the commands
+│   │   ├── store/              SQLite state (db.sqlite)
+│   │   ├── updater/            Self-update
+│   │   └── validate/           Input validation
+│   ├── platform/               OS-specific code (paths, elevation, processes)
+│   ├── release/                Release archives and checksums
+│   └── ui/                     Log lines and tables
+├── assets.go                   Embeds the resources below into the executable
 ├── .env.example                Environment template
 ├── docker-compose.yml          Docker Compose (dev)
 ├── docker-compose-prod.yml     Docker Compose (prod)
 ├── Dockerfile                  Custom FrankenPHP image
 ├── caddy/                      Caddy configuration
 ├── php/                        PHP configuration
-├── src/frankenmanager/         CLI package
-│   ├── cli.py                  Main CLI (Typer app)
-│   ├── exceptions.py           Custom exceptions
-│   ├── commands/               Command implementations
-│   │   ├── start.py            Start server
-│   │   ├── stop.py             Stop server
-│   │   ├── restart.py          Restart containers
-│   │   ├── status.py           Show status
-│   │   ├── setup.py            Privilege & mkcert setup
-│   │   ├── add_host.py         Add host(s) dynamically
-│   │   ├── add_alias.py        Add alternate host(s) (aliases) for an existing domain
-│   │   ├── remove_host.py      Remove host(s)/alias(es) and archive
-│   │   ├── restore_host.py     Restore archived host(s)
-│   │   ├── switch_php.py       Switch PHP version for a domain
-│   │   └── list_hosts.py       List domains with PHP versions
-│   ├── core/                   Core functionality
-│   │   ├── database.py         SQLite database management
-│   │   ├── migration.py        Config to database migration
-│   │   ├── config.py           Legacy JSON config (deprecated)
-│   │   ├── environment.py      .env file handling
-│   │   ├── docker_manager.py   Docker SDK integration
-│   │   ├── php_versions.py     PHP version map and port assignments
-│   │   ├── ssl_manager.py      mkcert wrapper
-│   │   ├── hosts_manager.py    /etc/hosts management
-│   │   ├── dns_server.py       Optional LAN DNS server (CoreDNS) config
-│   │   ├── caddyfile.py        Caddyfile generation and migration
-│   │   ├── password_manager.py MariaDB password sync
-│   │   ├── privilege_manager.py Passwordless sudo setup
-│   │   ├── resources.py        Data directory management
-│   │   └── updater.py          Self-update functionality
-│   └── utils/                  Utilities
-│       ├── platform.py         Cross-platform detection
-│       ├── logging.py          Rich console output
-│       └── validation.py       Input validation
-├── scripts/
-│   └── build.py                Binary build script
-└── tests/                      Test suite
+└── install.sh                  Installer (macOS, Linux)
 ```
 
 ## Services
@@ -1110,35 +1116,33 @@ All ports are configurable via the `.env` file. See [Environment Variables](#env
 
 ## Development
 
-### Install development dependencies
+Requires [Go](https://go.dev) 1.26 or later, and [golangci-lint](https://golangci-lint.run) for linting.
+
+### Build
 
 ```bash
-pip install -e ".[dev]"
+make build        # bin/frankenmanager, for this machine
+make build-all    # the 7 release targets in bin/
 ```
 
 ### Run tests
 
 ```bash
-pytest
+make test
 ```
 
-### Type checking
-
-```bash
-mypy src/
-```
+The tests never reach the network, Docker or your real data directory: external programs, GitHub and the hosts file are faked.
 
 ### Linting
 
 ```bash
-ruff check src/
+make lint
 ```
 
-### Build binaries
+### Release archives
 
 ```bash
-pip install pyinstaller
-python scripts/build.py --clean --test --release
+go run ./cmd/release all -version 1.2.0    # dist/assets: archives, bare executables, SHA256SUMS.txt
 ```
 
 ### Releasing
@@ -1155,9 +1159,10 @@ Releases are published by the `Release` workflow, run manually from the GitHub A
 
 | Feature | macOS | Linux | Windows |
 |---------|-------|-------|---------|
-| Pre-built binary | arm64 + x86_64 | x86_64 | x86_64 |
+| Pre-built binary | arm64 + x86_64 | x86_64 + arm64 + armv7 | x86_64 + arm64 |
 | Passwordless hosts | sudoers helper | sudoers helper | Admin required |
 | mkcert auto-install | Homebrew | Direct download | Chocolatey/Scoop |
+| Self-update | yes | yes | yes (Administrator terminal) |
 
 ## Troubleshooting
 

@@ -1,0 +1,25 @@
+version: "2"
+
+linters:
+  # errcheck, govet, ineffassign, staticcheck, unused
+  default: standard
+  enable:
+    - errorlint
+    - misspell
+    - unconvert
+  settings:
+    errcheck:
+      # Terminal output: nothing useful to do if a write to stdout fails
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/leobsst/frankenphp-cli

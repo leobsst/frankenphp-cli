@@ -1,0 +1,88 @@
+services:
+  db-mysql:
+    container_name: franken_mysql
+    image: mysql:${MYSQL_VERSION:-8.0}
+    restart: always
+    command: --max-allowed-packet=${MYSQL_MAX_ALLOWED_PACKET:-512M}
+    user: ${UID}:${GID}
+    env_file: .env
+    volumes:
+      - ${DATABASE_DIR:-./database}/mysql:/var/lib/mysql
+    ports:
+      - ${MYSQL_PORT:-127.0.0.1:3307:3306}
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    networks:
+      - franken_network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  phpmyadmin:
+    container_name: franken_phpmyadmin
+    image: phpmyadmin:latest
+    restart: always
+    environment:
+      PMA_HOSTS: franken_mysql
+      PMA_VERBOSES: MySQL
+      PMA_PORTS: 3306
+      FRANKEN_PASSWORD_FRANKEN_MYSQL: ${MYSQL_ROOT_PASSWORD}
+    volumes:
+      - ./phpmyadmin/config.user.inc.php:/etc/phpmyadmin/config.user.inc.php:ro
+    ports:
+      - ${PMA_PORT:-127.0.0.1:8080:80}
+    depends_on:
+      db-mysql:
+        condition: service_healthy
+    networks:
+      - franken_network
+
+  soketi:
+    container_name: franken_soketi
+    image: quay.io/soketi/soketi:1.6-16-alpine
+    restart: always
+    environment:
+      SOKETI_DEFAULT_APP_ID: ${SOKETI_DEFAULT_APP_ID}
+      SOKETI_DEFAULT_APP_KEY: ${SOKETI_DEFAULT_APP_KEY}
+      SOKETI_DEFAULT_APP_SECRET: ${SOKETI_DEFAULT_APP_SECRET}
+      SOKETI_PORT: '6001'
+    ports:
+      - ${SOKETI_PUBLISH:-127.0.0.1:6001:6001}
+    networks:
+      - franken_network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:$${SOKETI_PORT}/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  dns:
+    container_name: franken_dns
+    image: coredns/coredns:1.11.3
+    restart: always
+    command: -conf /etc/coredns/Corefile
+    volumes:
+      - ./dns:/etc/coredns:ro
+    ports:
+      - "192.168.1.10:5353:53/udp"
+      - "192.168.1.10:5353:53/tcp"
+
+  caddy-proxy:
+    container_name: franken-caddy-proxy
+    image: caddy:2-alpine
+    restart: always
+    network_mode: host
+    volumes:
+      - ${CADDY_DIR:-./caddy}/Caddyfile:/etc/caddy/Caddyfile
+      - ${CADDY_DIR:-./caddy}/certs:/certs
+      - ${CADDY_DIR:-./caddy}/data:/data
+      - ${CADDY_DIR:-./caddy}/config:/config
+      - ${CADDY_DIR:-./caddy}/log:/var/log
+
+networks:
+  franken_network:
+    driver: bridge

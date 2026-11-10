@@ -101,80 +101,110 @@ jobs:
             echo "prerelease=false" >> "$GITHUB_OUTPUT"
           fi
 
-  build-binaries:
-    name: Build ${{ matrix.os }} binary
+  build:
+    name: Build the bundles (7 targets)
     needs: authorize
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      # Pin the exact release version so a binary built ahead of its tag
-      # (the tag is only created at the end, with the release) never embeds
-      # a "guess-next-dev" version — only source/non-binary installs
-      # should ever report a .dev version. hatch-vcs calls
-      # setuptools_scm.get_version() without a dist_name, so only the
-      # unscoped SETUPTOOLS_SCM_PRETEND_VERSION is actually read (the
-      # dist-scoped _FOR_<NAME> variant is silently ignored).
-      SETUPTOOLS_SCM_PRETEND_VERSION: ${{ needs.authorize.outputs.version }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            artifact_name: frankenmanager-linux-x86_64
-          - os: macos-latest
-            artifact_name: frankenmanager-macos-arm64
-          # - os: macos-15-large
-          #   artifact_name: frankenmanager-macos-x86_64
-          # - os: windows-latest
-          #   artifact_name: frankenmanager-windows-x86_64.exe
-
+      VERSION: ${{ needs.authorize.outputs.version }}
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0  # Fetch all history and tags for version detection
 
-      - name: Set up Python
-        uses: actions/setup-python@v7
+      - name: Set up Go
+        uses: actions/setup-go@v7
         with:
-          python-version: "3.11"
+          go-version: "1.27.x"
 
-      - name: Install dependencies
+      - name: Test
+        run: go test ./...
+
+      # Reproducible archives: every entry gets the commit time
+      - name: Set SOURCE_DATE_EPOCH
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
+
+      - name: Build every bundle
+        run: go run ./cmd/release stage -version "$VERSION" -out dist
+
+      - name: Package Linux and Windows
+        run: >-
+          go run ./cmd/release pack -out dist
+          -targets linux/amd64,linux/arm64,linux/arm,windows/amd64,windows/arm64
+
+      - name: Test the Linux bundle as installed
         run: |
-          python -m pip install --upgrade pip
-          pip install hatch-vcs  # Required for version detection
-          pip install -e .
-          pip install pyinstaller
+          # Extracted from its archive and called through a symlink, like install.sh
+          TEST_DIR=$RUNNER_TEMP/bundle-test
+          mkdir -p "$TEST_DIR/bin"
+          tar -xzf dist/assets/frankenmanager-linux-x86_64.tar.gz -C "$TEST_DIR"
+          ln -s "$TEST_DIR/frankenmanager/frankenmanager" "$TEST_DIR/bin/frankenmanager"
+          test "$("$TEST_DIR/bin/frankenmanager" --version)" = "FrankenManager version $VERSION"
+          "$TEST_DIR/bin/frankenmanager" --help > /dev/null
+          test "$(dist/assets/frankenmanager-linux-x86_64 --version)" = "FrankenManager version $VERSION"
+
+      # Artifacts drop the execute bit: the macOS stage travels as a tarball
+      - name: Bundle the macOS stage
+        run: tar -czf stage-macos.tar.gz -C dist stage/darwin-amd64 stage/darwin-arm64
+
+      - name: Upload the macOS stage
+        uses: actions/upload-artifact@v7
+        with:
+          name: stage-macos
+          path: stage-macos.tar.gz
+          if-no-files-found: error
+
+      - name: Upload the Linux and Windows assets
+        uses: actions/upload-artifact@v7
+        with:
+          name: assets-other
+          path: dist/assets/*
+          if-no-files-found: error
+
+  macos:
+    name: Sign, notarize and package macOS
+    needs: [authorize, build]
+    runs-on: macos-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+      VERSION: ${{ needs.authorize.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: "1.27.x"
+
+      - name: Download the macOS stage
+        uses: actions/download-artifact@v8
+        with:
+          name: stage-macos
+
+      - name: Extract the macOS stage
+        run: |
+          mkdir -p dist
+          tar -xzf stage-macos.tar.gz -C dist
+          echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
 
       - name: Warn about missing Apple signing secrets
-        if: runner.os == 'macOS' && env.APPLE_CERTIFICATE_BASE64 == ''
+        if: env.APPLE_CERTIFICATE_BASE64 == ''
         env:
           APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
         run: |
-          echo "::warning::macOS binary will NOT be signed or notarized. Users will need to manually allow it in System Settings."
+          echo "::warning::macOS binaries will NOT be signed or notarized (ad hoc signature only). Users will need to manually allow them in System Settings."
           echo ""
           echo "To enable code signing, add the following secrets in Settings > Secrets and variables > Actions:"
-          echo ""
-          echo "1. APPLE_CERTIFICATE_BASE64"
-          echo "   - Open Keychain Access, export your 'Developer ID Application' certificate as .p12"
-          echo "   - Encode it: base64 -i YourCertificate.p12 | pbcopy"
-          echo "   - Paste the result as the secret value"
-          echo ""
-          echo "2. APPLE_CERTIFICATE_PASSWORD"
-          echo "   - The password you chose when exporting the .p12 file"
-          echo ""
-          echo "3. APPLE_NOTARY_CREDENTIALS"
-          echo '   - A JSON object: {"apple_id": "your@email.com", "team_id": "XXXXXXXXXX", "app_specific_password": "xxxx-xxxx-xxxx-xxxx"}'
-          echo "   - Generate an app-specific password at https://appleid.apple.com/account/manage"
-          echo "   - Find your Team ID at https://developer.apple.com/account#MembershipDetailsCard"
+          echo "1. APPLE_CERTIFICATE_BASE64: your 'Developer ID Application' certificate exported as .p12, base64-encoded"
+          echo "2. APPLE_CERTIFICATE_PASSWORD: the password of the .p12 file"
+          echo '3. APPLE_NOTARY_CREDENTIALS: {"apple_id": "...", "team_id": "XXXXXXXXXX", "app_specific_password": "xxxx-xxxx-xxxx-xxxx"}'
 
       - name: Setup macOS code signing keychain
         id: macos-keychain
-        if: runner.os == 'macOS' && env.APPLE_CERTIFICATE_BASE64 != ''
+        if: env.APPLE_CERTIFICATE_BASE64 != ''
         env:
           APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
-          # Create temporary keychain
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
           KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
 
@@ -182,199 +212,137 @@ jobs:
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-          # Import certificate
           CERT_PATH=$RUNNER_TEMP/certificate.p12
           echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
           security import "$CERT_PATH" -P "$APPLE_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
           security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain
 
-          # Find signing identity and export for next steps
           IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep "Developer ID Application" | head -1 | awk -F'"' '{print $2}')
           echo "Signing with identity: $IDENTITY"
           echo "identity=$IDENTITY" >> $GITHUB_OUTPUT
           echo "keychain_path=$KEYCHAIN_PATH" >> $GITHUB_OUTPUT
-          echo "keychain_password=$KEYCHAIN_PASSWORD" >> $GITHUB_OUTPUT
 
-      - name: Build binary (macOS signed)
-        if: runner.os == 'macOS' && steps.macos-keychain.outputs.identity != ''
+      # The CLI, then the app (its seal covers the launcher and Info.plist).
+      # Go binaries need no entitlement under the hardened runtime.
+      - name: Sign the bundles
         env:
-          CODESIGN_IDENTITY: ${{ steps.macos-keychain.outputs.identity }}
-          ENTITLEMENTS_FILE: entitlements.plist
-        run: python scripts/build.py --clean --release
+          IDENTITY: ${{ steps.macos-keychain.outputs.identity }}
+        run: |
+          if [ -n "$IDENTITY" ]; then
+            SIGN=(codesign --force --options runtime --timestamp --sign "$IDENTITY")
+          else
+            SIGN=(codesign --force --sign -)
+          fi
+          for BUNDLE in dist/stage/darwin-*/frankenmanager; do
+            "${SIGN[@]}" "$BUNDLE/frankenmanager"
+            "${SIGN[@]}" "$BUNDLE/FrankenManager.app"
+            codesign --verify --strict --verbose "$BUNDLE/frankenmanager"
+            codesign --verify --deep --strict --verbose "$BUNDLE/FrankenManager.app"
+          done
 
-      - name: Build binary (unsigned)
-        if: runner.os != 'macOS' || steps.macos-keychain.outputs.identity == ''
-        run: python scripts/build.py --clean --release
-
-      - name: Notarize macOS binary
-        if: runner.os == 'macOS' && steps.macos-keychain.outputs.identity != ''
+      - name: Notarize
+        if: steps.macos-keychain.outputs.identity != ''
         env:
           APPLE_NOTARY_CREDENTIALS: ${{ secrets.APPLE_NOTARY_CREDENTIALS }}
         run: |
-          # Legacy single-file binary (everything matching but the .tar.gz archive)
-          LEGACY_PATH=$(ls dist/frankenmanager-* | grep -v '\.tar\.gz$')
+          APPLE_ID=$(jq -r .apple_id <<< "$APPLE_NOTARY_CREDENTIALS")
+          TEAM_ID=$(jq -r .team_id <<< "$APPLE_NOTARY_CREDENTIALS")
+          APP_PASSWORD=$(jq -r .app_specific_password <<< "$APPLE_NOTARY_CREDENTIALS")
 
-          # Verify signatures
-          codesign --verify --verbose dist/frankenmanager/frankenmanager
-          codesign --verify --verbose "$LEGACY_PATH"
-          codesign --verify --deep --strict --verbose dist/frankenmanager/FrankenManager.app
-          echo "Binary signatures verified"
-
-          # Parse notary credentials
-          APPLE_ID=$(echo "$APPLE_NOTARY_CREDENTIALS" | python3 -c "import sys,json; print(json.load(sys.stdin)['apple_id'])")
-          TEAM_ID=$(echo "$APPLE_NOTARY_CREDENTIALS" | python3 -c "import sys,json; print(json.load(sys.stdin)['team_id'])")
-          APP_PASSWORD=$(echo "$APPLE_NOTARY_CREDENTIALS" | python3 -c "import sys,json; print(json.load(sys.stdin)['app_specific_password'])")
-
-          # Create zip for notarization (onedir bundle + legacy binary)
-          NOTARIZE_DIR=$RUNNER_TEMP/notarize
-          mkdir -p "$NOTARIZE_DIR"
-          cp -R dist/frankenmanager "$LEGACY_PATH" "$NOTARIZE_DIR/"
+          # notarytool takes a zip: both signed bundles (CLI and app)
           ZIP_PATH=$RUNNER_TEMP/frankenmanager.zip
-          ditto -c -k --keepParent "$NOTARIZE_DIR" "$ZIP_PATH"
-
-          # Submit for notarization and wait
+          ditto -c -k --keepParent dist/stage "$ZIP_PATH"
           xcrun notarytool submit "$ZIP_PATH" \
             --apple-id "$APPLE_ID" \
             --team-id "$TEAM_ID" \
             --password "$APP_PASSWORD" \
-            --wait --timeout 10m
-
-          echo "macOS binaries signed and notarized successfully"
+            --wait --timeout 15m
+          echo "macOS bundles signed and notarized"
 
       - name: Cleanup macOS keychain
         if: always() && steps.macos-keychain.outputs.keychain_path != ''
         run: security delete-keychain "${{ steps.macos-keychain.outputs.keychain_path }}"
 
-      - name: Test binary (Unix)
-        if: runner.os != 'Windows'
+      # After signing: the archives and bare binaries hold the signed files
+      - name: Package macOS
+        run: go run ./cmd/release pack -out dist -targets darwin/amd64,darwin/arm64
+
+      - name: Test the macOS bundle as installed
         run: |
-          # Run the bundle as installed: extracted from the release archive
-          # and called through a symlink, like install.sh does
           TEST_DIR=$RUNNER_TEMP/bundle-test
           mkdir -p "$TEST_DIR/bin"
-          tar -xzf dist/frankenmanager-*.tar.gz -C "$TEST_DIR"
+          tar -xzf dist/assets/frankenmanager-macos-arm64.tar.gz -C "$TEST_DIR"
           ln -s "$TEST_DIR/frankenmanager/frankenmanager" "$TEST_DIR/bin/frankenmanager"
-          "$TEST_DIR/bin/frankenmanager" --version
-          "$TEST_DIR/bin/frankenmanager" --help
+          test "$("$TEST_DIR/bin/frankenmanager" --version)" = "FrankenManager version $VERSION"
+          # The app launcher used by the LaunchAgent reaches the CLI
+          test "$("$TEST_DIR/frankenmanager/FrankenManager.app/Contents/MacOS/frankenmanager-agent" --version)" = "FrankenManager version $VERSION"
+          codesign --verify --deep --strict "$TEST_DIR/frankenmanager/FrankenManager.app"
 
-          # macOS: the app launcher used by the LaunchAgent reaches the CLI
-          if [ "$RUNNER_OS" = "macOS" ]; then
-            "$TEST_DIR/frankenmanager/FrankenManager.app/Contents/MacOS/frankenmanager-agent" --version
-          fi
-
-          LEGACY_PATH=$(ls dist/frankenmanager-* | grep -v '\.tar\.gz$')
-          chmod +x "$LEGACY_PATH"
-          "$LEGACY_PATH" --version
-
-      - name: Test binary (Windows)
-        if: runner.os == 'Windows'
-        run: |
-          dist\frankenmanager-*.exe --version
-          dist\frankenmanager-*.exe --help
-
-      - name: Upload artifact
+      - name: Upload the macOS assets
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ matrix.artifact_name }}
-          path: dist/frankenmanager-*
+          name: assets-macos
+          path: dist/assets/*
           if-no-files-found: error
 
-  build-python-package:
-    name: Build Python package
-    needs: authorize
-    runs-on: ubuntu-latest
+  windows:
+    name: Test the Windows bundle
+    needs: [authorize, build]
+    runs-on: windows-latest
     env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-      SETUPTOOLS_SCM_PRETEND_VERSION: ${{ needs.authorize.outputs.version }}
+      VERSION: ${{ needs.authorize.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
+      - name: Download the Windows assets
+        uses: actions/download-artifact@v8
         with:
-          fetch-depth: 0  # Fetch all history and tags for version detection
+          name: assets-other
 
-      - name: Set up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: "3.11"
-
-      - name: Install build tools
+      - name: Run the extracted executable
+        shell: bash
         run: |
-          python -m pip install --upgrade pip
-          pip install build hatch-vcs
-
-      - name: Build package
-        run: python -m build
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: python-package
-          path: dist/
-          if-no-files-found: error
+          mkdir -p bundle-test
+          tar -xzf frankenmanager-windows-x86_64.tar.gz -C bundle-test
+          test "$(./bundle-test/frankenmanager/frankenmanager.exe --version | tr -d '\r')" = "FrankenManager version $VERSION"
+          ./bundle-test/frankenmanager/frankenmanager.exe --help > /dev/null
 
   create-release:
     name: Create GitHub Release
-    needs: [authorize, build-binaries, build-python-package]
+    needs: [authorize, build, macos, windows]
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - uses: actions/checkout@v7
 
-      - name: Download all artifacts
+      - name: Download the assets
         uses: actions/download-artifact@v8
         with:
-          path: artifacts
-
-      - name: Prepare release assets
-        run: |
-          mkdir -p release-assets
-
-          # Copy binaries
-          cp artifacts/frankenmanager-linux-x86_64/* release-assets/ || true
-          cp artifacts/frankenmanager-macos-arm64/* release-assets/ || true
-          cp artifacts/frankenmanager-macos-x86_64/* release-assets/ || true
-          cp artifacts/frankenmanager-windows-x86_64.exe/* release-assets/ || true
-
-          # Copy Python packages
-          cp artifacts/python-package/* release-assets/ || true
-
-          # Make Unix binaries executable
-          chmod +x release-assets/frankenmanager-linux-* release-assets/frankenmanager-macos-* 2>/dev/null || true
-
-          # List all assets
-          echo "Release assets:"
-          ls -la release-assets/
+          pattern: assets-*
+          path: release-assets
+          merge-multiple: true
 
       - name: Generate checksums
         run: |
           cd release-assets
+          chmod +x frankenmanager-linux-* frankenmanager-macos-* 2>/dev/null || true
           sha256sum * > SHA256SUMS.txt
           cat SHA256SUMS.txt
+          ls -la
 
       - name: Extract CHANGELOG for version
         id: changelog
         run: |
           VERSION="${{ needs.authorize.outputs.version }}"
-
-          # Extract the section for this version from CHANGELOG.md
           if [ -f CHANGELOG.md ]; then
-            echo "Extracting changelog for version $VERSION"
-
-            # Use awk to extract content between version headers
             CHANGELOG_CONTENT=$(awk "/## \[$VERSION\]/,/## \[/" CHANGELOG.md | sed '$d' | tail -n +2)
-
-            # Check if we extracted anything meaningful
             if [ -n "$CHANGELOG_CONTENT" ]; then
-              # Save to file for use in release body
               echo "$CHANGELOG_CONTENT" > changelog_extract.md
               echo "has_content=true" >> $GITHUB_OUTPUT
             else
-              echo "No content found for version $VERSION in CHANGELOG.md"
               echo "has_content=false" >> $GITHUB_OUTPUT
             fi
           else
-            echo "CHANGELOG.md not found"
             echo "has_content=false" >> $GITHUB_OUTPUT
           fi
 
@@ -387,8 +355,6 @@ jobs:
 
           EOF
 
-          # Changelog given when running the workflow first (literal \n typed
-          # in the UI field become line breaks), then CHANGELOG.md
           if [ -n "${CHANGELOG_INPUT//[[:space:]]/}" ]; then
             NL=$'\n'
             printf '%s\n\n' "${CHANGELOG_INPUT//\\n/$NL}" >> release_body.md
@@ -404,22 +370,7 @@ jobs:
 
           ## Installation
 
-          ### Pre-built Binaries (Recommended)
-
-          Download the appropriate archive for your platform:
-
-          | Platform | Architecture | Download |
-          |----------|--------------|----------|
-          | macOS | Apple Silicon | `frankenmanager-macos-arm64.tar.gz` |
-          | macOS | Intel | `frankenmanager-macos-x86_64.tar.gz` |
-          | Linux | x86_64 | `frankenmanager-linux-x86_64.tar.gz` |
-
-          Each archive contains a `frankenmanager/` directory: keep it whole and
-          put its `frankenmanager` executable on your PATH (e.g. with a symlink).
-          The bare `frankenmanager-<platform>` binaries are slower-starting
-          single-file builds, only kept so that older installs can self-update.
-
-          #### Quick Install (macOS/Linux)
+          ### Quick Install (macOS/Linux)
 
           ```bash
           curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/refs/heads/main/install.sh | bash
@@ -431,25 +382,34 @@ jobs:
           VERSION=${{ needs.authorize.outputs.version }} curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/refs/heads/main/install.sh | bash
           ```
 
-          ### Python Package (pip)
+          ### Archives
 
-          ```bash
-          pip install frankenmanager
-          # or
-          pipx install frankenmanager
-          ```
+          | Platform | Architecture | Download |
+          |----------|--------------|----------|
+          | macOS | Apple Silicon | `frankenmanager-macos-arm64.tar.gz` |
+          | macOS | Intel | `frankenmanager-macos-x86_64.tar.gz` |
+          | Linux | x86_64 | `frankenmanager-linux-x86_64.tar.gz` |
+          | Linux | arm64 | `frankenmanager-linux-arm64.tar.gz` |
+          | Linux | armv7 | `frankenmanager-linux-armv7.tar.gz` |
+          | Windows | x86_64 | `frankenmanager-windows-x86_64.tar.gz` |
+          | Windows | arm64 | `frankenmanager-windows-arm64.tar.gz` |
+
+          Each archive contains a `frankenmanager/` directory: keep it whole
+          (on macOS it also holds `FrankenManager.app`) and put its
+          `frankenmanager` executable on your PATH, e.g. with a symlink. The
+          bare `frankenmanager-<platform>` executables are the same program,
+          kept so that older single-file installs can self-update.
+          `SHA256SUMS.txt` lists the checksums of every file.
 
           ## First-time Setup
-
-          After installation, run the setup command to configure passwordless privilege escalation and install dependencies:
 
           ```bash
           sudo frankenmanager setup --install-mkcert
           ```
 
-          This will:
-          - Configure passwordless `/etc/hosts` modifications
-          - Install mkcert for SSL certificate generation
+          This configures passwordless `/etc/hosts` modifications and installs
+          mkcert for SSL certificates. On Windows, run `frankenmanager setup`
+          from an Administrator terminal.
 
           ## Verify Installation
 
@@ -484,24 +444,3 @@ jobs:
           files: |
             release-assets/*
           body_path: release_body.md
-
-  # publish-pypi:
-  #   name: Publish to PyPI
-  #   needs: [build-python-package, create-release]
-  #   runs-on: ubuntu-latest
-  #   environment:
-  #     name: pypi
-  #     url: https://pypi.org/project/frankenmanager/
-  #   permissions:
-  #     id-token: write
-  #   steps:
-  #     - name: Download Python package
-  #       uses: actions/download-artifact@v8
-  #       with:
-  #         name: python-package
-  #         path: dist
-
-  #     - name: Publish to PyPI
-  #       uses: pypa/gh-action-pypi-publish@release/v1
-  #       with:
-  #         skip-existing: true

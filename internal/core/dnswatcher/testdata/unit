@@ -1,0 +1,13 @@
+[Unit]
+Description=FrankenManager LAN DNS watcher
+
+[Service]
+ExecStart="/home/me/.local/share/frank \"en\" \\manager/frankenmanager" "--no-update-check" "_watch-dns-internal"
+WorkingDirectory=/home/me/.local/share/frank "en" \manager
+StandardOutput=null
+StandardError=append:/home/me/.local/share/frank "en" \manager/.dns_watcher.log
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

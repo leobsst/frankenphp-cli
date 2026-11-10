@@ -1,0 +1,79 @@
+services:
+  db-mariadb:
+    container_name: franken_mariadb
+    image: mariadb:${MARIADB_VERSION:-10.11.9}
+    restart: always
+    command: --max-allowed-packet=${MYSQL_MAX_ALLOWED_PACKET:-512M}
+    user: ${UID}:${GID}
+    env_file: .env
+    volumes:
+      - ${DATABASE_DIR:-./database}/mariadb:/var/lib/mysql
+    ports:
+      - ${DB_PORT:-127.0.0.1:3306:3306}
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+    networks:
+      - franken_network
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  phpmyadmin:
+    container_name: franken_phpmyadmin
+    image: phpmyadmin:latest
+    restart: always
+    environment:
+      PMA_HOSTS: franken_mariadb
+      PMA_VERBOSES: MariaDB
+      PMA_PORTS: 3306
+      FRANKEN_PASSWORD_FRANKEN_MARIADB: ${MARIADB_ROOT_PASSWORD}
+    volumes:
+      - ./phpmyadmin/config.user.inc.php:/etc/phpmyadmin/config.user.inc.php:ro
+    ports:
+      - ${PMA_PORT:-127.0.0.1:8080:80}
+    depends_on:
+      db-mariadb:
+        condition: service_healthy
+    networks:
+      - franken_network
+
+  caddy-proxy:
+    container_name: franken-caddy-proxy
+    image: caddy:2-alpine
+    restart: always
+    network_mode: host
+    volumes:
+      - ${CADDY_DIR:-./caddy}/Caddyfile:/etc/caddy/Caddyfile
+      - ${CADDY_DIR:-./caddy}/certs:/certs
+      - ${CADDY_DIR:-./caddy}/data:/data
+      - ${CADDY_DIR:-./caddy}/config:/config
+      - ${CADDY_DIR:-./caddy}/log:/var/log
+    depends_on:
+      franken-php-83:
+        condition: service_started
+
+  franken-php-83:
+    container_name: frankenphp-8.3
+    image: custom-frankenphp:8.3
+    restart: always
+    network_mode: host
+    environment:
+      WEB_HTTP_PORT: '8380'
+      WEB_HTTPS_PORT: '8343'
+    volumes:
+      - ${CUSTOM_PATH}:/${CUSTOM_PATH}
+      - ${CADDY_DIR:-./caddy}/Caddyfile.worker:/etc/caddy/Caddyfile
+      - ${CADDY_DIR:-./caddy}/sites/php-8.3:/etc/caddy/sites/custom
+      - ${CADDY_DIR:-./caddy}/certs:/certs
+      - ${CADDY_DIR:-./caddy}/log:/var/log
+      - ./php/8.3/php.ini:/usr/local/etc/php/php.ini
+    depends_on:
+      db-mariadb:
+        condition: service_healthy
+
+networks:
+  franken_network:
+    driver: bridge

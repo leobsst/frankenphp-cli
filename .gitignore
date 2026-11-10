@@ -10,7 +10,7 @@ caddy/sites/php-*/*
 docker-compose-generated.yml
 php/8.*/
 database/*
-dns/
+/dns/
 .config
 .config.backup
 db.sqlite
@@ -20,49 +20,14 @@ db.sqlite
 .ca_server.state
 .dns_watcher.pid
 .dns_watcher.log
-# Python
-.venv/
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
+# Go
+/bin/
 
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-.nox/
-
-# Type checking
-.mypy_cache/
+# Release archives (go run ./cmd/release)
+/dist/
 
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
-
-# PyInstaller
-*.spec.bak
-*.manifest
-*.spec.~*
-
-instance/
-_version.py

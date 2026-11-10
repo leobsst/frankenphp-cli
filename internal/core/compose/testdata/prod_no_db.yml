@@ -1,0 +1,35 @@
+services:
+  caddy-proxy:
+    container_name: franken-caddy-proxy
+    image: caddy:2-alpine
+    restart: always
+    network_mode: host
+    volumes:
+      - ${CADDY_DIR:-${PWD}/caddy}/Caddyfile:/etc/caddy/Caddyfile
+      - ${CADDY_DIR:-${PWD}/caddy}/certs:/certs
+      - ${CADDY_DIR:-${PWD}/caddy}/data:/data
+      - ${CADDY_DIR:-${PWD}/caddy}/config:/config
+      - ${CADDY_DIR:-${PWD}/caddy}/log:/var/log
+      - /etc/letsencrypt:/etc/letsencrypt
+    depends_on:
+      franken-php-83:
+        condition: service_started
+
+  franken-php-83:
+    container_name: frankenphp-8.3
+    image: custom-frankenphp:8.3
+    restart: always
+    network_mode: host
+    user: ${UID}:${GID}
+    environment:
+      WEB_HTTP_PORT: '8380'
+      WEB_HTTPS_PORT: '8343'
+    volumes:
+      - ${CUSTOM_PATH}:/${CUSTOM_PATH}
+      - ${CADDY_DIR:-${PWD}/caddy}/Caddyfile.worker:/etc/caddy/Caddyfile
+      - ${CADDY_DIR:-${PWD}/caddy}/sites/php-8.3:/etc/caddy/sites/custom
+      - ${CADDY_DIR:-${PWD}/caddy}/certs:/certs
+      - ${CADDY_DIR:-${PWD}/caddy}/log:/var/log
+      - ${PWD}/php/8.3/php.ini:/usr/local/etc/php/php.ini
+      - ${PWD}/php/8.3/php-prod.ini:/usr/local/etc/php/conf.d/99-production.ini
+

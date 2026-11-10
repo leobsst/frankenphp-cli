@@ -1,0 +1,73 @@
+services:
+  db-postgresql:
+    container_name: franken_postgresql
+    image: postgres:${POSTGRES_VERSION:-16}-alpine
+    restart: always
+    network_mode: host
+    env_file: .env
+    volumes:
+      - ${DATABASE_DIR:-${PWD}/database}/postgresql:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  soketi:
+    container_name: franken_soketi
+    image: quay.io/soketi/soketi:1.6-16-alpine
+    restart: always
+    environment:
+      SOKETI_DEFAULT_APP_ID: ${SOKETI_DEFAULT_APP_ID}
+      SOKETI_DEFAULT_APP_KEY: ${SOKETI_DEFAULT_APP_KEY}
+      SOKETI_DEFAULT_APP_SECRET: ${SOKETI_DEFAULT_APP_SECRET}
+      SOKETI_PORT: '${SOKETI_PORT:-6001}'
+    network_mode: host
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:$${SOKETI_PORT}/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  caddy-proxy:
+    container_name: franken-caddy-proxy
+    image: caddy:2-alpine
+    restart: always
+    network_mode: host
+    volumes:
+      - ${CADDY_DIR:-${PWD}/caddy}/Caddyfile:/etc/caddy/Caddyfile
+      - ${CADDY_DIR:-${PWD}/caddy}/certs:/certs
+      - ${CADDY_DIR:-${PWD}/caddy}/data:/data
+      - ${CADDY_DIR:-${PWD}/caddy}/config:/config
+      - ${CADDY_DIR:-${PWD}/caddy}/log:/var/log
+      - /etc/letsencrypt:/etc/letsencrypt
+    depends_on:
+      franken-php-84:
+        condition: service_started
+
+  franken-php-84:
+    container_name: frankenphp-8.4
+    image: custom-frankenphp:8.4
+    restart: always
+    network_mode: host
+    user: ${UID}:${GID}
+    environment:
+      WEB_HTTP_PORT: '8480'
+      WEB_HTTPS_PORT: '8443'
+    volumes:
+      - ${CUSTOM_PATH}:/${CUSTOM_PATH}
+      - ${CADDY_DIR:-${PWD}/caddy}/Caddyfile.worker:/etc/caddy/Caddyfile
+      - ${CADDY_DIR:-${PWD}/caddy}/sites/php-8.4:/etc/caddy/sites/custom
+      - ${CADDY_DIR:-${PWD}/caddy}/certs:/certs
+      - ${CADDY_DIR:-${PWD}/caddy}/log:/var/log
+      - ${PWD}/php/8.4/php.ini:/usr/local/etc/php/php.ini
+      - ${PWD}/php/8.4/php-prod.ini:/usr/local/etc/php/conf.d/99-production.ini
+    depends_on:
+      db-postgresql:
+        condition: service_healthy
+

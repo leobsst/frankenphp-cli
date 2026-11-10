@@ -1,0 +1,102 @@
+{
+	http_port {$WEB_HTTP_PORT:80}
+	https_port {$WEB_HTTPS_PORT:443}
+}
+
+app.test {
+	tls /certs/app.test.pem /certs/app.test-key.pem
+	reverse_proxy 127.0.0.1:8380 {
+		header_up Host "app.test"
+	}
+	log {
+		output file /var/log/caddy/app_access.log {
+			roll_size 10mb
+			roll_keep 5
+			roll_keep_for 720h
+		}
+		format console
+	}
+}
+
+my.shop.test {
+	tls /certs/my.shop.test.pem /certs/my.shop.test-key.pem
+	reverse_proxy 127.0.0.1:8580 {
+		header_up Host "my.shop.test"
+	}
+	log {
+		output file /var/log/caddy/my.shop_access.log {
+			roll_size 10mb
+			roll_keep 5
+			roll_keep_for 720h
+		}
+		format console
+	}
+}
+
+alias.test {
+	tls /certs/alias.test.pem /certs/alias.test-key.pem
+	reverse_proxy 127.0.0.1:8380 {
+		header_up Host "app.test"
+	}
+	log {
+		output file /var/log/caddy/alias_access.log {
+			roll_size 10mb
+			roll_keep 5
+			roll_keep_for 720h
+		}
+		format console
+	}
+}
+
+api.test {
+	tls /certs/api.test.pem /certs/api.test-key.pem
+	reverse_proxy 127.0.0.1:8006
+	log {
+		output file /var/log/caddy/api_access.log {
+			roll_size 10mb
+			roll_keep 5
+			roll_keep_for 720h
+		}
+		format console
+	}
+}
+
+ext.test {
+	tls /certs/ext.test.pem /certs/ext.test-key.pem
+	reverse_proxy http://host:9000
+	log {
+		output file /var/log/caddy/ext_access.log {
+			roll_size 10mb
+			roll_keep 5
+			roll_keep_for 720h
+		}
+		format console
+	}
+}
+
+localhost {
+	tls /certs/localhost.pem /certs/localhost-key.pem
+	reverse_proxy 127.0.0.1:8081
+	log {
+		output file /var/log/caddy/localhost_access.log {
+			roll_size 10mb
+			roll_keep 5
+			roll_keep_for 720h
+		}
+		format console
+	}
+}
+
+ws.frankenmanager.test {
+	tls /certs/ws.frankenmanager.test.pem /certs/ws.frankenmanager.test-key.pem
+	reverse_proxy 127.0.0.1:6002
+	log {
+		output file /var/log/caddy/ws.frankenmanager_access.log {
+			roll_size 10mb
+			roll_keep 5
+			roll_keep_for 720h
+		}
+		format console
+	}
+}
+

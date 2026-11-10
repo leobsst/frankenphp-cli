@@ -1,0 +1,13 @@
+{
+  "none": [],
+  "one": [
+    "  Set 192.168.1.20 as the DNS server of your other devices (or of your router)."
+  ],
+  "many": [
+    "  Set one of these IPs as the DNS server of your other devices (or of your router):",
+    "    - 192.168.1.20 (en0, domains resolve to it)",
+    "    - 10.0.0.4 (en5)",
+    "    - 172.16.0.2",
+    "  On the same network, set two of them as primary and secondary DNS servers: the devices keep resolving if one interface goes down."
+  ]
+}
