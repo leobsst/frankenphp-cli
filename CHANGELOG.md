@@ -140,6 +140,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Caddyfile Management
 - Template-based Caddyfile generation
+  - Static assets (`/css/*`, `/js/*`, `/images/*`, `/fonts/*`, `/favicon.ico`) are cached for a year through a `@static` path matcher; pages get no `Cache-Control` header, so changes show up on reload
 - Per-site configuration files
 - Three-tier directory structure:
   - `custom/` - Active site configurations

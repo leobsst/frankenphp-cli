@@ -21,17 +21,10 @@ http://my.shop.test {
 	}
 
 	# Cache and security headers
+	@static path /css/* /js/* /images/* /fonts/* /favicon.ico
+	header @static Cache-Control "public, max-age=31536000, immutable"
+
 	header {
-		# Cache static files (1 year)
-		/css/* /js/* /images/* /fonts/* /favicon.ico {
-			Cache-Control "public, max-age=31536000, immutable"
-		}
-		
-		# Cache dynamic files (1 hour)
-		/ {
-			Cache-Control "public, max-age=3600"
-		}
-		
 		# Security headers
 		Strict-Transport-Security "max-age=15552000; includeSubDomains; preload"
 		X-Frame-Options "SAMEORIGIN"
