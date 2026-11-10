@@ -4,6 +4,8 @@
 BINARY  := frankenmanager
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null | sed 's/^v//')
 OUT     ?= bin
+# The golangci-lint of the CI, run without installing it
+GOLANGCI_LINT := go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
 PKG     := github.com/leobsst/frankenphp-cli
 LDFLAGS := -s -w -X $(PKG)/internal/version.Version=$(VERSION)
 GOFLAGS := -trimpath -ldflags '$(LDFLAGS)'
@@ -15,7 +17,7 @@ TARGETS := darwin/amd64 darwin/arm64 \
 
 export CGO_ENABLED := 0
 
-.PHONY: build build-all test lint clean
+.PHONY: build build-all test lint hooks clean
 
 ## build: native binary in $(OUT)/frankenmanager
 build:
@@ -36,7 +38,11 @@ test:
 
 ## lint: golangci-lint (configuration in .golangci.yml)
 lint:
-	golangci-lint run
+	$(GOLANGCI_LINT) run
+
+## hooks: enable the pre-commit hook of .githooks (lint before each commit)
+hooks:
+	git config core.hooksPath .githooks
 
 ## clean: move $(OUT) to the trash when `trash` exists, delete it otherwise
 clean:
