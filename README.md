@@ -1214,6 +1214,8 @@ Force regeneration:
 frankenmanager start "domain.test" /path --force-ssl
 ```
 
+**`cURL error 60: unable to get local issuer certificate` from PHP on the host (macOS)** while browsers accept the site: Homebrew's PHP and curl read Homebrew's CA bundle, not the keychain. `setup` adds the CA to that bundle on its own; if it could not, run `brew upgrade ca-certificates` (or `brew postinstall ca-certificates` when it is up to date). Inside the containers the CA is trusted on startup: restart them after a new CA.
+
 ### Certificate errors from another device on the network
 
 This is expected: mkcert's root CA is only trusted on the machine that installed it. Use `frankenmanager trust-ca on` to serve the root CA over your LAN so the other device can download and trust it - see [Share the root CA over your LAN](#share-the-root-ca-over-your-lan).

@@ -20,6 +20,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -62,6 +63,9 @@ type Installer struct {
 	BinDir string
 	// Home is the home directory of the real user (under sudo too).
 	Home string
+	// SudoUser is the user who ran sudo, "" outside sudo: Homebrew refuses
+	// to run as root, so brew runs as that user.
+	SudoUser string
 }
 
 // New returns the Installer of the running system.
@@ -75,7 +79,16 @@ func New(log Logger) *Installer {
 		Download: download,
 		BinDir:   "/usr/local/bin",
 		Home:     realHome(),
+		SudoUser: sudoUser(),
 	}
+}
+
+// sudoUser is the name of the user who ran sudo, "" outside sudo.
+func sudoUser() string {
+	if platform.UnderSudo() {
+		return os.Getenv("SUDO_USER")
+	}
+	return ""
 }
 
 // realHome is the home of the user who ran sudo, the current one otherwise.
@@ -138,11 +151,36 @@ Or download from: https://github.com/FiloSottile/mkcert/releases`
 
 // run runs a command, reporting a failure to start as a failed result.
 func (in *Installer) run(ctx context.Context, name string, args ...string) command.Result {
-	res, err := in.Run.Run(ctx, command.Cmd{Name: name, Args: args})
+	return in.runCmd(ctx, command.Cmd{Name: name, Args: args})
+}
+
+func (in *Installer) runCmd(ctx context.Context, c command.Cmd) command.Result {
+	res, err := in.Run.Run(ctx, c)
 	if err != nil {
 		return command.Result{ExitCode: -1, Stderr: []byte(err.Error())}
 	}
 	return res
+}
+
+// brew runs Homebrew with env added. As root under sudo, it runs as the
+// user who ran sudo (with their HOME): brew refuses to run as root, and
+// sudo drops the environment, hence env.
+func (in *Installer) brew(ctx context.Context, env map[string]string, args ...string) command.Result {
+	if in.SudoUser == "" || !in.IsAdmin() {
+		return in.runCmd(ctx, command.Cmd{Name: "brew", Args: args, Env: env})
+	}
+	sudoArgs := []string{"-H", "-u", in.SudoUser, "env"}
+	keys := make([]string, 0, len(env))
+	for k := range env {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	for _, k := range keys {
+		sudoArgs = append(sudoArgs, k+"="+env[k])
+	}
+	// sudo's secure_path may not include Homebrew's bin directory
+	sudoArgs = append(append(sudoArgs, in.Run.LookPath("brew")), args...)
+	return in.runCmd(ctx, command.Cmd{Name: "sudo", Args: sudoArgs})
 }
 
 // Install installs mkcert, and NSS first so that `mkcert -install` also
@@ -199,7 +237,7 @@ func (in *Installer) installNSS(ctx context.Context) bool {
 			return false
 		}
 		in.Log.Info("Installing nss via Homebrew...")
-		if res := in.run(ctx, "brew", "install", "nss"); !res.OK() {
+		if res := in.brew(ctx, nil, "install", "nss"); !res.OK() {
 			in.Log.Warning("Failed to install nss: " + string(res.Stderr))
 			return false
 		}
@@ -233,7 +271,7 @@ func (in *Installer) installMacOS(ctx context.Context) bool {
 		return false
 	}
 	in.Log.Info("Installing mkcert via Homebrew...")
-	if res := in.run(ctx, "brew", "install", "mkcert"); !res.OK() {
+	if res := in.brew(ctx, nil, "install", "mkcert"); !res.OK() {
 		in.Log.Error("Homebrew installation failed: " + string(res.Stderr))
 		return false
 	}
@@ -447,7 +485,38 @@ func (in *Installer) SetupCA(ctx context.Context) bool {
 			}
 		}
 	}
-	return in.runInstall(ctx, mkcert)
+	if !in.runInstall(ctx, mkcert) {
+		return false
+	}
+	in.updateHomebrewCABundle(ctx)
+	return true
+}
+
+// updateHomebrewCABundle rebuilds Homebrew's CA bundle on macOS, which
+// OpenSSL-based clients (Homebrew PHP and curl...) read instead of the
+// keychain: its post-install copies the trusted System keychain roots, so
+// the CA just installed joins it. An outdated keg is upgraded instead, its
+// post-install script failing against the newer formula. Best effort.
+func (in *Installer) updateHomebrewCABundle(ctx context.Context) {
+	if in.GOOS != "darwin" || in.Run.LookPath("brew") == "" ||
+		!in.brew(ctx, nil, "list", "--versions", "ca-certificates").OK() {
+		return
+	}
+	// The upgrade must not upgrade PHP or OpenSSL along with it
+	env := map[string]string{"HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK": "1"}
+	action := "postinstall"
+	in.Log.Info("Adding the CA to Homebrew's CA bundle (PHP, curl)...")
+	if res := in.brew(ctx, nil, "outdated", "--quiet", "ca-certificates"); strings.TrimSpace(string(res.Stdout)) != "" {
+		action = "upgrade"
+		in.Log.Info("Upgrading Homebrew's ca-certificates first...")
+	}
+	if res := in.brew(ctx, env, action, "ca-certificates"); !res.OK() {
+		in.Log.Warning(fmt.Sprintf("Could not update Homebrew's CA bundle: %s", strings.TrimSpace(string(res.Stderr))))
+		in.Log.Info("Host PHP may reject local certificates (cURL error 60). Run it by hand:")
+		in.Log.Info("  brew " + action + " ca-certificates")
+		return
+	}
+	in.Log.Success("Homebrew's CA bundle now trusts the FrankenManager CA!")
 }
 
 // uninstallCA removes the trusted CA before it is replaced, so that the

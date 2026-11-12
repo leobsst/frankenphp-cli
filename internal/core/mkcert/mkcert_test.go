@@ -244,6 +244,64 @@ func TestInstallMacOSAndWindows(t *testing.T) {
 	}
 }
 
+// After `mkcert -install` on macOS, Homebrew's CA bundle is rebuilt as the
+// sudo user (brew refuses root), upgrading an outdated keg whose
+// post-install would fail; a failure only warns.
+func TestSetupCAUpdatesHomebrewCABundle(t *testing.T) {
+	brew := "/opt/homebrew/bin/brew"
+	sudo := "sudo -H -u me env "
+	for _, tc := range []struct {
+		name               string
+		installed, outdate bool
+		fail               bool
+		want               []string
+		last               string
+	}{
+		{"up to date", true, false, false,
+			[]string{sudo + brew + " outdated --quiet ca-certificates",
+				sudo + "HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 " + brew + " postinstall ca-certificates"},
+			"success: Homebrew's CA bundle now trusts the FrankenManager CA!"},
+		{"outdated", true, true, false,
+			[]string{sudo + brew + " outdated --quiet ca-certificates",
+				sudo + "HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 " + brew + " upgrade ca-certificates"},
+			"success: Homebrew's CA bundle now trusts the FrankenManager CA!"},
+		{"failure", true, false, true,
+			[]string{sudo + brew + " outdated --quiet ca-certificates",
+				sudo + "HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK=1 " + brew + " postinstall ca-certificates"},
+			"info:   brew postinstall ca-certificates"},
+		{"not installed", false, false, false, nil, "success: mkcert CA installed successfully!"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			in, r, log := newInstaller("darwin", true, map[string]string{"mkcert": "/opt/homebrew/bin/mkcert", "brew": brew})
+			in.SudoUser = "me"
+			dir := t.TempDir()
+			caRunner(r, dir, command.Result{})
+			mkcertCalls := r.Handle
+			r.Handle = func(c command.Cmd) (command.Result, error) {
+				switch {
+				case slices.Contains(c.Args, "list"):
+					return command.Result{ExitCode: map[bool]int{true: 0, false: 1}[tc.installed]}, nil
+				case slices.Contains(c.Args, "outdated") && tc.outdate:
+					return command.Result{Stdout: []byte("ca-certificates\n"), ExitCode: 1}, nil
+				case slices.Contains(c.Args, "postinstall") && tc.fail:
+					return command.Result{ExitCode: 1, Stderr: []byte("boom")}, nil
+				}
+				return mkcertCalls(c)
+			}
+			if !in.SetupCA(context.Background()) {
+				t.Fatalf("SetupCA failed: %v", log.Lines)
+			}
+			// mkcert -CAROOT, mkcert -install, brew list, then the bundle
+			if got := r.Lines()[3:]; !slices.Equal(got, tc.want) {
+				t.Errorf("calls = %v", got)
+			}
+			if last := log.Lines[len(log.Lines)-1]; last != tc.last {
+				t.Errorf("log = %v", log.Lines)
+			}
+		})
+	}
+}
+
 // Under `sudo frankenmanager setup`, CAROOT and the CA files go back to the
 // real user, even when `mkcert -install` fails: otherwise `start` without
 // sudo cannot read the key and sign the site certificates.
