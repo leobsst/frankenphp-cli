@@ -27,8 +27,10 @@
 - Optional extra apt/Composer packages in the PHP image, scoped per PHP version
 - FrankenPHP with Caddy reverse proxy
 - MariaDB, MySQL and/or PostgreSQL databases with health checks
-- Optional Redis cache server (`REDIS_ENABLED=true`)
-- Optional Soketi WebSocket server (`SOKETI_ENABLED=true`), served over TLS at `wss://ws.frankenmanager.test`
+- Configuration stored in SQLite, changed with `frankenmanager configuration set` (with shell completion), applied live when possible
+- Optional Redis cache server, turned on and off live (`service enable redis`)
+- Optional Soketi WebSocket server (`service enable soketi`), served over TLS at `wss://ws.frankenmanager.test`
+- Short `fm` alias of the command (configurable, `frankenmanager` always works)
 - phpMyAdmin / pgAdmin for database management, served at `https://localhost`
 - Automatic `/etc/hosts` management (passwordless after setup)
 - Optional LAN DNS server so other devices reach your domains without editing their hosts file
@@ -50,7 +52,7 @@ The install script downloads the latest release for your platform, checks it aga
 curl -fsSL https://raw.githubusercontent.com/leobsst/frankenphp-cli/refs/heads/main/install.sh | bash
 ```
 
-It installs the bundle (the `frankenmanager` executable, plus `FrankenManager.app` on macOS) in `/usr/local/lib/frankenmanager` and links it as `/usr/local/bin/frankenmanager`. Set `VERSION=x.y.z` to pin a version. On Apple Silicon, it picks the arm64 build even from a Rosetta shell.
+It installs the bundle (the `frankenmanager` executable, plus `FrankenManager.app` on macOS) in `/usr/local/lib/frankenmanager` and links it as `/usr/local/bin/frankenmanager`, plus the short alias `/usr/local/bin/fm` (see [CLI alias](#cli-alias)). Set `VERSION=x.y.z` to pin a version. On Apple Silicon, it picks the arm64 build even from a Rosetta shell.
 
 ### Option 2: Manual install
 
@@ -148,6 +150,9 @@ frankenmanager setup --status
 | `frankenmanager setup` | Configure passwordless operation |
 | `frankenmanager update` | Update FrankenManager to latest version |
 | `frankenmanager restart --dns` | Restart the LAN DNS server (when `DNS_SERVER=true`) |
+| `frankenmanager configuration [list\|get\|set\|reset]` | Show or change the configuration (see [Settings](#settings)) |
+| `frankenmanager service enable\|disable\|status [dns\|redis\|soketi]` | Turn an optional service on or off, live |
+| `frankenmanager completion bash\|zsh\|fish\|powershell` | Generate the shell completion script |
 | `frankenmanager trust-ca on \| off \| status [--port <port>]` | Share the local mkcert root CA over the LAN so other devices can trust your `.test` domains (off by default) |
 | `frankenmanager --help` | Show help for all commands |
 
@@ -156,7 +161,7 @@ frankenmanager setup --status
 ### Start the server
 
 ```bash
-# Start with specific domains (default PHP version from .env)
+# Start with specific domains (default PHP version: DEFAULT_PHP_VERSION)
 frankenmanager start "domain1.test domain2.test" /path/to/projects
 
 # Start with a specific PHP version
@@ -177,10 +182,10 @@ frankenmanager start --build
   - If omitted on a fresh install (nothing registered yet), the server starts without any PHP container: only the reverse proxy, the databases and their admin UIs run. Add hosts afterwards with `add-host`, e.g. proxy hosts (`add-host "app.test" 127.0.0.1:3000`) that never need PHP
   - If provided, merges with registered domains (adds new ones to existing)
 - **--path** (optional): Path to the directory containing your project folders
-  - Uses `DEFAULT_PROJECT_PATH` from `.env` if not specified
+  - Uses the `DEFAULT_PROJECT_PATH` setting if not specified
   - Only required when at least one PHP domain is served
 - **--php** (optional): PHP version for the new domains (`8.2`, `8.3`, `8.4`, `8.5`)
-  - Defaults to `DEFAULT_PHP_VERSION` from `.env`, then `8.3`
+  - Defaults to the `DEFAULT_PHP_VERSION` setting (`8.3`)
   - PHP 8.2 is deprecated: it still works, but a warning is shown
 - **--build** (optional): Rebuild the PHP images even if they are up to date
 
@@ -301,7 +306,7 @@ What happens:
 
 The `exec` command runs a command with a PHP version (and its extensions, `php.ini`, Composer...), in a one-off container of that version's PHP image. The version is given directly (`8.4`) or taken from a domain. It runs from your current directory, wherever it is: the directory is mounted at the same path in the container, along with the projects root. The container uses the host network, like the PHP containers, so databases and other domains are reachable.
 
-Commands always run as the current user, so created files (`vendor/`, caches...) belong to you. On Windows, which has no Unix user IDs, `UID`/`GID` from `.env` are used (`1000:1000` if unset).
+Commands always run as the current user, so created files (`vendor/`, caches...) belong to you. On Windows, which has no Unix user IDs, the `UID`/`GID` settings are used (`1000:1000` if unset).
 
 ```bash
 cd ~/projects/myapp
@@ -330,7 +335,7 @@ frankenmanager add-host "newapp.test" --php 8.4
 
 #### Default PHP version
 
-Set `DEFAULT_PHP_VERSION` in `.env` to change the default for all commands that accept `--php`. Commands resolve the version in this order: `--php` flag → `DEFAULT_PHP_VERSION` in `.env` → `8.3`.
+Run `frankenmanager configuration set DEFAULT_PHP_VERSION 8.4` to change the default for all commands that accept `--php`. Commands resolve the version in this order: `--php` flag → `DEFAULT_PHP_VERSION` setting → `8.3`.
 
 #### Architecture
 
@@ -416,7 +421,7 @@ frankenmanager restart --build
 **Notes:**
 - When restarting `--caddy`, SSL certificates are regenerated (use `--force-ssl` to force full regeneration)
 - When restarting `--database`, the MariaDB password is automatically synced
-- When the LAN DNS server is enabled, `restart` (and `restart --dns`) refreshes its records and applies DNS settings changed in `.env`
+- When the LAN DNS server is enabled, `restart` (and `restart --dns`) refreshes its records and applies the DNS settings changed since the last start
 - Multiple containers can be restarted simultaneously by combining options
 - `restart` never rebuilds images unless `--build` is given
 
@@ -621,17 +626,15 @@ frankenmanager trust-ca off
 
 ### WebSocket server (Soketi)
 
-Apps that need WebSockets (e.g. Laravel broadcasting with Echo) can use an optional [Soketi](https://docs.soketi.app) server, compatible with the Pusher protocol. Turn it on in `.env`:
+Apps that need WebSockets (e.g. Laravel broadcasting with Echo) can use an optional [Soketi](https://docs.soketi.app) server, compatible with the Pusher protocol. Turn it on:
 
 ```bash
-SOKETI_ENABLED=true
-# Optional: left empty, they are generated on start and saved to .env
-SOKETI_DEFAULT_APP_ID=
-SOKETI_DEFAULT_APP_KEY=
-SOKETI_DEFAULT_APP_SECRET=
+frankenmanager service enable soketi
+# Optional: the credentials are generated when empty
+frankenmanager configuration get SOKETI_DEFAULT_APP_KEY
 ```
 
-On the next `frankenmanager start` (a `restart` does not pick up the change), the `franken_soketi` container runs and:
+When the server runs, Soketi starts at once (otherwise on the next `start`): the `franken_soketi` container runs and:
 
 - browsers connect to `wss://ws.frankenmanager.test` (port 443): the reverse proxy terminates TLS with a mkcert certificate and forwards the WebSocket traffic to Soketi. The hosts entry (and the LAN DNS record, when `DNS_SERVER=true`) is added for you;
 - PHP apps publish events to its HTTP API at `127.0.0.1:6001` (`SOKETI_PORT`), with no TLS.
@@ -656,17 +659,17 @@ VITE_PUSHER_SCHEME=https
 VITE_PUSHER_APP_CLUSTER="${PUSHER_APP_CLUSTER}"
 ```
 
-Changing a credential in `.env` takes effect on the next `stop`/`start`. Turning Soketi off removes the container and the `ws.frankenmanager.test` host on the next `start`.
+Changing a credential (`configuration set SOKETI_DEFAULT_APP_KEY ...`) takes effect on the next `stop`/`start`. `service disable soketi` removes the container, the reverse proxy route and the `ws.frankenmanager.test` host at once.
 
 ### LAN DNS server
 
-The `/etc/hosts` entries only exist on your machine: other devices on the network can't resolve your `.test` domains. Instead of editing the hosts file of each device, you can turn on an optional DNS server container ([CoreDNS](https://coredns.io)) in `.env`:
+The `/etc/hosts` entries only exist on your machine: other devices on the network can't resolve your `.test` domains. Instead of editing the hosts file of each device, you can turn on an optional DNS server container ([CoreDNS](https://coredns.io)):
 
 ```bash
-DNS_SERVER=true
+frankenmanager service enable dns
 ```
 
-On the next `frankenmanager start`, it resolves every registered domain (including alternate and proxy hosts) to your machine's LAN IP, and forwards every other query to `DNS_UPSTREAM`. It listens on every network interface (`0.0.0.0:53`), so it keeps answering when you switch from Wi-Fi to Ethernet. `start` and `status` print the IP to give the other devices, e.g. `192.168.1.42`. When your machine is connected through several interfaces (e.g. Wi-Fi and Ethernet at once), `start` and `status` list every address the server answers on: on the same network, set two of them as primary and secondary DNS servers so that the devices keep resolving if one interface goes down.
+When the server runs, it starts at once (otherwise on the next `start`). It resolves every registered domain (including alternate and proxy hosts) to your machine's LAN IP, and forwards every other query to `DNS_UPSTREAM`. It listens on every network interface (`0.0.0.0:53`), so it keeps answering when you switch from Wi-Fi to Ethernet. `start` and `status` print the IP to give the other devices, e.g. `192.168.1.42`. When your machine is connected through several interfaces (e.g. Wi-Fi and Ethernet at once), `start` and `status` list every address the server answers on: on the same network, set two of them as primary and secondary DNS servers so that the devices keep resolving if one interface goes down.
 
 Then point the other devices at it, either:
 - per device: set `192.168.1.42` as the DNS server in its Wi-Fi/network settings;
@@ -674,13 +677,13 @@ Then point the other devices at it, either:
 
 Domains added or removed with `add-host`, `add-alias`, `remove-host` or `restore-host` are picked up within a few seconds, without restarting anything.
 
-| Variable | Default | Description |
-|----------|---------|-------------|
+| Setting | Default | Description |
+|---------|---------|-------------|
 | `DNS_SERVER` | `false` | Run the LAN DNS server |
 | `DNS_IP` | (auto-detected, kept up to date) | IP the domains resolve to. Set it if the detected LAN IP is wrong (several network interfaces, VPN...): it then stays fixed |
 | `DNS_LISTEN_IP` | `0.0.0.0` | Address the server listens on. Set it only if port 53 is already taken on some address (e.g. `systemd-resolved` on Linux): use your LAN IP then |
 | `DNS_PORT` | `53` | Port the server listens on. Keep `53`: most devices can't use another port |
-| `DNS_UPSTREAM` | `1.1.1.1 9.9.9.9` | Space-separated resolvers for every other query. Use your router's or company's DNS if public resolvers are blocked |
+| `DNS_UPSTREAM` | `1.1.1.1 8.8.8.8` | Space-separated resolvers for every other query. Use your router's or company's DNS if public resolvers are blocked |
 
 **Notes:**
 - The domains follow your machine's LAN IP: while the server runs, a background process checks it every few seconds and, when it changes (Wi-Fi to Ethernet, new DHCP lease...), updates the records, which CoreDNS reloads on its own. Nothing to restart. `status` shows whether it is active ("Follows LAN IP changes"); it is off when `DNS_IP` is set, since the IP is then fixed.
@@ -863,7 +866,9 @@ sudo frankenmanager update --force
 
 **Note**: the binary is installed in a system directory (e.g. `/usr/local/lib`), so `frankenmanager update` and `frankenmanager update --force` need to be run with `sudo` (or as an administrator). `frankenmanager update --check` does not modify anything and does not require elevated privileges.
 
-Once the new version is installed, `update` also refreshes the static files of your data directory (`Dockerfile`, `docker-compose*.yml`, `docker/entrypoint.sh`, `caddy/Caddyfile.worker`, `caddy/Caddyfile.template`, `php/php.ini`, `php/php-prod.ini`, `.env.example`), as your user even under `sudo`. Generated files (`caddy/Caddyfile`, `docker-compose-generated.yml`, per-site Caddyfiles) and the per-version `php/<version>/php.ini` are left untouched.
+Once the new version is installed, `update` also refreshes the static files of your data directory (`Dockerfile`, `docker-compose*.yml`, `docker/entrypoint.sh`, `caddy/Caddyfile.worker`, `caddy/Caddyfile.template`, `php/php.ini`, `php/php-prod.ini`), as your user even under `sudo`. Generated files (`caddy/Caddyfile`, `docker-compose-generated.yml`, per-site Caddyfiles) and the per-version `php/<version>/php.ini` are left untouched.
+
+`update` also installs the [CLI alias](#cli-alias) when missing (releases before it had none).
 
 On Windows, run `frankenmanager update` from an Administrator terminal: the running `frankenmanager.exe` is moved aside and removed by the next update.
 
@@ -886,8 +891,8 @@ You can override this location with the `FRANKENMANAGER_DATA_DIR` environment va
 
 ```
 ~/.frankenmanager/
-├── db.sqlite               # Server state database (domains, status, timestamps)
-├── .env                    # Environment configuration, including the database passwords
+├── db.sqlite               # Configuration (including the database passwords) and server state (domains)
+├── .env.migrated           # Backup of the former .env file, once migrated
 ├── .db_password_history_*  # Previous database root passwords (used to sync password changes)
 ├── docker-compose.yml      # Docker Compose configuration
 ├── Dockerfile              # Custom FrankenPHP image
@@ -966,17 +971,54 @@ CREATE TABLE proxies (
 
 The `aliases` and `proxies` tables are created automatically the next time you run any `frankenmanager` command after upgrading — no reset or manual migration needed.
 
-### Environment Variables (.env)
+### Settings
 
-The `.env` file is automatically created in the data directory on first run. Edit it to configure:
+The configuration lives in the `configuration` table of `db.sqlite`: only the values you change are stored, the others use their default. Show and change it with the `configuration` command (alias `config`):
 
-| Variable | Default | Description |
-|----------|---------|-------------|
+```bash
+frankenmanager configuration                         # Every setting, its value, its source and how a change applies
+frankenmanager configuration get DEFAULT_PHP_VERSION # The value alone, for scripts
+frankenmanager configuration set DEFAULT_PHP_VERSION 8.4
+frankenmanager configuration set REDIS_ENABLED true  # Starts Redis at once when the server runs
+frankenmanager configuration reset WEB_HTTPS_PORT    # Back to the default
+frankenmanager configuration --show-secrets          # Show the passwords in clear
+```
+
+Names are case-insensitive and values are checked (`true`/`false`, ports, PHP versions, IPs...). Depending on the setting, a change applies:
+
+| Applies | Settings | What happens |
+|---------|----------|--------------|
+| live | `REDIS_ENABLED`, `DNS_SERVER`, `SOKETI_ENABLED` | The service starts or stops at once (same as `service enable\|disable`) |
+| immediate | `CLI_ALIAS` | The alias is replaced at once |
+| next command | `DEFAULT_PHP_VERSION`, `DEFAULT_PROJECT_PATH` | Read by the next command |
+| `restart --dns` | `DNS_IP`, `DNS_LISTEN_IP`, `DNS_PORT`, `DNS_UPSTREAM` | Refreshes the LAN DNS server |
+| `restart --database` | `MARIADB_ROOT_PASSWORD`, `MYSQL_ROOT_PASSWORD` | Syncs the root passwords |
+| `restart --build` | `PHP_IMAGE_DISTRO`, `INSTALL_PDFTK`, `EXTRA_*_PACKAGES*`, `WWWGROUP` | Rebuilds the PHP images |
+| stop/start | everything else (ports, versions, `DB_ENGINES`, `APP_ENV`...) | The containers must be recreated |
+
+When the server runs, `configuration set` tells which command applies the change; nothing is restarted behind your back.
+
+**Shell completion.** `configuration set` completes the setting names (with their description) and their accepted values. Install the completion once, then again after changing the alias:
+
+```bash
+echo 'source <(frankenmanager completion zsh)' >> ~/.zshrc    # zsh (after compinit)
+echo 'source <(frankenmanager completion bash)' >> ~/.bashrc  # bash (needs bash-completion)
+frankenmanager completion fish > ~/.config/fish/completions/frankenmanager.fish
+frankenmanager completion powershell >> $PROFILE
+```
+
+**Migration from `.env`.** Earlier releases read a `.env` file in the data directory. The first command run after upgrading imports it into `db.sqlite` (values left empty or equal to the default are skipped, so they follow future defaults), then renames it `.env.migrated` as a backup. Unknown keys are not imported and are listed. A `.env` file created afterwards is ignored, with a warning.
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `CLI_ALIAS` | `fm` | Short alias of the command, see [CLI alias](#cli-alias) (empty: none) |
 | `APP_ENV` | `dev` | Environment (`dev` or `prod`) |
 | `DEFAULT_PHP_VERSION` | `8.3` | Default PHP version for new domains (`8.2` (deprecated), `8.3`, `8.4`, `8.5`) |
-| `UID` | (auto-filled) | System user ID for file ownership |
-| `GID` | (auto-filled) | System group ID for file ownership |
-| `CERTS_DIR` | `./caddy/certs` | SSL certificates directory |
+| `UID` | (current user) | System user ID for file ownership |
+| `GID` | (current group) | System group ID for file ownership |
+| `DEFAULT_PROJECT_PATH` | (empty) | Projects root used when `start` has no `--path` |
+| `CADDY_DIR` | `./caddy` | Caddy files directory, certificates in its `certs/` (relative to the data directory, or absolute) |
+| `DATABASE_DIR` | `./database` | Database data directory |
 | `MARIADB_ROOT_PASSWORD` | (auto-generated) | MariaDB root password |
 | `EXPOSE_SERVICES` | `false` | Expose services to the network (not just localhost) |
 | `DB_PORT` | `3306` | MariaDB port |
@@ -997,9 +1039,10 @@ The `.env` file is automatically created in the data directory on first run. Edi
 | `WEB_HTTP_PORT` | `80` | Web server HTTP port |
 | `WEB_HTTPS_PORT` | `443` | Web server HTTPS port |
 | `DNS_SERVER` | `false` | Run the LAN DNS server (see [LAN DNS server](#lan-dns-server)) |
-| `DNS_IP` | (auto-detected) | IP the LAN DNS server resolves domains to and listens on |
+| `DNS_IP` | (auto-detected) | IP the LAN DNS server resolves domains to |
+| `DNS_LISTEN_IP` | (every interface) | Address the LAN DNS server listens on |
 | `DNS_PORT` | `53` | LAN DNS server port |
-| `DNS_UPSTREAM` | `1.1.1.1 9.9.9.9` | Resolvers the LAN DNS server forwards other queries to |
+| `DNS_UPSTREAM` | `1.1.1.1 8.8.8.8` | Resolvers the LAN DNS server forwards other queries to |
 | `MYSQL_MAX_ALLOWED_PACKET` | `512M` | MariaDB max packet size |
 | `PHP_IMAGE_DISTRO` | `alpine` | Base distribution of the PHP images: `alpine` (smaller) or `trixie` (Debian, glibc) |
 | `INSTALL_PDFTK` | `false` | Install `pdftk` in the PHP image (adds a Java runtime, ~200 MB) |
@@ -1012,43 +1055,55 @@ The `.env` file is automatically created in the data directory on first run. Edi
 
 ### Base Image (Alpine / Trixie)
 
-The PHP images are built on Alpine by default, which keeps them around half the size of the Debian ones. Set `PHP_IMAGE_DISTRO=trixie` to build on Debian Trixie instead, e.g. if a project relies on glibc-specific behavior (`iconv` transliteration, locales...).
+The PHP images are built on Alpine by default, which keeps them around half the size of the Debian ones. Run `frankenmanager configuration set PHP_IMAGE_DISTRO trixie` to build on Debian Trixie instead, e.g. if a project relies on glibc-specific behavior (`iconv` transliteration, locales...).
 
-`pdftk` is not installed by default since it needs a Java runtime (~200 MB). Set `INSTALL_PDFTK=true` to add it, on either distribution.
+`pdftk` is not installed by default since it needs a Java runtime (~200 MB). Run `frankenmanager configuration set INSTALL_PDFTK true` to add it, on either distribution.
 
 ### Extra Packages (apk / apt / Composer)
 
-The custom FrankenPHP image can install additional Linux and global Composer packages on top of the built-in ones, configured via `.env`. Linux packages are read from `EXTRA_APK_PACKAGES` on Alpine and from `EXTRA_APT_PACKAGES` on Trixie, as package names differ. `<version>` is the PHP version without the dot (`82`, `83`, `84`, `85`).
+The custom FrankenPHP image can install additional Linux and global Composer packages on top of the built-in ones, configured with `frankenmanager configuration set`. Linux packages are read from `EXTRA_APK_PACKAGES` on Alpine and from `EXTRA_APT_PACKAGES` on Trixie, as package names differ. `<version>` is the PHP version without the dot (`82`, `83`, `84`, `85`).
 
 ```bash
 # Applies to every PHP version
-EXTRA_APK_PACKAGES=htop vim
-EXTRA_COMPOSER_PACKAGES=deployer/deployer
+frankenmanager configuration set EXTRA_APK_PACKAGES "htop vim"
+frankenmanager configuration set EXTRA_COMPOSER_PACKAGES deployer/deployer
 
-# Applies to PHP 8.4 only, merged with the vars above
-EXTRA_APK_PACKAGES_84=redis
-EXTRA_COMPOSER_PACKAGES_84=laravel/installer
+# Applies to PHP 8.4 only, merged with the settings above
+frankenmanager configuration set EXTRA_APK_PACKAGES_84 redis
+frankenmanager configuration set EXTRA_COMPOSER_PACKAGES_84 laravel/installer
 ```
 
 Composer packages are installed with `composer global require`, so their binaries are available on the container's `PATH`.
 
 Changes take effect on the next image build: images whose build options changed are rebuilt automatically on the next `frankenmanager start` (or `add-host`/`restore-host`/`switch-php` when they start a new version container). Use `frankenmanager restart --build` to apply them without stopping the server.
 
+### CLI alias
+
+`fm` is a short alias of `frankenmanager`: `fm start`, `fm config set ...`. `frankenmanager` always stays available. The install script creates it next to the command (`/usr/local/bin/fm`, a symlink; `fm.cmd` on Windows), as do `setup` and `update` when it is missing.
+
+```bash
+frankenmanager configuration set CLI_ALIAS fk   # Replaces fm by fk
+frankenmanager configuration set CLI_ALIAS ""   # No alias
+frankenmanager configuration reset CLI_ALIAS    # Back to fm
+```
+
+An existing file of that name that is not a FrankenManager alias is never replaced: the command warns instead. When the directory is not writable, it prints the command to create the alias by hand (e.g. `sudo ln -s frankenmanager /usr/local/bin/fm`). macOS ships its own `/usr/bin/fm`: the alias wins as long as `/usr/local/bin` comes before `/usr/bin` in your `PATH` (the default); otherwise the command warns that `fm` runs the other program.
+
 ### Databases
 
-Enable one or more engines with `DB_ENGINES` (e.g. `DB_ENGINES=mariadb,mysql,postgresql`). Their root passwords are generated on the first start and stored in the `.env` file of the data directory, i.e. `~/.frankenmanager/.env` on macOS/Linux:
+Enable one or more engines with `DB_ENGINES` (e.g. `DB_ENGINES=mariadb,mysql,postgresql`). Their root passwords are generated on the first start and stored in the configuration (`db.sqlite` of the data directory):
 
-| Engine | User | Password variable in `~/.frankenmanager/.env` |
-|--------|------|------------------------------------------------|
+| Engine | User | Password setting |
+|--------|------|------------------|
 | MariaDB | `root` | `MARIADB_ROOT_PASSWORD` |
 | MySQL | `root` | `MYSQL_ROOT_PASSWORD` |
 | PostgreSQL | `POSTGRES_USER` (`postgres`) | `POSTGRES_PASSWORD` |
 
 ```bash
-grep PASSWORD ~/.frankenmanager/.env
+frankenmanager configuration get MARIADB_ROOT_PASSWORD
 ```
 
-Changing a password in `.env` is applied to the running database on the next `start` or `restart --db` (MariaDB/MySQL).
+Changing a password (`configuration set MARIADB_ROOT_PASSWORD ...`) is applied to the running database on the next `start` or `restart --db` (MariaDB/MySQL).
 
 **Admin UIs (dev only).** They are started automatically depending on the enabled engines, and one of them is served at `https://localhost` (unless `localhost` is registered as a host):
 
@@ -1057,7 +1112,7 @@ Changing a password in `.env` is applied to the running database on the next `st
 
 ### Production Mode
 
-Set `APP_ENV=prod` in `.env` to enable:
+Run `frankenmanager configuration set APP_ENV prod` (then `stop`/`start`) to enable:
 
 - Production Docker Compose configuration (host networking)
 - PHP OPCache enabled
@@ -1084,7 +1139,8 @@ frankenphp-cli/
 │   │   ├── dns/                LAN DNS server (CoreDNS) config
 │   │   ├── dnswatcher/         LAN IP watcher (LaunchAgent, systemd unit)
 │   │   ├── docker/             docker CLI wrapper, image builds
-│   │   ├── env/                .env handling
+│   │   ├── alias/              CLI alias (fm) next to the command
+│   │   ├── env/                Configuration: settings registry, .env migration
 │   │   ├── hosts/              Hosts file management
 │   │   ├── mkcert/             mkcert install and CA
 │   │   ├── password/           Database password sync
@@ -1101,7 +1157,6 @@ frankenphp-cli/
 │   ├── release/                Release archives and checksums
 │   └── ui/                     Log lines and tables
 ├── assets.go                   Embeds the resources below into the executable
-├── .env.example                Environment template
 ├── docker-compose.yml          Docker Compose (dev)
 ├── docker-compose-prod.yml     Docker Compose (prod)
 ├── Dockerfile                  Custom FrankenPHP image
@@ -1131,7 +1186,7 @@ frankenphp-cli/
 
 Only containers for PHP versions that have at least one domain are started: with no PHP domain at all, no FrankenPHP container runs.
 
-All ports are configurable via the `.env` file. See [Environment Variables](#environment-variables-env) for details.
+All ports are configurable with `frankenmanager configuration set`. See [Settings](#settings) for details.
 
 ## Development
 
@@ -1294,7 +1349,7 @@ frankenmanager stop
 sudo frankenmanager setup --remove
 
 # Remove the binary (if installed via binary)
-sudo rm -rf /usr/local/bin/frankenmanager /usr/local/lib/frankenmanager
+sudo rm -rf /usr/local/bin/frankenmanager /usr/local/bin/fm /usr/local/lib/frankenmanager
 
 # Remove data directory
 rm -rf ~/.frankenmanager

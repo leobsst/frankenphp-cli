@@ -74,9 +74,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Uses the domain's PHP image and `php.ini`; alternate hosts follow their target domain
   - A PHP version can be given instead of a domain (e.g. `exec 8.4 php -v`)
   - Runs from the current directory, wherever it is (mounted at the same path in a one-off container)
-  - Always runs as the current user (UID/GID from `.env`, or `1000:1000`, on Windows)
+  - Always runs as the current user (the `UID`/`GID` settings, or `1000:1000`, on Windows)
   - Quoted or unquoted command: a single quoted argument goes through a shell (pipes, `&&`)
   - Interactive TTY when run from a terminal, exits with the command's exit code
+- `configuration` (alias `config`) - Show and change the settings: `list`, `get`, `set`, `reset`
+  - Values validated (booleans, ports, PHP versions, IPs, database engines...), names case-insensitive
+  - Each setting tells how a change applies: live, next command, `restart --dns`/`--database`/`--build`, or stop/start; nothing is restarted behind your back
+  - `--show-secrets` to show the passwords, masked by default
+- `service` - Turn an optional service on or off live: `enable`/`disable`/`status` `dns`, `redis` or `soketi`
+  - On a running server, only that service starts or stops, with its certificate, hosts entry, reverse proxy route, DNS records and LAN IP watcher; otherwise it applies on the next start
+  - Also triggered by `configuration set` on `REDIS_ENABLED`, `DNS_SERVER` and `SOKETI_ENABLED`
+- `completion` - Shell completion script for bash, zsh, fish and PowerShell, completing the setting names (with their description) and values of `configuration set`, for the command and its alias
+- Short CLI alias `fm` (`CLI_ALIAS` setting, empty for none): `frankenmanager` always stays available
+  - A symlink next to the command (`fm.cmd` on Windows), installed by the install scripts, `setup` and `update`, replaced at once when `CLI_ALIAS` changes
+  - Never replaces a file of that name that is not a FrankenManager alias; warns when another `fm` comes first in `PATH` (macOS ships `/usr/bin/fm`)
 
 #### Services
 - **FrankenPHP** (webserver-and-caddy) - PHP 8.3 with Caddy web server
@@ -87,12 +98,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Automatic password sync between containers
   - Configurable max packet size (default 512M)
 - **Redis** (franken_redis) - Cache server
-- **Soketi** (franken_soketi) - Optional Pusher-compatible WebSocket server (`SOKETI_ENABLED=true`)
+- **Soketi** (franken_soketi) - Optional Pusher-compatible WebSocket server (`service enable soketi`)
   - Served over TLS by the reverse proxy at `wss://ws.frankenmanager.test` (certificate, hosts entry and LAN DNS record handled automatically)
   - Default app configured through `SOKETI_DEFAULT_APP_ID`, `SOKETI_DEFAULT_APP_KEY` and `SOKETI_DEFAULT_APP_SECRET` (generated on start when empty)
   - Reachable by the PHP apps at `127.0.0.1:SOKETI_PORT` (default `6001`), restartable with `restart --soketi`
 - **phpMyAdmin** (franken_phpmyadmin) - Web-based database management UI
-- **CoreDNS** (franken_dns) - Optional LAN DNS server (`DNS_SERVER=true`), so other devices on the network reach the `.test` domains without editing their hosts file
+- **CoreDNS** (franken_dns) - Optional LAN DNS server (`service enable dns`), so other devices on the network reach the `.test` domains without editing their hosts file
   - Resolves every registered domain, alternate host, proxy host and the Soketi host to this machine's LAN IP (or `DNS_IP`); every other query is forwarded to `DNS_UPSTREAM`
   - Listens on every network interface by default (`0.0.0.0:53`), `DNS_LISTEN_IP` and `DNS_PORT` to pin it
   - Records kept in sync on every domain change (add, remove, restore, alias, proxy host) without restarting the container, with a short TTL (30 s)
@@ -100,14 +111,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - The watcher runs as a LaunchAgent on macOS and a systemd user unit on Linux: independent of the terminal, back after a reboot or login, relaunched if it crashes (detached background process elsewhere)
     - macOS: shown as "FrankenManager" in Login Items, through a minimal `FrankenManager.app` shipped in the bundle, instead of the name on the signing certificate
   - `start` and `status` list every LAN address the server answers on (e.g. Wi-Fi and Ethernet at once), to set as primary and secondary DNS servers on the other devices
-  - `restart --dns` refreshes the records and applies the DNS settings changed in `.env`
+  - `restart --dns` refreshes the records and applies the DNS settings changed since the last start
 
 #### Custom Docker Image
 - Composer bundled in the custom FrankenPHP image
 - Alpine-based image by default, roughly half the size of the Debian one; `PHP_IMAGE_DISTRO=trixie` switches back to Debian Trixie
 - Optional `pdftk` (with its Java runtime) via `INSTALL_PDFTK=true`, on both distributions
-- Optional extra Linux packages via `EXTRA_APK_PACKAGES` (Alpine) or `EXTRA_APT_PACKAGES` (Trixie) in `.env`, installed on top of the built-in ones
-- Optional extra global Composer packages via `EXTRA_COMPOSER_PACKAGES` in `.env`, installed with `composer global require`
+- Optional extra Linux packages via `EXTRA_APK_PACKAGES` (Alpine) or `EXTRA_APT_PACKAGES` (Trixie), installed on top of the built-in ones
+- Optional extra global Composer packages via `EXTRA_COMPOSER_PACKAGES`, installed with `composer global require`
 - All scoped per PHP version with `EXTRA_APK_PACKAGES_<version>` / `EXTRA_APT_PACKAGES_<version>` / `EXTRA_COMPOSER_PACKAGES_<version>` (e.g. `EXTRA_APT_PACKAGES_84`), merged with the version-agnostic ones
 - Applied on the next image build (`frankenmanager start`, or when a new PHP version container is created)
 
@@ -119,9 +130,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Automatic migration from legacy JSON config
   - Dedicated `aliases` table for alternate hosts, auto-created on upgrade (no reset required)
   - Dedicated `proxies` table for raw upstream proxy hosts, auto-created on upgrade (no reset required)
-- `.env` file generation with sensible defaults
-  - Auto-generated MariaDB root password
-  - Auto-filled UID/GID for file ownership
+- Settings stored in SQLite (`configuration` table of `db.sqlite`), with sensible defaults kept in the code: only the changed values are stored
+  - Auto-generated database root passwords and Soketi credentials
+  - UID/GID of the current user by default, for file ownership
   - Configurable ports for all services
   - Environment mode (`dev`/`prod`)
   - Network exposure control
@@ -176,7 +187,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Release archives for 7 targets (`frankenmanager-<platform>.tar.gz`), each holding a `frankenmanager/` directory with the executable (plus `FrankenManager.app` on macOS), bare executables, and `SHA256SUMS.txt`
 - macOS executables and app signed with a Developer ID and notarized
 - `install.ps1` for Windows: installs `frankenmanager.exe` in `%LOCALAPPDATA%\Programs\FrankenManager` without Administrator rights, adds it to the user `PATH`, and checks the archive against `SHA256SUMS.txt`
-- `install.sh` for macOS and Linux: installs in `/usr/local/lib/frankenmanager` with a `/usr/local/bin/frankenmanager` link, picks the arm64 build on Apple Silicon even from a Rosetta shell, and checks the archive against `SHA256SUMS.txt`
+- `install.sh` for macOS and Linux: installs in `/usr/local/lib/frankenmanager` with a `/usr/local/bin/frankenmanager` link and the `/usr/local/bin/fm` alias, picks the arm64 build on Apple Silicon even from a Rosetta shell, and checks the archive against `SHA256SUMS.txt`
 - Version checking and display
 - Static resource templates (Dockerfile, docker-compose files, Caddyfile templates, base php.ini) embedded in the executable and automatically resynced on update when the installed version changes, leaving generated/live files (Caddyfile, docker-compose-generated.yml, per-domain site configs) untouched
 
@@ -189,7 +200,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Upgrading from 0.1.x
 - `sudo frankenmanager update` from 0.1.x installs 1.0.0 by itself, at the same place. The data directory (`~/.frankenmanager`), privilege setup, hosts entries, certificates, PHP images and the LAN DNS watcher service are picked up as they are: nothing to redo.
 - To go back, reinstall 0.1.63 (`VERSION=0.1.63 install.sh`): the data directory stays compatible both ways.
+- The `.env` file of the data directory is imported into `db.sqlite` by the first command (values left empty or equal to the default are skipped), then renamed `.env.migrated` as a backup; unknown keys are listed and left out. Change the settings with `frankenmanager configuration set` from then on.
 - What changes:
+  - The configuration lives in `db.sqlite` instead of `.env`; `.env.example` is no longer shipped, and the first `start` no longer stops to have it reviewed
+  - The database services of the generated compose file no longer load the `.env` file (`env_file`)
   - `list` and `status` show bare domain names (`app.test`) in their tables
   - A failed `start`, `add-host`, `add-alias` or `restore-host` prints its error once, cleans up, and exits with code 1
   - `restore-host --list` sorts the archived hosts by name
@@ -198,14 +212,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Updating an install older than the bundle layout (a single file in `/usr/local/bin`) in place, the fallback on `docker-compose.yml` / `docker-compose-prod.yml` when the generated compose file is missing, and the migration of the legacy `.config` file are removed
 - Fixed since 0.1.x:
   - The hosts helper script could not remove entries on Linux; `setup` replaces an outdated helper
-  - Windows: checking whether the CA server or the DNS watcher runs no longer kills it, and the first `start` no longer fails when creating `.env`
+  - Windows: checking whether the CA server or the DNS watcher runs no longer kills it
   - `restart` generated certificates in `CERTS_DIR` instead of `CADDY_DIR/certs`
   - The site template ignored a custom `CADDY_DIR`; the built-in fallback site had doubled braces
-  - The default `DNS_UPSTREAM` matches `.env.example` (`1.1.1.1 8.8.8.8`)
+  - The default `DNS_UPSTREAM` is `1.1.1.1 8.8.8.8` everywhere
   - An invalid `--php` printed a traceback instead of an error
   - `switch-php` on an unknown domain exited with code 0
   - mkcert is installed automatically on Linux armv7 too
-  - `start` wrote generated passwords and Soketi credentials to `.env` even when the server was already running
+  - `start` wrote generated passwords and Soketi credentials even when the server was already running
   - Linux: under `sudo`, mkcert could put its CA in root's home directory
   - A failed `add-host` or `restore-host` left its domains registered; `restore-host` also moves the site file back to the archive
 
