@@ -32,8 +32,9 @@ full_domain {
 		X-XSS-Protection "1; mode=block"
 		Referrer-Policy "no-referrer"
 		
-		# Remove server header
+		# Remove server and PHP version headers
 		-Server
+		-X-Powered-By
 	}
 
 	# @websocket {
