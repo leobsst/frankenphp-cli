@@ -1,5 +1,5 @@
 // Package alias installs the short alias of the frankenmanager command
-// (fm by default), next to it: a relative symlink on macOS and Linux, a
+// (fkm by default), next to it: a relative symlink on macOS and Linux, a
 // .cmd shim on Windows. frankenmanager itself is never touched.
 package alias
 

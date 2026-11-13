@@ -104,7 +104,7 @@
     }
     if (($env:Path -split ';') -notcontains $InstallDir) { $env:Path = "$env:Path;$InstallDir" }
 
-    # The short alias (fm by default, CLI_ALIAS setting) next to the command
+    # The short alias (fkm by default, CLI_ALIAS setting) next to the command
     & $Exe --no-update-check _install-alias-internal --bin-dir $InstallDir
 
     Write-Host ''

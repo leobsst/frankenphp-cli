@@ -121,7 +121,7 @@ var Services = map[string]string{
 const AliasKey = "CLI_ALIAS"
 
 // DefaultAlias is the CLI alias installed by default.
-const DefaultAlias = "fm"
+const DefaultAlias = "fkm"
 
 var booleans = []string{"true", "false"}
 

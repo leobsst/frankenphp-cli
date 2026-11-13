@@ -80,7 +80,7 @@ func TestDefaults(t *testing.T) {
 		uid, gid = strconv.Itoa(os.Getuid()), strconv.Itoa(os.Getgid())
 	}
 	for key, want := range map[string]string{
-		"UID": uid, "GID": gid, "DEFAULT_PHP_VERSION": "8.3", "CLI_ALIAS": "fm",
+		"UID": uid, "GID": gid, "DEFAULT_PHP_VERSION": "8.3", "CLI_ALIAS": "fkm",
 		"DNS_UPSTREAM": "1.1.1.1 8.8.8.8", "DEFAULT_PROJECT_PATH": "", "UNKNOWN": "",
 	} {
 		if got := e.Get(key); got != want {
@@ -115,7 +115,7 @@ func TestSetAndResetPersist(t *testing.T) {
 	if err := e.Load(); err != nil {
 		t.Fatal(err)
 	}
-	if e.Get("CLI_ALIAS") != "fm" || e.IsSet("CLI_ALIAS") || e.Get("DEFAULT_PHP_VERSION") != "8.4" {
+	if e.Get("CLI_ALIAS") != "fkm" || e.IsSet("CLI_ALIAS") || e.Get("DEFAULT_PHP_VERSION") != "8.4" {
 		t.Errorf("after reset: %v", e.Vars())
 	}
 }

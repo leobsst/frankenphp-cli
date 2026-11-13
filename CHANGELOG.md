@@ -85,9 +85,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - On a running server, only that service starts or stops, with its certificate, hosts entry, reverse proxy route, DNS records and LAN IP watcher; otherwise it applies on the next start
   - Also triggered by `configuration set` on `REDIS_ENABLED`, `DNS_SERVER` and `SOKETI_ENABLED`
 - `completion` - Shell completion script for bash, zsh, fish and PowerShell, completing the setting names (with their description) and values of `configuration set`, for the command and its alias
-- Short CLI alias `fm` (`CLI_ALIAS` setting, empty for none): `frankenmanager` always stays available
-  - A symlink next to the command (`fm.cmd` on Windows), installed by the install scripts, `setup` and `update`, replaced at once when `CLI_ALIAS` changes
-  - Never replaces a file of that name that is not a FrankenManager alias; warns when another `fm` comes first in `PATH` (macOS ships `/usr/bin/fm`)
+- Short CLI alias `fkm` (`CLI_ALIAS` setting, empty for none): `frankenmanager` always stays available
+  - A symlink next to the command (`fkm.cmd` on Windows), installed by the install scripts, `setup` and `update`, replaced at once when `CLI_ALIAS` changes
+  - Never replaces a file of that name that is not a FrankenManager alias; warns when another `fkm` comes first in `PATH`; the default is `fkm` rather than `fm`, which macOS already ships as `/usr/bin/fm`
 
 #### Services
 - **FrankenPHP** (webserver-and-caddy) - PHP 8.3 with Caddy web server
@@ -187,7 +187,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Release archives for 7 targets (`frankenmanager-<platform>.tar.gz`), each holding a `frankenmanager/` directory with the executable (plus `FrankenManager.app` on macOS), bare executables, and `SHA256SUMS.txt`
 - macOS executables and app signed with a Developer ID and notarized
 - `install.ps1` for Windows: installs `frankenmanager.exe` in `%LOCALAPPDATA%\Programs\FrankenManager` without Administrator rights, adds it to the user `PATH`, and checks the archive against `SHA256SUMS.txt`
-- `install.sh` for macOS and Linux: installs in `/usr/local/lib/frankenmanager` with a `/usr/local/bin/frankenmanager` link and the `/usr/local/bin/fm` alias, picks the arm64 build on Apple Silicon even from a Rosetta shell, and checks the archive against `SHA256SUMS.txt`
+- `install.sh` for macOS and Linux: installs in `/usr/local/lib/frankenmanager` with a `/usr/local/bin/frankenmanager` link and the `/usr/local/bin/fkm` alias, picks the arm64 build on Apple Silicon even from a Rosetta shell, and checks the archive against `SHA256SUMS.txt`
 - Version checking and display
 - Static resource templates (Dockerfile, docker-compose files, Caddyfile templates, base php.ini) embedded in the executable and automatically resynced on update when the installed version changes, leaving generated/live files (Caddyfile, docker-compose-generated.yml, per-domain site configs) untouched
 

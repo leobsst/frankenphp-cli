@@ -73,7 +73,7 @@ func TestUpdate(t *testing.T) {
 	// The alias, missing after releases without it, is installed once
 	if code, out, _ := e.run("update"); code != 0 || out != "-- Checking for updates...\n-- Current version: 1.3.0\n"+
 		"-- Latest version:  1.3.0\n-- Already on the latest version!\n"+
-		"-- Alias 'fm' ready: 'fm <command>' works like 'frankenmanager <command>'.\n" {
+		"-- Alias 'fkm' ready: 'fkm <command>' works like 'frankenmanager <command>'.\n" {
 		t.Errorf("code %d, out %q", code, out)
 	}
 	if _, out, _ := e.run("update"); strings.Contains(out, "Alias") {

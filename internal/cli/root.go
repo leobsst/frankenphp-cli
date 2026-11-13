@@ -36,7 +36,7 @@ func NewRootCmd(out, errOut io.Writer, deps Deps) *cobra.Command {
 		Short: "FrankenPHP Docker development environment manager",
 		Long: `FrankenPHP Docker development environment manager.
 
-Also available under its short alias, fm by default (CLI_ALIAS setting).`,
+Also available under its short alias, fkm by default (CLI_ALIAS setting).`,
 		Version: version.Version,
 		// Errors are printed by Execute, in its own format
 		SilenceErrors: true,

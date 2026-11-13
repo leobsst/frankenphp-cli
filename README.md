@@ -30,7 +30,7 @@
 - Configuration stored in SQLite, changed with `frankenmanager configuration set` (with shell completion), applied live when possible
 - Optional Redis cache server, turned on and off live (`service enable redis`)
 - Optional Soketi WebSocket server (`service enable soketi`), served over TLS at `wss://ws.frankenmanager.test`
-- Short `fm` alias of the command (configurable, `frankenmanager` always works)
+- Short `fkm` alias of the command (configurable, `frankenmanager` always works)
 - phpMyAdmin / pgAdmin for database management, served at `https://localhost`
 - Automatic `/etc/hosts` management (passwordless after setup)
 - Optional LAN DNS server so other devices reach your domains without editing their hosts file
@@ -52,7 +52,7 @@ The install script downloads the latest release for your platform, checks it aga
 curl -fsSL https://raw.githubusercontent.com/leobsst/frankenphp-cli/refs/heads/main/install.sh | bash
 ```
 
-It installs the bundle (the `frankenmanager` executable, plus `FrankenManager.app` on macOS) in `/usr/local/lib/frankenmanager` and links it as `/usr/local/bin/frankenmanager`, plus the short alias `/usr/local/bin/fm` (see [CLI alias](#cli-alias)). Set `VERSION=x.y.z` to pin a version. On Apple Silicon, it picks the arm64 build even from a Rosetta shell.
+It installs the bundle (the `frankenmanager` executable, plus `FrankenManager.app` on macOS) in `/usr/local/lib/frankenmanager` and links it as `/usr/local/bin/frankenmanager`, plus the short alias `/usr/local/bin/fkm` (see [CLI alias](#cli-alias)). Set `VERSION=x.y.z` to pin a version. On Apple Silicon, it picks the arm64 build even from a Rosetta shell.
 
 ### Option 2: Manual install
 
@@ -1011,7 +1011,7 @@ frankenmanager completion powershell >> $PROFILE
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `CLI_ALIAS` | `fm` | Short alias of the command, see [CLI alias](#cli-alias) (empty: none) |
+| `CLI_ALIAS` | `fkm` | Short alias of the command, see [CLI alias](#cli-alias) (empty: none) |
 | `APP_ENV` | `dev` | Environment (`dev` or `prod`) |
 | `DEFAULT_PHP_VERSION` | `8.3` | Default PHP version for new domains (`8.2` (deprecated), `8.3`, `8.4`, `8.5`) |
 | `UID` | (current user) | System user ID for file ownership |
@@ -1079,15 +1079,15 @@ Changes take effect on the next image build: images whose build options changed 
 
 ### CLI alias
 
-`fm` is a short alias of `frankenmanager`: `fm start`, `fm config set ...`. `frankenmanager` always stays available. The install script creates it next to the command (`/usr/local/bin/fm`, a symlink; `fm.cmd` on Windows), as do `setup` and `update` when it is missing.
+`fkm` is a short alias of `frankenmanager`: `fkm start`, `fkm config set ...`. `frankenmanager` always stays available. The install script creates it next to the command (`/usr/local/bin/fkm`, a symlink; `fkm.cmd` on Windows), as do `setup` and `update` when it is missing.
 
 ```bash
-frankenmanager configuration set CLI_ALIAS fk   # Replaces fm by fk
+frankenmanager configuration set CLI_ALIAS fk   # Replaces fkm by fk
 frankenmanager configuration set CLI_ALIAS ""   # No alias
-frankenmanager configuration reset CLI_ALIAS    # Back to fm
+frankenmanager configuration reset CLI_ALIAS    # Back to fkm
 ```
 
-An existing file of that name that is not a FrankenManager alias is never replaced: the command warns instead. When the directory is not writable, it prints the command to create the alias by hand (e.g. `sudo ln -s frankenmanager /usr/local/bin/fm`). macOS ships its own `/usr/bin/fm`: the alias wins as long as `/usr/local/bin` comes before `/usr/bin` in your `PATH` (the default); otherwise the command warns that `fm` runs the other program.
+An existing file of that name that is not a FrankenManager alias is never replaced: the command warns instead. When the directory is not writable, it prints the command to create the alias by hand (e.g. `sudo ln -s frankenmanager /usr/local/bin/fkm`). If another `fkm` comes first in your `PATH`, the command warns that `fkm` runs the other program. The default is `fkm` rather than `fm`, which macOS already ships as `/usr/bin/fm`.
 
 ### Databases
 
@@ -1139,7 +1139,7 @@ frankenphp-cli/
 │   │   ├── dns/                LAN DNS server (CoreDNS) config
 │   │   ├── dnswatcher/         LAN IP watcher (LaunchAgent, systemd unit)
 │   │   ├── docker/             docker CLI wrapper, image builds
-│   │   ├── alias/              CLI alias (fm) next to the command
+│   │   ├── alias/              CLI alias (fkm) next to the command
 │   │   ├── env/                Configuration: settings registry, .env migration
 │   │   ├── hosts/              Hosts file management
 │   │   ├── mkcert/             mkcert install and CA
@@ -1349,7 +1349,7 @@ frankenmanager stop
 sudo frankenmanager setup --remove
 
 # Remove the binary (if installed via binary)
-sudo rm -rf /usr/local/bin/frankenmanager /usr/local/bin/fm /usr/local/lib/frankenmanager
+sudo rm -rf /usr/local/bin/frankenmanager /usr/local/bin/fkm /usr/local/lib/frankenmanager
 
 # Remove data directory
 rm -rf ~/.frankenmanager

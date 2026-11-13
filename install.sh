@@ -111,7 +111,7 @@ $SUDO rm -rf "$LIB_DIR"
 $SUDO mv "${LIB_DIR}.new" "$LIB_DIR"
 $SUDO ln -sfn "${LIB_DIR}/${BINARY_NAME}" "${INSTALL_DIR}/${BINARY_NAME}"
 
-# The short alias (fm by default, CLI_ALIAS setting) next to the command. The
+# The short alias (fkm by default, CLI_ALIAS setting) next to the command. The
 # user's HOME is kept so that a configured alias is read from their data
 # directory (read-only: nothing is created there).
 $SUDO env HOME="$HOME" FRANKENMANAGER_DATA_DIR="${FRANKENMANAGER_DATA_DIR:-}" \
