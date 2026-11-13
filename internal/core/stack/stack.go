@@ -25,7 +25,8 @@ func ProjectPath(e *env.Env, s *store.Store) (string, error) {
 	return path, nil
 }
 
-// ComposeOptions returns what the compose file describes, from .env.
+// ComposeOptions returns what the compose file describes, from the
+// configuration.
 // dnsListen is where the LAN DNS server listens, "" when disabled.
 func ComposeOptions(e *env.Env, phpVersions []string, dnsListen string) compose.Options {
 	return compose.Options{
@@ -38,7 +39,7 @@ func ComposeOptions(e *env.Env, phpVersions []string, dnsListen string) compose.
 	}
 }
 
-// GenerateCompose rewrites the compose file from .env.
+// GenerateCompose rewrites the compose file from the configuration.
 func GenerateCompose(dataDir string, e *env.Env, phpVersions []string, dnsListen string) error {
 	_, err := compose.Write(dataDir, ComposeOptions(e, phpVersions, dnsListen))
 	return err
@@ -58,8 +59,8 @@ func ComposeUp(ctx context.Context, d *docker.Manager, e *env.Env, phpVersions [
 	return d.ComposeUp(ctx, vars)
 }
 
-// BuildImage builds the image of a PHP version with the build options of
-// .env, unless an up-to-date one exists and force is off. It reports
+// BuildImage builds the image of a PHP version with the configured build
+// options, unless an up-to-date one exists and force is off. It reports
 // whether it built.
 func BuildImage(ctx context.Context, d *docker.Manager, e *env.Env, log Logger,
 	customPath, phpVersion string, force bool) (bool, error) {

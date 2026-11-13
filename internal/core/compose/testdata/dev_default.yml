@@ -5,7 +5,6 @@ services:
     restart: always
     command: --max-allowed-packet=${MYSQL_MAX_ALLOWED_PACKET:-512M}
     user: ${UID}:${GID}
-    env_file: .env
     volumes:
       - ${DATABASE_DIR:-./database}/mariadb:/var/lib/mysql
     ports:

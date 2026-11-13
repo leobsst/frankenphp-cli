@@ -8,34 +8,18 @@ import (
 	"testing"
 
 	"github.com/leobsst/frankenphp-cli/internal/core/docker"
-	"github.com/leobsst/frankenphp-cli/internal/core/env"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
 )
 
-// initEnv creates .env from .env.example, as the first start does, then
-// appends extra (a later key wins).
+// initEnv stores the settings of extra, in .env syntax, over the defaults.
 func (e *testEnv) initEnv(extra string) {
 	e.t.Helper()
-	if _, err := env.New(filepath.Join(e.dir, ".env"), filepath.Join(e.dir, ".env.example")).EnsureExists(); err != nil {
-		e.t.Fatal(err)
-	}
-	f, err := os.OpenFile(filepath.Join(e.dir, ".env"), os.O_APPEND|os.O_WRONLY, 0)
-	if err != nil {
-		e.t.Fatal(err)
-	}
-	defer func() { _ = f.Close() }()
-	if _, err := f.WriteString("\n" + extra); err != nil {
-		e.t.Fatal(err)
-	}
+	e.writeEnv(extra)
 }
 
 func (e *testEnv) envValue(key string) string {
 	e.t.Helper()
-	v := env.New(filepath.Join(e.dir, ".env"), "")
-	if err := v.Load(); err != nil {
-		e.t.Fatal(err)
-	}
-	return v.Get(key)
+	return e.loadEnv().Get(key)
 }
 
 // projects returns a projects root for --path.
@@ -65,14 +49,23 @@ func (e *testEnv) dockerLines() []string {
 const running = `{"Names":"franken-caddy-proxy","State":"running","Status":"Up"}
 {"Names":"frankenphp-8.4","State":"running","Status":"Up"}`
 
-func TestStartCreatesEnvFirst(t *testing.T) {
+// An existing .env is migrated by the first command, which then uses it.
+func TestEnvFileMigratedOnFirstCommand(t *testing.T) {
 	e := newEnv(t)
-	code, out, _ := e.run("start")
-	if code != 1 || !strings.Contains(out, "-- Created .env file at "+filepath.Join(e.dir, ".env")+". Please review settings, then try again.") {
+	if err := os.WriteFile(filepath.Join(e.dir, ".env"), []byte("DEFAULT_PHP_VERSION=8.4\nFOO=bar\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, out, _ := e.run("configuration", "get", "DEFAULT_PHP_VERSION")
+	if code != 0 || !strings.Contains(out, "-- Configuration migrated from .env to db.sqlite") ||
+		!strings.Contains(out, "WARNING: Not migrated, unknown keys: FOO\n") || !strings.HasSuffix(out, "\n8.4\n") {
 		t.Errorf("code %d, out:\n%s", code, out)
 	}
-	if len(e.docker.calls) != 0 || strings.Contains(out, "ERROR") {
-		t.Errorf("docker %v, out %s", e.docker.calls, out)
+	if _, err := os.Stat(filepath.Join(e.dir, ".env.migrated")); err != nil {
+		t.Error(err)
+	}
+	// Once migrated, nothing more is said
+	if _, out, _ := e.run("configuration", "get", "DEFAULT_PHP_VERSION"); out != "8.4\n" {
+		t.Errorf("second run: %q", out)
 	}
 }
 
@@ -90,7 +83,7 @@ func TestStart(t *testing.T) {
 		t.Fatalf("code %d, out:\n%s", code, out)
 	}
 	for _, line := range []string{
-		"-- MariaDB password generated and saved to .env\n",
+		"-- MariaDB password generated and saved to the configuration\n",
 		"-- Added 127.0.0.1\tapp.test to hosts file\n",
 		"-- Building Docker image for PHP 8.4...\n",
 		"\n-- Web server started!\n--   PHP 8.4: app.test, api.test\n",
@@ -138,7 +131,7 @@ func TestStart(t *testing.T) {
 	}
 }
 
-// Nothing is written to .env when the server already runs.
+// Nothing is written to the configuration when the server already runs.
 func TestStartAlreadyRunning(t *testing.T) {
 	e := newEnv(t)
 	e.initEnv("SOKETI_ENABLED=true\n")
@@ -151,7 +144,7 @@ func TestStartAlreadyRunning(t *testing.T) {
 		t.Errorf("code %d, out %q", code, out)
 	}
 	if e.envValue("MARIADB_ROOT_PASSWORD") != "" || e.envValue("SOKETI_DEFAULT_APP_KEY") != "" {
-		t.Error(".env written")
+		t.Error("configuration written")
 	}
 }
 
@@ -162,7 +155,7 @@ func TestStartErrors(t *testing.T) {
 	}{
 		// An error message
 		"invalid php": {[]string{"start", "app.test", "--php", "7.4"}, "ERROR: Unsupported PHP version '7.4'"},
-		"no path":     {[]string{"start", "app.test"}, "ERROR: No project path specified and DEFAULT_PROJECT_PATH is not set in .env\n"},
+		"no path":     {[]string{"start", "app.test"}, "ERROR: No project path specified and DEFAULT_PROJECT_PATH is not set (frankenmanager configuration set DEFAULT_PROJECT_PATH <path>)\n"},
 		"bad path":    {[]string{"start", "app.test", "-p", "/nonexistent"}, "ERROR: Directory does not exist: /nonexistent\n"},
 		"bad domain":  {[]string{"start", "bad_domain.test", "-p", "."}, "ERROR: Invalid domain name: bad_domain.test\n"},
 		"extra arg":   {[]string{"start", "a.test", "b.test"}, ""},
@@ -269,8 +262,8 @@ func TestRestartSomeContainers(t *testing.T) {
 	for _, line := range []string{
 		"-- Restarting caddy, database, cache, soketi...\n",
 		"\n-- Generating SSL certificates...\n",
-		"WARNING: Redis is disabled: set REDIS_ENABLED=true in .env to use it.\n",
-		"WARNING: Soketi is disabled: set SOKETI_ENABLED=true in .env to use it.\n",
+		"WARNING: Redis is disabled: run 'frankenmanager service enable redis' to use it.\n",
+		"WARNING: Soketi is disabled: run 'frankenmanager service enable soketi' to use it.\n",
 		"\n-- Container(s) restarted: caddy, database, cache, soketi\n",
 	} {
 		if !strings.Contains(out, line) {
@@ -297,7 +290,7 @@ func TestRestartBuildWithoutProjectPath(t *testing.T) {
 	}
 	e.docker.ps = running
 	code, out, _ := e.run("restart", "--dns", "--build")
-	want := "ERROR: No project path known: set DEFAULT_PROJECT_PATH in .env or use 'stop' then 'start --build --path <path>'.\n"
+	want := "ERROR: No project path known: set DEFAULT_PROJECT_PATH (frankenmanager configuration set) or use 'stop' then 'start --build --path <path>'.\n"
 	if code != 1 || !strings.HasSuffix(out, want) {
 		t.Errorf("code %d, out:\n%s", code, out)
 	}

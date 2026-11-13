@@ -104,6 +104,9 @@
     }
     if (($env:Path -split ';') -notcontains $InstallDir) { $env:Path = "$env:Path;$InstallDir" }
 
+    # The short alias (fm by default, CLI_ALIAS setting) next to the command
+    & $Exe --no-update-check _install-alias-internal --bin-dir $InstallDir
+
     Write-Host ''
     Write-Host "$BinaryName v$Version installed to $Exe"
     Write-Host "Run '$BinaryName --version' to verify, then 'frankenmanager setup --install-mkcert' from an Administrator terminal on a first install."

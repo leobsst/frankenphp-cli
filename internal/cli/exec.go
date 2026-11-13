@@ -23,7 +23,7 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/validate"
 )
 
-// Fallback user when the host has no Unix IDs (Windows) and .env sets
+// Fallback user when the host has no Unix IDs (Windows) and the configuration sets
 // none: the default user of WSL2 distributions and most Linux desktops.
 const defaultUID, defaultGID = "1000", "1000"
 
@@ -108,7 +108,7 @@ func containerPath(p string) string {
 	return filepath.ToSlash(p)
 }
 
-// execUser returns the current user as a Docker uid:gid, from .env (or
+// execUser returns the current user as a Docker uid:gid, from the configuration (or
 // 1000:1000) on Windows.
 func execUser(goos string, e *env.Env) string {
 	if goos != "windows" {

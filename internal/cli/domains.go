@@ -39,7 +39,7 @@ func rangeArgs(required int, names ...string) cobra.PositionalArgs {
 
 // errNoProjectPath is raised when a new PHP container needs the projects
 // root and none is known.
-var errNoProjectPath = errors.New("No project path known: set DEFAULT_PROJECT_PATH in .env " + //nolint:staticcheck // user-facing message
+var errNoProjectPath = errors.New("No project path known: set DEFAULT_PROJECT_PATH (frankenmanager configuration set) " + //nolint:staticcheck // user-facing message
 	"or restart the server with --path.")
 
 // server is the context of a command run on a started server.

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/leobsst/frankenphp-cli/internal/core/dns"
+	"github.com/leobsst/frankenphp-cli/internal/core/env"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
 )
 
@@ -17,11 +18,11 @@ import (
 func checkDir(t *testing.T, envContent string, lanIP *string) string {
 	t.Helper()
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(envContent), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	s, err := store.Open(filepath.Join(dir, "db.sqlite"))
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetConfig(env.Parse(envContent)); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.AddDomains([]string{"app.test"}, "8.4"); err != nil {

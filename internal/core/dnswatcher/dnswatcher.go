@@ -54,7 +54,7 @@ const (
 	logName = ".dns_watcher.log"
 )
 
-// Config reads the .env settings.
+// Config reads the configuration.
 type Config interface {
 	Get(key string) string
 }
@@ -379,15 +379,15 @@ func (w *Watcher) stopSystemd(ctx context.Context) bool {
 // CheckOnce rewrites the records when the LAN IP changed since lastIP, and
 // returns the IP they now point to. A loopback IP means no network for now
 // (e.g. switching from Wi-Fi to Ethernet): the records are left alone. The
-// .env and the database are read again on each change, to include the
+// configuration and the domains are read again on each change, to include the
 // domains added since the watcher started.
 func CheckOnce(dataDir, lastIP string, stderr io.Writer) (string, error) {
 	ip := dns.LANIP()
 	if ip == lastIP || strings.HasPrefix(ip, "127.") {
 		return lastIP, nil
 	}
-	e := env.New(filepath.Join(dataDir, ".env"), filepath.Join(dataDir, ".env.example"))
-	if err := e.Load(); err != nil {
+	e, _, err := env.Open(dataDir)
+	if err != nil {
 		return lastIP, err
 	}
 	if !Needed(e) {

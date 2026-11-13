@@ -60,7 +60,7 @@ func TestHiddenCommands(t *testing.T) {
 func TestHiddenFromHelp(t *testing.T) {
 	e := newEnv(t)
 	_, out, _ := e.run("--help")
-	for _, name := range []string{"_serve-ca-internal", "_watch-dns-internal", "_sync-resources-internal", "_refresh-update-cache", "completion"} {
+	for _, name := range []string{"_serve-ca-internal", "_watch-dns-internal", "_sync-resources-internal", "_refresh-update-cache"} {
 		if strings.Contains(out, name) {
 			t.Errorf("%s shows in the help", name)
 		}

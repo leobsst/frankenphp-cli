@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/leobsst/frankenphp-cli/internal/command"
+	"github.com/leobsst/frankenphp-cli/internal/core/alias"
 	"github.com/leobsst/frankenphp-cli/internal/core/caserver"
 	"github.com/leobsst/frankenphp-cli/internal/core/dnswatcher"
 	"github.com/leobsst/frankenphp-cli/internal/core/docker"
@@ -58,6 +59,8 @@ type Deps struct {
 	Updater func(dataDir string, log updater.Logger) *updater.Updater
 	// Stdin answers the prompts.
 	Stdin io.Reader
+	// Alias returns the installer of the CLI alias, next to the command.
+	Alias func() (*alias.Installer, error)
 	// ServeCA, WatchDNS and Refresh are the work of the hidden commands:
 	// serve the root CA, follow the LAN IP, ask GitHub for a release.
 	ServeCA  func(ctx context.Context, certFile string, port int) error
@@ -117,6 +120,9 @@ func (d Deps) withDefaults() Deps {
 	if d.Watcher == nil {
 		d.Watcher = dnswatcher.New
 	}
+	if d.Alias == nil {
+		d.Alias = alias.Locate
+	}
 	if d.Notify == nil {
 		d.Notify = func(dataDir string, log updater.Logger) { updater.New(dataDir, log).Notify() }
 	}
@@ -147,10 +153,30 @@ func (a *app) projectDir() (string, error) {
 	return dir, nil
 }
 
-// loadEnv reads the .env of dir; a missing file yields no variable.
+// loadEnv reads the configuration of dir, migrating its .env file first
+// when there is one.
 func (a *app) loadEnv(dir string) (*env.Env, error) {
-	e := env.New(filepath.Join(dir, ".env"), filepath.Join(dir, ".env.example"))
-	return e, e.Load()
+	e, m, err := env.Open(dir)
+	a.reportMigration(m)
+	return e, err
+}
+
+// reportMigration tells what the .env migration did.
+func (a *app) reportMigration(m env.Migration) {
+	switch {
+	case m.Migrated:
+		msg := "Configuration migrated from .env to db.sqlite"
+		if m.Backup != "" {
+			msg += " (backup: " + m.Backup + ")"
+		}
+		a.log.Info(msg + ". Use 'frankenmanager configuration' to view or change it.")
+		if len(m.Unknown) > 0 {
+			a.log.Warning("Not migrated, unknown keys: " + strings.Join(m.Unknown, ", "))
+		}
+	case m.Ignored:
+		a.log.Warning("The .env file is no longer read: the configuration lives in db.sqlite. " +
+			"Use 'frankenmanager configuration set <name> <value>', then remove .env.")
+	}
 }
 
 // openStore opens db.sqlite of dir.
@@ -175,7 +201,12 @@ var skipUpdateCheck = map[string]bool{
 	"_watch-dns-internal":      true,
 	"_refresh-update-cache":    true,
 	"_sync-resources-internal": true,
+	"_install-alias-internal":  true,
 	"update":                   true,
+	// The completion: its output is a script, or the candidates
+	"completion":                    true,
+	cobra.ShellCompRequestCmd:       true,
+	cobra.ShellCompNoDescRequestCmd: true,
 }
 
 // notify announces a newer release before cmd, unless --no-update-check.

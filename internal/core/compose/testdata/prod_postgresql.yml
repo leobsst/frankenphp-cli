@@ -4,7 +4,6 @@ services:
     image: postgres:${POSTGRES_VERSION:-16}-alpine
     restart: always
     network_mode: host
-    env_file: .env
     volumes:
       - ${DATABASE_DIR:-${PWD}/database}/postgresql:/var/lib/postgresql/data
     environment:

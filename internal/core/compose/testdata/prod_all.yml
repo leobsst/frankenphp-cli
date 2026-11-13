@@ -4,7 +4,6 @@ services:
     image: postgres:${POSTGRES_VERSION:-16}-alpine
     restart: always
     network_mode: host
-    env_file: .env
     volumes:
       - ${DATABASE_DIR:-${PWD}/database}/postgresql:/var/lib/postgresql/data
     environment:
@@ -24,7 +23,6 @@ services:
     command: --max-allowed-packet=${MYSQL_MAX_ALLOWED_PACKET:-512M}
     network_mode: host
     user: ${UID}:${GID}
-    env_file: .env
     volumes:
       - ${DATABASE_DIR:-${PWD}/database}/mysql:/var/lib/mysql
     environment:
@@ -43,7 +41,6 @@ services:
     command: --max-allowed-packet=${MYSQL_MAX_ALLOWED_PACKET:-512M}
     network_mode: host
     user: ${UID}:${GID}
-    env_file: .env
     volumes:
       - ${DATABASE_DIR:-${PWD}/database}/mariadb:/var/lib/mysql
     environment:

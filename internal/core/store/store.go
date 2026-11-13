@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -45,6 +46,9 @@ type Proxy struct {
 // SettingProjectPath stores the projects root given to `start`.
 const SettingProjectPath = "project_path"
 
+// SettingEnvMigrated marks a configuration migrated from the .env file.
+const SettingEnvMigrated = "env_migrated"
+
 // Store is an open db.sqlite.
 type Store struct {
 	db *sql.DB
@@ -73,6 +77,13 @@ var schema = []string{
 	`CREATE TABLE IF NOT EXISTS settings (
 		key TEXT PRIMARY KEY,
 		value TEXT NOT NULL
+	)`,
+	// The user configuration (formerly .env): only the values set by the
+	// user, the defaults live in the code
+	`CREATE TABLE IF NOT EXISTS configuration (
+		key TEXT PRIMARY KEY,
+		value TEXT NOT NULL,
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	)`,
 }
 
@@ -140,6 +151,108 @@ func (s *Store) SetSetting(key, value string) error {
 	_, err := s.db.Exec("INSERT INTO settings (key, value) VALUES (?, ?) "+
 		"ON CONFLICT(key) DO UPDATE SET value = excluded.value", key, value)
 	return err
+}
+
+// --- Configuration -----------------------------------------------------------
+
+// Config returns every configuration value set by the user.
+func (s *Store) Config() (map[string]string, error) {
+	rows, err := s.db.Query("SELECT key, value FROM configuration")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	values := map[string]string{}
+	for rows.Next() {
+		var k, v string
+		if err := rows.Scan(&k, &v); err != nil {
+			return nil, err
+		}
+		values[k] = v
+	}
+	return values, rows.Err()
+}
+
+// SetConfig stores configuration values, replacing existing ones, in one
+// transaction.
+func (s *Store) SetConfig(values map[string]string) error {
+	return s.inTx(func(tx *sql.Tx) error {
+		for k, v := range values {
+			if _, err := tx.Exec("INSERT INTO configuration (key, value) VALUES (?, ?) "+
+				"ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP", k, v); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// DeleteConfig removes configuration values: they fall back to their
+// default.
+func (s *Store) DeleteConfig(keys ...string) error {
+	return s.execEach("DELETE FROM configuration WHERE key = ?", keys)
+}
+
+// ConfigDB is the configuration of the db.sqlite at Path, opened for each
+// operation: no connection to close for the commands that only read it.
+type ConfigDB struct{ Path string }
+
+// Config returns the values set by the user.
+func (c ConfigDB) Config() (map[string]string, error) {
+	var values map[string]string
+	return values, c.with(func(s *Store) (err error) { values, err = s.Config(); return err })
+}
+
+// SetConfig stores values.
+func (c ConfigDB) SetConfig(values map[string]string) error {
+	return c.with(func(s *Store) error { return s.SetConfig(values) })
+}
+
+// DeleteConfig removes values.
+func (c ConfigDB) DeleteConfig(keys ...string) error {
+	return c.with(func(s *Store) error { return s.DeleteConfig(keys...) })
+}
+
+// Setting returns a stored setting and whether it exists.
+func (c ConfigDB) Setting(key string) (value string, ok bool, err error) {
+	return value, ok, c.with(func(s *Store) error { value, ok, err = s.Setting(key); return err })
+}
+
+// SetSetting stores a setting.
+func (c ConfigDB) SetSetting(key, value string) error {
+	return c.with(func(s *Store) error { return s.SetSetting(key, value) })
+}
+
+func (c ConfigDB) with(fn func(*Store) error) error {
+	s, err := Open(c.Path)
+	if err != nil {
+		return err
+	}
+	if err := fn(s); err != nil {
+		_ = s.Close()
+		return err
+	}
+	return s.Close()
+}
+
+// ReadConfigValue returns a configuration value of the db.sqlite at path,
+// opened read-only: nothing is created, so it is safe under sudo. ok is
+// false when the file, the table or the key is missing.
+func ReadConfigValue(path, key string) (value string, ok bool, err error) {
+	if _, err := os.Stat(path); err != nil {
+		return "", false, nil
+	}
+	db, err := sql.Open("sqlite", "file:"+filepath.ToSlash(path)+"?mode=ro&_pragma=busy_timeout(5000)")
+	if err != nil {
+		return "", false, err
+	}
+	defer func() { _ = db.Close() }()
+	err = db.QueryRow("SELECT value FROM configuration WHERE key = ?", key).Scan(&value)
+	if err != nil {
+		// No such row, or a database older than the table
+		return "", false, nil
+	}
+	return value, true, nil
 }
 
 // --- Domains -----------------------------------------------------------------

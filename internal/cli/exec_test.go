@@ -215,10 +215,10 @@ func TestExecAfterRootOption(t *testing.T) {
 	}
 }
 
-// loadEnv reads the .env of the test data directory.
+// loadEnv reads the configuration of the test data directory.
 func (e *testEnv) loadEnv() *env.Env {
 	e.t.Helper()
-	v := env.New(filepath.Join(e.dir, ".env"), "")
+	v := env.New(store.ConfigDB{Path: filepath.Join(e.dir, "db.sqlite")})
 	if err := v.Load(); err != nil {
 		e.t.Fatal(err)
 	}

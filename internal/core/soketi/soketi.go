@@ -26,15 +26,15 @@ const (
 	AppSecretKey = "SOKETI_DEFAULT_APP_SECRET"
 )
 
-// CredentialKeys are the default app credentials, in .env order.
+// CredentialKeys are the default app credentials, in display order.
 var CredentialKeys = []string{AppIDKey, AppKeyKey, AppSecretKey}
 
-// Getter reads the .env settings.
+// Getter reads the configuration.
 type Getter interface {
 	Get(key string) string
 }
 
-// Config reads and writes the .env settings.
+// Config reads and writes the configuration.
 type Config interface {
 	Getter
 	Set(key, value string) error
@@ -72,7 +72,7 @@ func Domains(c Getter) []string {
 	return []string{Domain}
 }
 
-// EnsureCredentials fills in the credentials left empty in .env and returns
+// EnsureCredentials fills in the credentials left empty and returns
 // the names of the generated variables. Does nothing when disabled.
 func EnsureCredentials(c Config) ([]string, error) {
 	if !Enabled(c) {

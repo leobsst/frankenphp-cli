@@ -164,6 +164,7 @@ func (a *app) setup(ctx context.Context, installMkcert bool) error {
 		a.log.Info("Or install manually:")
 		a.log.Info(m.Instructions())
 	}
+	a.ensureAlias()
 	a.log.Info("")
 	a.log.Success("Setup complete!")
 	return nil

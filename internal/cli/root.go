@@ -32,8 +32,11 @@ func (e usageError) Unwrap() error { return e.err }
 func NewRootCmd(out, errOut io.Writer, deps Deps) *cobra.Command {
 	a := &app{deps: deps.withDefaults(), out: out, errOut: errOut, log: ui.NewLogger(out), con: ui.NewConsole(out)}
 	root := &cobra.Command{
-		Use:     "frankenmanager",
-		Short:   "FrankenPHP Docker development environment manager",
+		Use:   "frankenmanager",
+		Short: "FrankenPHP Docker development environment manager",
+		Long: `FrankenPHP Docker development environment manager.
+
+Also available under its short alias, fm by default (CLI_ALIAS setting).`,
 		Version: version.Version,
 		// Errors are printed by Execute, in its own format
 		SilenceErrors: true,
@@ -57,7 +60,7 @@ func NewRootCmd(out, errOut io.Writer, deps Deps) *cobra.Command {
 			return usageError{errors.New("Missing command.")} //nolint:staticcheck // user-facing message
 		},
 	}
-	// No completion command
+	// Our own completion command, which also completes the alias
 	root.CompletionOptions.DisableDefaultCmd = true
 	root.SetOut(out)
 	root.SetErr(errOut)
@@ -74,7 +77,8 @@ func NewRootCmd(out, errOut io.Writer, deps Deps) *cobra.Command {
 
 	root.AddCommand(newStartCmd(a), newStopCmd(a), newRestartCmd(a),
 		newAddHostCmd(a), newAddAliasCmd(a), newRemoveHostCmd(a), newRestoreHostCmd(a), newSwitchPHPCmd(a),
-		newExecCmd(a), newListCmd(a), newStatusCmd(a), newTrustCACmd(a), newSetupCmd(a), newResetCmd(a), newUpdateCmd(a))
+		newExecCmd(a), newListCmd(a), newStatusCmd(a), newTrustCACmd(a), newSetupCmd(a), newResetCmd(a), newUpdateCmd(a),
+		newConfigurationCmd(a), newServiceCmd(a), newCompletionCmd(a))
 
 	root.AddCommand(newInternalCmds(a)...)
 

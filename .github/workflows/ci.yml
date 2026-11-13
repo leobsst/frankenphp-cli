@@ -7,7 +7,6 @@ on:
       - "caddy/**"
       - "php/**"
       - "docker/**"
-      - ".env.example"
       - "install.sh"
       - "install.ps1"
       - "Dockerfile"
@@ -162,8 +161,8 @@ jobs:
 
       - name: Create test environment
         run: |
-          cp .env.example .env
-          echo "USER=ci" >> .env
+          # The legacy compose files still read an env_file
+          echo "USER=ci" > .env
           echo "GROUP=ci" >> .env
           echo "MARIADB_ROOT_PASSWORD=testpassword" >> .env
           mkdir -p caddy/certs

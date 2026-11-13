@@ -380,8 +380,8 @@ func composeArgs(args ...string) []string {
 	return append([]string{"--log-level", "error", "compose", "-f", compose.FileName}, args...)
 }
 
-// ComposeUp brings the stack up to date with env taking precedence over
-// .env. With services, only those are updated, without their dependencies;
+// ComposeUp brings the stack up to date with env, the variables of the
+// compose file. With services, only those are updated, without their dependencies;
 // otherwise --remove-orphans drops the services removed from the file
 // (e.g. Redis once disabled).
 func (m *Manager) ComposeUp(ctx context.Context, env map[string]string, services ...string) error {

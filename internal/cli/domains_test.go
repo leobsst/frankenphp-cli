@@ -122,7 +122,7 @@ func TestAddHostFailureRemovesHostsEntries(t *testing.T) {
 	before := readFile(t, e.hostsFile)
 	code, out, _ := e.run("add-host", "new.test", "--php", "8.5")
 	mustContain(t, out,
-		"ERROR: An error occurred: No project path known: set DEFAULT_PROJECT_PATH in .env or restart the server with --path.\n",
+		"ERROR: An error occurred: No project path known: set DEFAULT_PROJECT_PATH (frankenmanager configuration set) or restart the server with --path.\n",
 		"ERROR: Cleanup complete. The host(s) were not added.\n",
 	)
 	if code != 1 || readFile(t, e.hostsFile) != before {

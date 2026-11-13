@@ -27,7 +27,7 @@ const (
 	// DefaultUpstream are public resolvers rather than the host's own: once
 	// the router hands this server out, the host may resolve through it,
 	// and forwarding to the host's resolver would loop back here.
-	// The same default as .env.example.
+	// The same default as DNS_UPSTREAM in the configuration registry.
 	DefaultUpstream = "1.1.1.1 8.8.8.8"
 	// RecordsTTL is short, so that removed domains stop resolving quickly.
 	RecordsTTL = 30
@@ -42,7 +42,7 @@ type Error struct{ Msg string }
 
 func (e *Error) Error() string { return e.Msg }
 
-// Config reads the .env settings.
+// Config reads the configuration.
 type Config interface {
 	Get(key string) string
 }

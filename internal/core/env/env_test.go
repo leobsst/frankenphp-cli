@@ -8,10 +8,12 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/leobsst/frankenphp-cli/internal/core/store"
 )
 
-// Each case states what earlier releases read from the line: existing .env
-// files must keep the same meaning.
+// Each case states what earlier releases read from the line: the migrated
+// .env files must keep the same meaning.
 func TestParseMatchesReference(t *testing.T) {
 	content := "APP_ENV=dev\r\n" +
 		"  # comment line\n" +
@@ -51,29 +53,21 @@ func TestParseMatchesReference(t *testing.T) {
 
 func newEnv(t *testing.T, content string) *Env {
 	t.Helper()
+	return FromMap(Parse(content))
+}
+
+// dbEnv is a configuration stored in the db.sqlite of a new data directory.
+func dbEnv(t *testing.T) (*Env, string) {
+	t.Helper()
 	dir := t.TempDir()
-	e := New(filepath.Join(dir, ".env"), filepath.Join(dir, ".env.example"))
-	if content != "" {
-		if err := os.WriteFile(e.Path, []byte(content), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
+	e := New(store.ConfigDB{Path: filepath.Join(dir, "db.sqlite")})
 	if err := e.Load(); err != nil {
 		t.Fatal(err)
 	}
-	return e
+	return e, dir
 }
 
-func fileContent(t *testing.T, path string) string {
-	t.Helper()
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(data)
-}
-
-func TestLoadMissingFile(t *testing.T) {
+func TestDefaults(t *testing.T) {
 	e := newEnv(t, "")
 	if len(e.Vars()) != 0 {
 		t.Errorf("vars = %v, want none", e.Vars())
@@ -81,74 +75,48 @@ func TestLoadMissingFile(t *testing.T) {
 	if !reflect.DeepEqual(e.DBEngines(), []string{"mariadb"}) {
 		t.Errorf("DBEngines() = %v", e.DBEngines())
 	}
-}
-
-func TestSet(t *testing.T) {
-	cases := []struct {
-		name, before, key, value, after string
-	}{
-		{"replaces the first match only", "# head\nA=1\nB=2\nA=3\n", "A", "x", "# head\nA=x\nB=2\nA=3\n"},
-		{"matches after trimming", "  A=1\n", "A", "x", "A=x\n"},
-		{"needs KEY= exactly", "A =1\nAB=2\n", "A", "x", "A =1\nAB=2\nA=x\n"},
-		{"appends and adds the final newline", "B=2", "A", "x", "B=2\nA=x\n"},
-		{"normalizes CRLF", "A=1\r\nB=2\r\n", "B", "x", "A=1\nB=x\n"},
-		{"keeps blank lines", "A=1\n\n\nB=2\n", "A", "x", "A=x\n\n\nB=2\n"},
-	}
-	for _, c := range cases {
-		e := newEnv(t, c.before)
-		if err := e.Set(c.key, c.value); err != nil {
-			t.Fatal(err)
-		}
-		if got := fileContent(t, e.Path); got != c.after {
-			t.Errorf("%s: file = %q, want %q", c.name, got, c.after)
-		}
-		if e.Get(c.key) != c.value {
-			t.Errorf("%s: Get(%s) = %q", c.name, c.key, e.Get(c.key))
-		}
-	}
-}
-
-func TestSetCreatesMissingFile(t *testing.T) {
-	e := newEnv(t, "")
-	if err := e.Set("A", "1"); err != nil {
-		t.Fatal(err)
-	}
-	if got := fileContent(t, e.Path); got != "A=1\n" {
-		t.Errorf("file = %q", got)
-	}
-}
-
-func TestEnsureExists(t *testing.T) {
-	e := newEnv(t, "")
-	if _, err := e.EnsureExists(); err == nil || err.Error() != "Missing "+e.ExamplePath {
-		t.Errorf("without .env.example: err = %v", err)
-	}
-
-	example := "# Set to your user\nUID=\nGID=\nOTHER_UID=\n"
-	if err := os.WriteFile(e.ExamplePath, []byte(example), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	existed, err := e.EnsureExists()
-	if err != nil || existed {
-		t.Fatalf("existed=%v err=%v, want false, nil", existed, err)
-	}
-
 	uid, gid := "1000", "1000"
 	if runtime.GOOS != "windows" {
 		uid, gid = strconv.Itoa(os.Getuid()), strconv.Itoa(os.Getgid())
 	}
-	want := "# Set to your user\nUID=" + uid + "\nGID=" + gid + "\nOTHER_UID=\n"
-	if got := fileContent(t, e.Path); got != want {
-		t.Errorf(".env = %q, want %q", got, want)
-	}
-	if runtime.GOOS != "windows" {
-		if info, _ := os.Stat(e.Path); info.Mode().Perm() != 0o660 {
-			t.Errorf("mode = %v, want 0660", info.Mode().Perm())
+	for key, want := range map[string]string{
+		"UID": uid, "GID": gid, "DEFAULT_PHP_VERSION": "8.3", "CLI_ALIAS": "fm",
+		"DNS_UPSTREAM": "1.1.1.1 8.8.8.8", "DEFAULT_PROJECT_PATH": "", "UNKNOWN": "",
+	} {
+		if got := e.Get(key); got != want {
+			t.Errorf("Get(%s) = %q, want %q", key, got, want)
+		}
+		if e.IsSet(key) {
+			t.Errorf("IsSet(%s)", key)
 		}
 	}
+}
 
-	if existed, err := e.EnsureExists(); err != nil || !existed {
-		t.Errorf("second call: existed=%v err=%v, want true, nil", existed, err)
+// Set persists in db.sqlite, an empty value overrides the default, Reset
+// goes back to it.
+func TestSetAndResetPersist(t *testing.T) {
+	e, dir := dbEnv(t)
+	for key, value := range map[string]string{"DEFAULT_PHP_VERSION": "8.4", "CLI_ALIAS": ""} {
+		if err := e.Set(key, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reloaded := New(store.ConfigDB{Path: filepath.Join(dir, "db.sqlite")})
+	if err := reloaded.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.Get("DEFAULT_PHP_VERSION") != "8.4" || reloaded.Get("CLI_ALIAS") != "" || !reloaded.IsSet("CLI_ALIAS") {
+		t.Errorf("reloaded: %v", reloaded.Vars())
+	}
+
+	if err := reloaded.Reset("CLI_ALIAS"); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Load(); err != nil {
+		t.Fatal(err)
+	}
+	if e.Get("CLI_ALIAS") != "fm" || e.IsSet("CLI_ALIAS") || e.Get("DEFAULT_PHP_VERSION") != "8.4" {
+		t.Errorf("after reset: %v", e.Vars())
 	}
 }
 
@@ -159,7 +127,8 @@ func TestRequire(t *testing.T) {
 	}
 	for _, key := range []string{"EMPTY", "MISSING"} {
 		_, err := e.Require(key)
-		if err == nil || err.Error() != "Required environment variable '"+key+"' is not set" {
+		want := "Required configuration '" + key + "' is not set (frankenmanager configuration set " + key + " <value>)"
+		if err == nil || err.Error() != want {
 			t.Errorf("Require(%s) err = %v", key, err)
 		}
 	}
@@ -347,11 +316,11 @@ func TestComposeEnvVarsLocalhostAndMissingValues(t *testing.T) {
 	}
 
 	if _, err := e.ComposeEnvVars("/data", "", []string{"mariadb"}); err == nil ||
-		err.Error() != "Required environment variable 'MARIADB_ROOT_PASSWORD' is not set" {
+		!strings.HasPrefix(err.Error(), "Required configuration 'MARIADB_ROOT_PASSWORD' is not set") {
 		t.Errorf("missing password: err = %v", err)
 	}
-	if _, err := newEnv(t, "GID=1").ComposeEnvVars("/data", "", nil); err == nil {
-		t.Error("missing UID accepted")
+	if _, err := newEnv(t, "UID=\nGID=1").ComposeEnvVars("/data", "", nil); err == nil {
+		t.Error("empty UID accepted")
 	}
 }
 

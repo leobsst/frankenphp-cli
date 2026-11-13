@@ -1,6 +1,6 @@
-// Package password syncs the database root passwords with .env.
+// Package password syncs the database root passwords with the configuration.
 //
-// When .env holds a new password, the running server still has the old
+// When the configuration holds a new password, the running server still has the old
 // one: the old ones are kept in .db_password_history_<engine>, the right
 // one is found by trying them, then ALTER USER sets the new one. Only
 // MariaDB and MySQL need it: PostgreSQL reads POSTGRES_PASSWORD on start.
@@ -157,12 +157,12 @@ func (m *Manager) Sync(ctx context.Context, engine, container, newPassword strin
 	if err := m.save(engine, newPassword); err != nil {
 		return false, err
 	}
-	m.Log.Success(label(engine) + " password updated to match .env")
+	m.Log.Success(label(engine) + " password updated to match the configuration")
 	return true, nil
 }
 
 // SyncAll syncs the password of every enabled MariaDB and MySQL server.
-// passwords maps an engine to its .env password; engines without one are
+// passwords maps an engine to its configured password; engines without one are
 // skipped.
 func (m *Manager) SyncAll(ctx context.Context, engines []string, passwords map[string]string) error {
 	for _, engine := range engines {

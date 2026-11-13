@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -67,10 +68,16 @@ func TestUpdateCheck(t *testing.T) {
 
 func TestUpdate(t *testing.T) {
 	e := newEnv(t)
+	writeFile(t, filepath.Join(e.root, "bin", "frankenmanager"), "binary")
 	e.fakeUpdater("1.3.0", fakeGitHub{200, "v1.3.0"})
+	// The alias, missing after releases without it, is installed once
 	if code, out, _ := e.run("update"); code != 0 || out != "-- Checking for updates...\n-- Current version: 1.3.0\n"+
-		"-- Latest version:  1.3.0\n-- Already on the latest version!\n" {
+		"-- Latest version:  1.3.0\n-- Already on the latest version!\n"+
+		"-- Alias 'fm' ready: 'fm <command>' works like 'frankenmanager <command>'.\n" {
 		t.Errorf("code %d, out %q", code, out)
+	}
+	if _, out, _ := e.run("update"); strings.Contains(out, "Alias") {
+		t.Errorf("alias reported again: %q", out)
 	}
 	e.fakeUpdater("dev", fakeGitHub{200, "v1.3.0"})
 	if code, out, _ := e.run("update", "--force"); code != 1 || out != "WARNING: Self-update is only available for pre-compiled binaries.\n"+

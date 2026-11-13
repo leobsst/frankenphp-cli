@@ -94,6 +94,7 @@ func newInternalCmds(a *app) []*cobra.Command {
 				return nil
 			},
 		},
+		newInstallAliasCmd(a),
 		{
 			Use:    updater.RefreshCommand,
 			Short:  "Internal: refresh the cached GitHub release info, spawned at startup.",
@@ -117,4 +118,23 @@ func newInternalCmds(a *app) []*cobra.Command {
 func refresh(ctx context.Context, dataDir string, log updater.Logger) error {
 	_, err := updater.New(dataDir, log).Refresh(ctx)
 	return err
+}
+
+// newInstallAliasCmd installs the configured CLI alias, for the install
+// scripts: --bin-dir is the directory of the frankenmanager command, which
+// PATH may not reach under sudo.
+func newInstallAliasCmd(a *app) *cobra.Command {
+	var binDir string
+	cmd := &cobra.Command{
+		Use:    "_install-alias-internal",
+		Short:  "Internal: install the CLI alias next to the command, run by the install scripts.",
+		Hidden: true,
+		Args:   noArgs,
+		RunE: func(*cobra.Command, []string) error {
+			a.ensureAliasIn(binDir)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&binDir, "bin-dir", "", "Directory of the frankenmanager command")
+	return cmd
 }

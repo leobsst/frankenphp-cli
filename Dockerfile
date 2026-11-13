@@ -9,7 +9,7 @@ COPY --from=composer /usr/bin/composer /usr/bin/composer
 # Space-separated extra packages to install on top of the defaults below,
 # resolved from EXTRA_APK_PACKAGES (Alpine) or EXTRA_APT_PACKAGES (Trixie),
 # scoped per PHP version via the <version without dot> suffix and merged with
-# EXTRA_COMPOSER_PACKAGES(_<version>). See .env.example.
+# EXTRA_COMPOSER_PACKAGES(_<version>). See `frankenmanager configuration list`.
 ARG EXTRA_SYSTEM_PACKAGES=""
 ARG EXTRA_COMPOSER_PACKAGES=""
 # Set to "true" to install pdftk (pulls a Java runtime, ~200 MB)

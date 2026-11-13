@@ -1,18 +1,14 @@
-// Package env reads and writes the .env file of the data directory. The
-// format is the one existing installations already use: no `export`, no
-// inline comment, no variable expansion.
+// Package env holds the user configuration. It used to live in the .env
+// file of the data directory; it is now stored in db.sqlite (table
+// configuration) and the .env file is migrated once (see Migrate). The keys
+// keep their .env names.
 package env
 
 import (
-	"errors"
 	"fmt"
-	"io/fs"
 	"maps"
-	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/leobsst/frankenphp-cli/internal/core/phpversions"
@@ -23,61 +19,62 @@ import (
 // validDBEngines are the database engines DB_ENGINES may list.
 var validDBEngines = []string{"mariadb", "mysql", "postgresql"}
 
-// Env holds the variables of a .env file.
+// Backend stores the values set by the user.
+type Backend interface {
+	Config() (map[string]string, error)
+	SetConfig(values map[string]string) error
+	DeleteConfig(keys ...string) error
+}
+
+// Env is the configuration: the values set by the user, over the defaults
+// of the registry.
 type Env struct {
-	Path        string // .env
-	ExamplePath string // .env.example, copied on the first run
-	vars        map[string]string
+	backend Backend
+	vars    map[string]string // set by the user
 }
 
-// New returns an empty Env for path; call Load to read it.
-func New(path, examplePath string) *Env {
-	return &Env{Path: path, ExamplePath: examplePath, vars: map[string]string{}}
+// New returns the configuration stored in backend; call Load to read it.
+func New(backend Backend) *Env {
+	return &Env{backend: backend, vars: map[string]string{}}
 }
 
-// EnsureExists creates .env from .env.example when missing, with UID and
-// GID filled in, and returns whether it already existed.
-//
-// Windows has no user and group IDs: 1000:1000 is used there, the default
-// `exec` already falls back to.
-func (e *Env) EnsureExists() (existed bool, err error) {
-	if _, err := os.Stat(e.Path); err == nil {
-		return true, nil
-	}
-	content, err := os.ReadFile(e.ExamplePath)
-	if errors.Is(err, fs.ErrNotExist) {
-		return false, fmt.Errorf("Missing %s", e.ExamplePath) //nolint:staticcheck // user-facing message
-	}
-	if err != nil {
-		return false, err
-	}
-
-	uid, gid := 1000, 1000
-	if runtime.GOOS != "windows" {
-		uid, gid = os.Getuid(), os.Getgid()
-	}
-	// Like str.replace(..., 1): the first occurrence, wherever it is
-	text := strings.Replace(string(content), "UID=", "UID="+strconv.Itoa(uid), 1)
-	text = strings.Replace(text, "GID=", "GID="+strconv.Itoa(gid), 1)
-
-	if err := os.WriteFile(e.Path, []byte(text), 0o660); err != nil {
-		return false, err
-	}
-	return false, os.Chmod(e.Path, 0o660) // WriteFile applies the umask
+// FromMap returns a configuration held in memory only (tests, previews).
+func FromMap(vars map[string]string) *Env {
+	m := MemoryBackend{}
+	maps.Copy(m, vars)
+	return &Env{backend: m, vars: maps.Clone(m)}
 }
 
-// Load reads the file, replacing the variables in memory. A missing file
-// yields no variable.
+// MemoryBackend is a Backend held in memory.
+type MemoryBackend map[string]string
+
+// Config returns a copy of the values.
+func (m MemoryBackend) Config() (map[string]string, error) { return maps.Clone(m), nil }
+
+// SetConfig stores values.
+func (m MemoryBackend) SetConfig(values map[string]string) error {
+	maps.Copy(m, values)
+	return nil
+}
+
+// DeleteConfig removes values.
+func (m MemoryBackend) DeleteConfig(keys ...string) error {
+	for _, k := range keys {
+		delete(m, k)
+	}
+	return nil
+}
+
+// Load reads the stored values, replacing those in memory.
 func (e *Env) Load() error {
-	data, err := os.ReadFile(e.Path)
-	if errors.Is(err, fs.ErrNotExist) {
-		e.vars = map[string]string{}
-		return nil
-	}
+	vars, err := e.backend.Config()
 	if err != nil {
 		return err
 	}
-	e.vars = Parse(string(data))
+	if vars == nil {
+		vars = map[string]string{}
+	}
+	e.vars = vars
 	return nil
 }
 
@@ -112,46 +109,48 @@ func splitLines(s string) []string {
 	return strings.Split(strings.TrimSuffix(s, "\n"), "\n")
 }
 
-// Get returns a variable, "" when missing.
-func (e *Env) Get(key string) string { return e.vars[key] }
-
-// Vars returns a copy of the loaded variables.
-func (e *Env) Vars() map[string]string { return maps.Clone(e.vars) }
-
-// Require returns a variable, or an error when it is missing or empty.
-func (e *Env) Require(key string) (string, error) {
-	if v := e.vars[key]; v != "" {
-		return v, nil
+// Get returns a value: the one set by the user, the default of the key
+// otherwise, "" for an unknown key.
+func (e *Env) Get(key string) string {
+	if v, ok := e.vars[key]; ok {
+		return v
 	}
-	return "", fmt.Errorf("Required environment variable '%s' is not set", key) //nolint:staticcheck // user-facing message
+	return defaultOf(key)
 }
 
-// Set writes a variable to the file and to memory: it replaces the first
-// line starting with "KEY=" (after trimming), or appends one. Comments are
-// kept and the file ends with a newline.
+// IsSet reports whether the user set key (as opposed to its default).
+func (e *Env) IsSet(key string) bool {
+	_, ok := e.vars[key]
+	return ok
+}
+
+// Vars returns a copy of the values set by the user.
+func (e *Env) Vars() map[string]string { return maps.Clone(e.vars) }
+
+// Require returns a value, or an error when it is missing or empty.
+func (e *Env) Require(key string) (string, error) {
+	if v := e.Get(key); v != "" {
+		return v, nil
+	}
+	return "", fmt.Errorf("Required configuration '%s' is not set (frankenmanager configuration set %s <value>)", key, key) //nolint:staticcheck // user-facing message
+}
+
+// Set stores a value.
 func (e *Env) Set(key, value string) error {
-	var lines []string
-	data, err := os.ReadFile(e.Path)
-	switch {
-	case err == nil:
-		lines = splitLines(string(data))
-	case !errors.Is(err, fs.ErrNotExist):
-		return err
-	}
-
-	entry := key + "=" + value
-	if i := slices.IndexFunc(lines, func(l string) bool {
-		return strings.HasPrefix(strings.TrimSpace(l), key+"=")
-	}); i >= 0 {
-		lines[i] = entry
-	} else {
-		lines = append(lines, entry)
-	}
-
-	if err := os.WriteFile(e.Path, []byte(strings.Join(lines, "\n")+"\n"), 0o666); err != nil {
+	if err := e.backend.SetConfig(map[string]string{key: value}); err != nil {
 		return err
 	}
 	e.vars[key] = value
+	return nil
+}
+
+// Reset removes the value set by the user: the key falls back to its
+// default.
+func (e *Env) Reset(key string) error {
+	if err := e.backend.DeleteConfig(key); err != nil {
+		return err
+	}
+	delete(e.vars, key)
 	return nil
 }
 
@@ -277,7 +276,6 @@ func (e *Env) CertsDir(projectDir string) string {
 }
 
 // ComposeEnvVars returns every variable the generated compose file expects.
-// They take precedence over the .env file compose reads by itself.
 func (e *Env) ComposeEnvVars(projectDir, customPath string, dbEngines []string) (map[string]string, error) {
 	localhost := "127.0.0.1:"
 	if e.Get("EXPOSE_SERVICES") == "true" {

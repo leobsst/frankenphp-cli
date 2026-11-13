@@ -147,7 +147,7 @@ func (a *app) restart(ctx context.Context, forceSSL bool, targets []string, buil
 			return err
 		}
 		if customPath == "" {
-			return errors.New("No project path known: set DEFAULT_PROJECT_PATH in .env " + //nolint:staticcheck // user-facing message
+			return errors.New("No project path known: set DEFAULT_PROJECT_PATH (frankenmanager configuration set) " + //nolint:staticcheck // user-facing message
 				"or use 'stop' then 'start --build --path <path>'.")
 		}
 		if err := stack.BuildImages(ctx, d, e, a.log, customPath, active, true); err != nil {
@@ -171,7 +171,7 @@ func (a *app) restart(ctx context.Context, forceSSL bool, targets []string, buil
 				return err
 			}
 		}
-		// Picks up DNS_SERVER / DNS_IP changes made in .env since the last start
+		// Picks up DNS_SERVER / DNS_IP changes made since the last start
 		w, err := a.deps.Watcher(dir)
 		if err != nil {
 			return err
@@ -202,11 +202,11 @@ func (a *app) restart(ctx context.Context, forceSSL bool, targets []string, buil
 					}
 				}
 			case t == "cache" && !redis:
-				a.log.Warning("Redis is disabled: set REDIS_ENABLED=true in .env to use it.")
+				a.log.Warning("Redis is disabled: run 'frankenmanager service enable redis' to use it.")
 			case t == "soketi" && !websocket:
-				a.log.Warning("Soketi is disabled: set SOKETI_ENABLED=true in .env to use it.")
+				a.log.Warning("Soketi is disabled: run 'frankenmanager service enable soketi' to use it.")
 			case t == "dns" && !dnsOn:
-				a.log.Warning("The LAN DNS server is disabled: set DNS_SERVER=true in .env.")
+				a.log.Warning("The LAN DNS server is disabled: run 'frankenmanager service enable dns'.")
 			default:
 				d.RestartContainer(ctx, restartContainers[t])
 			}

@@ -14,16 +14,8 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
 )
 
-func newEnv(t *testing.T, dir, content string) *env.Env {
-	t.Helper()
-	e := env.New(filepath.Join(dir, ".env"), filepath.Join(dir, ".env.example"))
-	if err := os.WriteFile(e.Path, []byte(content), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := e.Load(); err != nil {
-		t.Fatal(err)
-	}
-	return e
+func newEnv(content string) *env.Env {
+	return env.FromMap(env.Parse(content))
 }
 
 // fakeRunner records the docker calls; Docker is never reached.
@@ -64,7 +56,7 @@ func TestProjectPath(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		got, err := ProjectPath(newEnv(t, dir, tc.env), s)
+		got, err := ProjectPath(newEnv(tc.env), s)
 		if err != nil || got != tc.want {
 			t.Errorf("ProjectPath = %q, %v; want %q", got, err, tc.want)
 		}
@@ -72,7 +64,7 @@ func TestProjectPath(t *testing.T) {
 }
 
 func TestComposeOptionsFromEnv(t *testing.T) {
-	e := newEnv(t, t.TempDir(), "APP_ENV=production\nDB_ENGINES=postgresql\nREDIS_ENABLED=true\nSOKETI_ENABLED=true\n")
+	e := newEnv("APP_ENV=production\nDB_ENGINES=postgresql\nREDIS_ENABLED=true\nSOKETI_ENABLED=true\n")
 	got := ComposeOptions(e, []string{"8.4"}, "0.0.0.0:53")
 	want := compose.Options{PHPVersions: []string{"8.4"}, Production: true, DBEngines: []string{"postgresql"},
 		DNSListen: "0.0.0.0:53", Redis: true, Websocket: true}
@@ -85,7 +77,7 @@ func TestComposeOptionsFromEnv(t *testing.T) {
 
 func TestComposeUpWritesFileThenStarts(t *testing.T) {
 	dir := t.TempDir()
-	e := newEnv(t, dir, "UID=501\nGID=20\nMARIADB_ROOT_PASSWORD=secret\n")
+	e := newEnv("UID=501\nGID=20\nMARIADB_ROOT_PASSWORD=secret\n")
 	r := &fakeRunner{}
 	d := &docker.Manager{Dir: dir, Runner: r, Log: &memLog{}}
 
@@ -111,14 +103,14 @@ func TestComposeUpMissingUID(t *testing.T) {
 	dir := t.TempDir()
 	r := &fakeRunner{}
 	d := &docker.Manager{Dir: dir, Runner: r, Log: &memLog{}}
-	if err := ComposeUp(context.Background(), d, newEnv(t, dir, ""), nil, "", ""); err == nil || len(r.args) != 0 {
+	if err := ComposeUp(context.Background(), d, newEnv(""), nil, "", ""); err == nil || len(r.args) != 0 {
 		t.Errorf("err=%v calls=%v", err, r.args)
 	}
 }
 
 func TestBuildImagesFromEnv(t *testing.T) {
 	dir := t.TempDir()
-	e := newEnv(t, dir, "WWWGROUP=20\nEXTRA_APT_PACKAGES=vim\nEXTRA_APK_PACKAGES_84=git\n"+
+	e := newEnv("WWWGROUP=20\nEXTRA_APT_PACKAGES=vim\nEXTRA_APK_PACKAGES_84=git\n" +
 		"EXTRA_COMPOSER_PACKAGES=laravel/installer\nINSTALL_PDFTK=true\n")
 	r := &fakeRunner{}
 	log := &memLog{}
@@ -151,7 +143,7 @@ func TestBuildImagesFromEnv(t *testing.T) {
 		t.Errorf("log = %v", log.lines)
 	}
 
-	bad := newEnv(t, dir, "PHP_IMAGE_DISTRO=debian\n")
+	bad := newEnv("PHP_IMAGE_DISTRO=debian\n")
 	if _, err := BuildImage(context.Background(), d, bad, log, "", "8.3", false); err == nil {
 		t.Error("no error for an unsupported distro")
 	}

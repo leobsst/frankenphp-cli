@@ -3,7 +3,6 @@ services:
     container_name: franken_postgresql
     image: postgres:${POSTGRES_VERSION:-16}-alpine
     restart: always
-    env_file: .env
     volumes:
       - ${DATABASE_DIR:-./database}/postgresql:/var/lib/postgresql/data
     ports:
@@ -42,7 +41,6 @@ services:
     restart: always
     command: --max-allowed-packet=${MYSQL_MAX_ALLOWED_PACKET:-512M}
     user: ${UID}:${GID}
-    env_file: .env
     volumes:
       - ${DATABASE_DIR:-./database}/mysql:/var/lib/mysql
     ports:
@@ -64,7 +62,6 @@ services:
     restart: always
     command: --max-allowed-packet=${MYSQL_MAX_ALLOWED_PACKET:-512M}
     user: ${UID}:${GID}
-    env_file: .env
     volumes:
       - ${DATABASE_DIR:-./database}/mariadb:/var/lib/mysql
     ports:

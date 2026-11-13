@@ -32,6 +32,8 @@ Examples:
 				if !u.Update(cmd.Context(), force) {
 					return exitError(1)
 				}
+				// Earlier releases had no alias
+				a.ensureAlias()
 				return nil
 			}
 			a.log.Info("Current version: " + u.Version)

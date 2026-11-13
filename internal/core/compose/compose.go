@@ -63,7 +63,7 @@ type PMAServer struct {
 	Engine      string
 	Container   string
 	Verbose     string // name shown in phpMyAdmin's server switcher
-	PasswordVar string // .env variable holding its root password
+	PasswordVar string // configuration key holding its root password
 }
 
 // pmaServers are in the order of the server switcher, the first enabled
@@ -236,8 +236,9 @@ func dbServices(engines []string, production bool) []string {
 		if e.mysqlCmd {
 			lines = append(lines, "    user: ${UID}:${GID}")
 		}
+		// No env_file: the configuration is in db.sqlite, and the variables
+		// a database needs are in its environment block
 		lines = append(lines,
-			"    env_file: .env",
 			"    volumes:",
 			"      - "+dir("DATABASE_DIR", "database", production)+"/"+engine+":"+e.dataDir,
 		)

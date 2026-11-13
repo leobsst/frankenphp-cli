@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -15,8 +16,10 @@ import (
 
 	"github.com/leobsst/frankenphp-cli/internal/command"
 	"github.com/leobsst/frankenphp-cli/internal/command/commandtest"
+	"github.com/leobsst/frankenphp-cli/internal/core/alias"
 	"github.com/leobsst/frankenphp-cli/internal/core/dnswatcher"
 	"github.com/leobsst/frankenphp-cli/internal/core/docker"
+	"github.com/leobsst/frankenphp-cli/internal/core/env"
 	"github.com/leobsst/frankenphp-cli/internal/core/hosts"
 	"github.com/leobsst/frankenphp-cli/internal/core/mkcert"
 	"github.com/leobsst/frankenphp-cli/internal/core/privilege"
@@ -201,7 +204,13 @@ func (e *testEnv) run(args ...string) (code int, out, errOut string) {
 		},
 		CAState: func(string) (int, int, bool) { return 424242, e.caPort, e.caPort != 0 },
 		LANIP:   func() string { return "192.168.1.20" },
-		Stdin:   strings.NewReader(e.stdin),
+		// The alias goes next to a fake command of the temporary directory,
+		// PATH unread
+		Alias: func() (*alias.Installer, error) {
+			return &alias.Installer{GOOS: "linux", BinDir: filepath.Join(e.root, "bin"), Target: "frankenmanager",
+				LookPath: func(string) (string, error) { return "", exec.ErrNotFound }}, nil
+		},
+		Stdin: strings.NewReader(e.stdin),
 		ServeCA: func(ctx context.Context, cert string, port int) error {
 			if e.serveCA == nil {
 				e.t.Error("unexpected CA server")
@@ -249,9 +258,10 @@ func (e *testEnv) store() *store.Store {
 	return s
 }
 
+// writeEnv stores settings given in .env syntax.
 func (e *testEnv) writeEnv(content string) {
 	e.t.Helper()
-	if err := os.WriteFile(filepath.Join(e.dir, ".env"), []byte(content), 0o600); err != nil {
+	if err := e.store().SetConfig(env.Parse(content)); err != nil {
 		e.t.Fatal(err)
 	}
 }

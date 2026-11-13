@@ -25,7 +25,7 @@ import (
 )
 
 // phpVersionHelp is the help of the --php options.
-var phpVersionHelp = fmt.Sprintf("PHP version (%s; %s deprecated). Defaults to DEFAULT_PHP_VERSION in .env",
+var phpVersionHelp = fmt.Sprintf("PHP version (%s; %s deprecated). Defaults to DEFAULT_PHP_VERSION",
 	strings.Join(phpversions.Supported, ", "), strings.Join(phpversions.Deprecated, ", "))
 
 // maxArgs accepts up to n arguments, extra ones being a usage error.
@@ -53,7 +53,7 @@ func newStartCmd(a *app) *cobra.Command {
 If domains are not provided, uses domains registered in the database.
 With no domain at all, starts the reverse proxy and databases only
 (add hosts later with add-host).
-If --path is not specified, uses DEFAULT_PROJECT_PATH from .env file.
+If --path is not specified, uses the DEFAULT_PROJECT_PATH configuration.
 PHP images are only built when missing or outdated, unless --build is set.
 
 Examples:
@@ -72,7 +72,7 @@ Examples:
 		},
 	}
 	f := cmd.Flags()
-	f.StringVarP(&o.path, "path", "p", "", "Project root path (uses DEFAULT_PROJECT_PATH from .env if not set)")
+	f.StringVarP(&o.path, "path", "p", "", "Project root path (uses the DEFAULT_PROJECT_PATH configuration if not set)")
 	f.BoolVar(&o.forceSSL, "force-ssl", false, "Force SSL certificate regeneration")
 	f.StringVar(&o.php, "php", "", phpVersionHelp)
 	f.BoolVar(&o.build, "build", false, "Rebuild the PHP images even if they are up to date")
@@ -88,7 +88,7 @@ func (a *app) isRunning(ctx context.Context, d *docker.Manager, s *store.Store) 
 	return docker.IsRunning(d.ContainerStatuses(ctx), active), nil
 }
 
-// dbPasswords returns the .env root passwords of the MariaDB and MySQL
+// dbPasswords returns the configured root passwords of the MariaDB and MySQL
 // servers to sync.
 func dbPasswords(e *env.Env, engines []string) (map[string]string, error) {
 	keys := map[string]string{"mariadb": "MARIADB_ROOT_PASSWORD", "mysql": "MYSQL_ROOT_PASSWORD"}
@@ -124,16 +124,8 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 	if err != nil {
 		return err
 	}
-	e := env.New(filepath.Join(dir, ".env"), filepath.Join(dir, ".env.example"))
-	existed, err := e.EnsureExists()
+	e, err := a.loadEnv(dir)
 	if err != nil {
-		return err
-	}
-	if !existed {
-		a.log.Info(fmt.Sprintf("Created .env file at %s. Please review settings, then try again.", e.Path))
-		return exitError(1)
-	}
-	if err := e.Load(); err != nil {
 		return err
 	}
 
@@ -151,7 +143,7 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 	for _, key := range []string{"UID", "GID"} {
 		if _, err := e.Require(key); err != nil {
 			a.log.Error(err.Error())
-			a.log.Error("Please set UID and GID in .env file.")
+			a.log.Error("Please set UID and GID: frankenmanager configuration set UID <id>")
 			return exitError(1)
 		}
 	}
@@ -167,7 +159,7 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 	}
 	defer closeStore(s, &err)
 
-	// Checked before anything is written to .env
+	// Checked before anything is written to the configuration
 	if running, err := a.isRunning(ctx, d, s); err != nil {
 		return err
 	} else if running {
@@ -184,7 +176,7 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 			if err := e.Set(g.key, env.GeneratePassword()); err != nil {
 				return err
 			}
-			a.log.Info(g.name + " password generated and saved to .env")
+			a.log.Info(g.name + " password generated and saved to the configuration")
 		}
 	}
 	generated, err := soketi.EnsureCredentials(e)
@@ -192,10 +184,7 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 		return err
 	}
 	if len(generated) > 0 {
-		a.log.Info(fmt.Sprintf("Soketi %s generated and saved to .env", strings.Join(generated, ", ")))
-	}
-	if err := e.Load(); err != nil {
-		return err
+		a.log.Info(fmt.Sprintf("Soketi %s generated and saved to the configuration", strings.Join(generated, ", ")))
 	}
 
 	caddyDir := e.ResolveDir("CADDY_DIR", "./caddy", dir)
@@ -237,7 +226,8 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 	// The project path is only needed by PHP containers
 	if len(merged) > 0 {
 		if customPath == "" {
-			a.log.Error("No project path specified and DEFAULT_PROJECT_PATH is not set in .env")
+			a.log.Error("No project path specified and DEFAULT_PROJECT_PATH is not set " +
+				"(frankenmanager configuration set DEFAULT_PROJECT_PATH <path>)")
 			return exitError(1)
 		}
 		if err := validate.Directory(customPath); err != nil {
@@ -413,7 +403,7 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 		}
 		if strings.HasPrefix(ip, "127.") {
 			a.log.Warning("No LAN IP detected: the domains resolve to this machine only. " +
-				"Set DNS_IP in .env to this machine's LAN IP.")
+				"Set DNS_IP to this machine's LAN IP: frankenmanager configuration set DNS_IP <ip>")
 		}
 	}
 	return nil

@@ -111,6 +111,12 @@ $SUDO rm -rf "$LIB_DIR"
 $SUDO mv "${LIB_DIR}.new" "$LIB_DIR"
 $SUDO ln -sfn "${LIB_DIR}/${BINARY_NAME}" "${INSTALL_DIR}/${BINARY_NAME}"
 
+# The short alias (fm by default, CLI_ALIAS setting) next to the command. The
+# user's HOME is kept so that a configured alias is read from their data
+# directory (read-only: nothing is created there).
+$SUDO env HOME="$HOME" FRANKENMANAGER_DATA_DIR="${FRANKENMANAGER_DATA_DIR:-}" \
+  "${INSTALL_DIR}/${BINARY_NAME}" --no-update-check _install-alias-internal --bin-dir "$INSTALL_DIR" || true
+
 echo ""
 echo "${BINARY_NAME} v${VERSION} installed to ${LIB_DIR} (command: ${INSTALL_DIR}/${BINARY_NAME})"
 echo "Run '${BINARY_NAME} --version' to verify, then 'sudo ${BINARY_NAME} setup --install-mkcert' on a first install."

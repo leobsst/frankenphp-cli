@@ -75,7 +75,7 @@ func TestSyncFromHistory(t *testing.T) {
 	if info, _ := os.Stat(filepath.Join(m.Dir, ".db_password_history_mariadb")); runtime.GOOS != "windows" && info.Mode().Perm() != 0o660 { // Windows keeps no Unix mode
 		t.Errorf("history mode %v", info.Mode())
 	}
-	if !slices.Equal(log.Lines, []string{"success: MariaDB password updated to match .env"}) {
+	if !slices.Equal(log.Lines, []string{"success: MariaDB password updated to match the configuration"}) {
 		t.Errorf("log = %v", log.Lines)
 	}
 	if got := m.History("mariadb"); !slices.Equal(got, []string{"new"}) {

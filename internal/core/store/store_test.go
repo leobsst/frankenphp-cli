@@ -66,7 +66,7 @@ func TestOpenMigratesOldDatabase(t *testing.T) {
 	if !reflect.DeepEqual(columns, []string{"id", "domain", "added_at", "php_version"}) {
 		t.Errorf("columns = %v", columns)
 	}
-	for _, table := range []string{"aliases", "proxies", "settings"} {
+	for _, table := range []string{"aliases", "proxies", "settings", "configuration"} {
 		if _, err := s.db.Exec("SELECT * FROM " + table); err != nil {
 			t.Errorf("table %s not created: %v", table, err)
 		}
