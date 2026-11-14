@@ -127,10 +127,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Real-time status checking
   - ACID-compliant transactions
   - Timestamp tracking for domains and status changes
-  - Automatic migration from legacy JSON config
-  - Dedicated `aliases` table for alternate hosts, auto-created on upgrade (no reset required)
-  - Dedicated `proxies` table for raw upstream proxy hosts, auto-created on upgrade (no reset required)
+  - Dedicated `aliases` table for alternate hosts
+  - Dedicated `proxies` table for raw upstream proxy hosts
 - Settings stored in SQLite (`configuration` table of `db.sqlite`), with sensible defaults kept in the code: only the changed values are stored
+  - Every value is checked against the accepted ones (fixed lists, ports, IPs...) by `configuration set`; a value edited by hand in `db.sqlite` that does not pass falls back to its default
   - Auto-generated database root passwords and Soketi credentials
   - UID/GID of the current user by default, for file ownership
   - Configurable ports for all services
@@ -200,7 +200,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Upgrading from 0.1.x
 - `sudo frankenmanager update` from 0.1.x installs 1.0.0 by itself, at the same place. The data directory (`~/.frankenmanager`), privilege setup, hosts entries, certificates, PHP images and the LAN DNS watcher service are picked up as they are: nothing to redo.
 - To go back, reinstall 0.1.63 (`VERSION=0.1.63 install.sh`): the data directory stays compatible both ways.
-- The `.env` file of the data directory is imported into `db.sqlite` by the first command (values left empty or equal to the default are skipped), then renamed `.env.migrated` as a backup; unknown keys are listed and left out. Change the settings with `frankenmanager configuration set` from then on.
+- The `.env` file of the data directory is imported into `db.sqlite` by the first command (values left empty or equal to the default are skipped), then renamed `.env.migrated` as a backup; unknown keys and invalid values (e.g. `APP_ENV=staging`) are listed and left out, their default applies. Change the settings with `frankenmanager configuration set` from then on.
 - What changes:
   - The configuration lives in `db.sqlite` instead of `.env`; `.env.example` is no longer shipped, and the first `start` no longer stops to have it reviewed
   - The database services of the generated compose file no longer load the `.env` file (`env_file`)
@@ -209,7 +209,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `restore-host --list` sorts the archived hosts by name
   - Windows: `setup` requires an Administrator terminal and edits the hosts file directly; the PowerShell helper script is removed
   - The Python package (wheel, sdist) is no longer published
-  - Updating an install older than the bundle layout (a single file in `/usr/local/bin`) in place, the fallback on `docker-compose.yml` / `docker-compose-prod.yml` when the generated compose file is missing, and the migration of the legacy `.config` file are removed
+  - Updating an install older than the bundle layout (a single file in `/usr/local/bin`) in place, the fallback on `docker-compose.yml` / `docker-compose-prod.yml` when the generated compose file is missing, the migration of the legacy `.config` file, the move of site Caddyfiles from the legacy `caddy/sites/custom/` directory to `caddy/sites/php-<version>/` the conversion of TLS site Caddyfiles to HTTP on `start` and the addition of the `php_version` column to a `domains` table without it are removed: start once with 0.1.63 before updating if your install predates them
 - Fixed since 0.1.x:
   - The hosts helper script could not remove entries on Linux; `setup` replaces an outdated helper
   - Windows: checking whether the CA server or the DNS watcher runs no longer kills it

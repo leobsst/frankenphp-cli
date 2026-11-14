@@ -219,7 +219,7 @@ var definitions = buildDefinitions()
 
 func buildDefinitions() []Definition {
 	defs := []Definition{
-		{Key: "APP_ENV", Description: "Environment: dev, or prod/production (host network, no phpMyAdmin)",
+		{Key: "APP_ENV", Description: "dev for local development; prod/production only on a public/cloud server",
 			Default: static("dev"), Values: []string{"dev", "prod", "production"}, Apply: ApplyRecreate},
 		{Key: "UID", Description: "User ID the containers run as (defaults to the current user)",
 			Default: currentID(true), Validate: validateID, Apply: ApplyRecreate},

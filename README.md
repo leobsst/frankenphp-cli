@@ -259,9 +259,8 @@ The server automatically:
 2. Generates SSL certificates for each domain via mkcert
 3. Adds entries to `/etc/hosts` (passwordless if setup was run)
 4. Creates Caddyfile configuration for each domain (HTTP-only worker sites; TLS is handled by the reverse proxy)
-5. Migrates any existing Caddyfiles to the current HTTP-only format automatically
-6. Builds the PHP images that are missing or outdated (all of them with `--build`), then starts the Docker containers
-7. Syncs MariaDB password if changed
+5. Builds the PHP images that are missing or outdated (all of them with `--build`), then starts the Docker containers
+6. Syncs MariaDB password if changed
 
 ### Multi-PHP Version Support
 
@@ -351,14 +350,15 @@ Each PHP version gets its own container (`frankenphp-8.2`, `frankenphp-8.3`, etc
 Per-site Caddyfiles are stored in version-specific subdirectories:
 
 ```
-~/.frankenmanager/caddy/sites/custom/
-├── php8.2/
-│   └── legacy_Caddyfile
-├── php8.3/
+~/.frankenmanager/caddy/sites/
+├── php-8.2/
+│   └── old_Caddyfile
+├── php-8.3/
 │   ├── shop_Caddyfile
 │   └── blog_Caddyfile
-└── php8.4/
-    └── api_Caddyfile
+├── php-8.4/
+│   └── api_Caddyfile
+└── archive/            # Caddyfiles of removed domains (see restore-host)
 ```
 
 ### Stop the server
@@ -553,7 +553,7 @@ This will:
 
 ### Caddyfile Customization
 
-Each domain gets its own Caddyfile generated from `caddy/Caddyfile.template`. You can edit a site's Caddyfile directly at `~/.frankenmanager/caddy/sites/custom/<domain>_Caddyfile` to customize behavior for that site.
+Each domain gets its own Caddyfile generated from `caddy/Caddyfile.template`. You can edit a site's Caddyfile directly at `~/.frankenmanager/caddy/sites/php-<version>/<domain>_Caddyfile` to customize behavior for that site.
 
 If the custom template at `caddy/Caddyfile.template` is unreadable, FrankenManager will automatically fall back to its built-in template.
 
@@ -563,7 +563,7 @@ For a ready-to-use Pusher-compatible WebSocket server shared by every app, see [
 
 The generated Caddyfile includes commented-out WebSocket configuration. To enable it for a site:
 
-1. Open the site's Caddyfile (`~/.frankenmanager/caddy/sites/custom/<domain>_Caddyfile`)
+1. Open the site's Caddyfile (`~/.frankenmanager/caddy/sites/php-<version>/<domain>_Caddyfile`)
 2. Replace the default compression directive:
 
 ```caddyfile
@@ -593,8 +593,7 @@ handle @websocket {
 #### Internal architecture
 
 Worker sites run on plain HTTP internally. TLS termination happens at the reverse proxy layer (Caddy), which forwards requests over HTTP to the FrankenPHP workers. This means:
-- Per-site Caddyfiles do **not** include `tls` directives for worker-to-proxy traffic
-- Existing installs are automatically migrated to this format on the next `frankenmanager start`
+- Per-site Caddyfiles do **not** include `tls` directives for worker-to-proxy traffic: the `tls` lines of the template are commented out when a site Caddyfile is generated
 
 ### Force SSL certificate regeneration
 
@@ -836,7 +835,7 @@ frankenmanager reset --db --caddyfiles
 | Option | Alias | What it does |
 |--------|-------|--------------|
 | `--db` | `--database` | Clears the registered domain list in FrankenManager's configuration (`db.sqlite`) |
-| `--caddyfiles` | `--caddy` | Deletes all custom Caddyfile configurations in `caddy/sites/custom/` |
+| `--caddyfiles` | `--caddy` | Deletes every per-site Caddyfile in `caddy/sites/php-<version>/` (the archive is kept) |
 
 **Use cases:**
 - Clean up after testing multiple domains
@@ -892,7 +891,6 @@ You can override this location with the `FRANKENMANAGER_DATA_DIR` environment va
 ```
 ~/.frankenmanager/
 ├── db.sqlite               # Configuration (including the database passwords) and server state (domains)
-├── .env.migrated           # Backup of the former .env file, once migrated
 ├── .db_password_history_*  # Previous database root passwords (used to sync password changes)
 ├── docker-compose.yml      # Docker Compose configuration
 ├── Dockerfile              # Custom FrankenPHP image
@@ -931,10 +929,6 @@ FrankenManager uses a SQLite database (`db.sqlite`) to store server state and do
 - **Data integrity**: Unique constraints prevent duplicate domains
 - **Future-proof**: Easy schema evolution for new features
 
-**Automatic Migration:**
-
-If you're upgrading from an older version that used `.config` (JSON), your data will be automatically migrated to the database on the next command run. The old `.config` file will be backed up to `.config.backup`.
-
 **Database Schema:**
 
 ```sql
@@ -949,6 +943,7 @@ CREATE TABLE server_state (
 CREATE TABLE domains (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     domain TEXT NOT NULL UNIQUE,
+    php_version TEXT NOT NULL DEFAULT '8.3',
     added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -968,8 +963,6 @@ CREATE TABLE proxies (
     added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
-
-The `aliases` and `proxies` tables are created automatically the next time you run any `frankenmanager` command after upgrading — no reset or manual migration needed.
 
 ### Settings
 
@@ -1007,12 +1000,10 @@ frankenmanager completion fish > ~/.config/fish/completions/frankenmanager.fish
 frankenmanager completion powershell >> $PROFILE
 ```
 
-**Migration from `.env`.** Earlier releases read a `.env` file in the data directory. The first command run after upgrading imports it into `db.sqlite` (values left empty or equal to the default are skipped, so they follow future defaults), then renames it `.env.migrated` as a backup. Unknown keys are not imported and are listed. A `.env` file created afterwards is ignored, with a warning.
-
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `CLI_ALIAS` | `fkm` | Short alias of the command, see [CLI alias](#cli-alias) (empty: none) |
-| `APP_ENV` | `dev` | Environment (`dev` or `prod`) |
+| `APP_ENV` | `dev` | `dev` for local development (always the case on a workstation), `prod`/`production` only to run FrankenManager on a public/cloud server, see [Production Mode](#production-mode) |
 | `DEFAULT_PHP_VERSION` | `8.3` | Default PHP version for new domains (`8.2` (deprecated), `8.3`, `8.4`, `8.5`) |
 | `UID` | (current user) | System user ID for file ownership |
 | `GID` | (current group) | System group ID for file ownership |
@@ -1112,13 +1103,16 @@ Changing a password (`configuration set MARIADB_ROOT_PASSWORD ...`) is applied t
 
 ### Production Mode
 
-Run `frankenmanager configuration set APP_ENV prod` (then `stop`/`start`) to enable:
+`APP_ENV` is only meant for running FrankenManager on a public/cloud server. It plays no part in local development: leave it on `dev` (the default) on a workstation, whatever the environment of the apps you serve. Production mode drops what local development relies on (mkcert certificates per domain, phpMyAdmin/pgAdmin, published ports).
 
-- Production Docker Compose configuration (host networking)
+On such a server, run `frankenmanager configuration set APP_ENV prod` (then `stop`/`start`) to enable:
+
+- Production Docker Compose configuration (host networking, containers run as `UID`:`GID`)
+- No phpMyAdmin/pgAdmin, nothing served at `https://localhost`
 - PHP OPCache enabled
 - `expose_php` disabled
 - Output buffering (4096 bytes)
-- Let's Encrypt certificates (instead of mkcert)
+- Let's Encrypt certificates from `/etc/letsencrypt` (instead of mkcert)
 
 ## Architecture
 
@@ -1133,14 +1127,14 @@ frankenphp-cli/
 ├── internal/
 │   ├── cli/                    Commands (cobra)
 │   ├── core/                   Everything the commands rely on
-│   │   ├── caddyfile/          Caddyfile generation and migration
+│   │   ├── caddyfile/          Caddyfile generation
 │   │   ├── caserver/           Root CA sharing (trust-ca)
 │   │   ├── compose/            docker-compose-generated.yml
 │   │   ├── dns/                LAN DNS server (CoreDNS) config
 │   │   ├── dnswatcher/         LAN IP watcher (LaunchAgent, systemd unit)
 │   │   ├── docker/             docker CLI wrapper, image builds
 │   │   ├── alias/              CLI alias (fkm) next to the command
-│   │   ├── env/                Configuration: settings registry, .env migration
+│   │   ├── env/                Configuration: settings registry
 │   │   ├── hosts/              Hosts file management
 │   │   ├── mkcert/             mkcert install and CA
 │   │   ├── password/           Database password sync
@@ -1298,12 +1292,6 @@ brew install mkcert
 # Windows
 choco install mkcert
 ```
-
-### Caddyfile format after upgrade
-
-If you upgraded from an older version, your existing per-site Caddyfiles may use the legacy TLS format. Running `frankenmanager start` will automatically migrate them to the current HTTP-only worker format (TLS lines are commented out rather than deleted, so customizations are preserved).
-
-To migrate manually without starting the server, you can edit the Caddyfile directly or run `frankenmanager reset --caddyfiles` to regenerate all from scratch.
 
 ### Container health check failures
 
