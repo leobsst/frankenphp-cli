@@ -65,14 +65,24 @@ func (m MemoryBackend) DeleteConfig(keys ...string) error {
 	return nil
 }
 
-// Load reads the stored values, replacing those in memory.
+// Load reads the stored values, replacing those in memory. A value the
+// registry rejects (edited by hand in db.sqlite) is dropped silently: its
+// key falls back to the default. A mere case difference ("True") is
+// normalized.
 func (e *Env) Load() error {
-	vars, err := e.backend.Config()
+	stored, err := e.backend.Config()
 	if err != nil {
 		return err
 	}
-	if vars == nil {
-		vars = map[string]string{}
+	vars := make(map[string]string, len(stored))
+	for key, value := range stored {
+		if d, ok := Lookup(key); ok {
+			value = d.canonical(value)
+			if d.Check(value) != nil {
+				continue
+			}
+		}
+		vars[key] = value
 	}
 	e.vars = vars
 	return nil

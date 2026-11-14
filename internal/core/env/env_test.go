@@ -120,6 +120,26 @@ func TestSetAndResetPersist(t *testing.T) {
 	}
 }
 
+// A value edited by hand in db.sqlite and rejected by the registry falls
+// back to the default; a case difference is normalized, unknown keys kept.
+func TestLoadDropsInvalidStoredValues(t *testing.T) {
+	stored := MemoryBackend{
+		"APP_ENV": "staging", "WEB_HTTP_PORT": "99999", "REDIS_ENABLED": "True",
+		"DEFAULT_PHP_VERSION": "8.4", "CLI_ALIAS": "", "LEGACY_KEY": "x",
+	}
+	e := New(stored)
+	if err := e.Load(); err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"REDIS_ENABLED": "true", "DEFAULT_PHP_VERSION": "8.4", "CLI_ALIAS": "", "LEGACY_KEY": "x"}
+	if !reflect.DeepEqual(e.Vars(), want) {
+		t.Errorf("vars = %v, want %v", e.Vars(), want)
+	}
+	if e.Get("APP_ENV") != "dev" || e.Get("WEB_HTTP_PORT") != "80" {
+		t.Errorf("APP_ENV = %q, WEB_HTTP_PORT = %q", e.Get("APP_ENV"), e.Get("WEB_HTTP_PORT"))
+	}
+}
+
 func TestRequire(t *testing.T) {
 	e := newEnv(t, "SET=1\nEMPTY=\n")
 	if v, err := e.Require("SET"); err != nil || v != "1" {
