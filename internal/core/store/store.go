@@ -9,12 +9,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	_ "modernc.org/sqlite" // pure Go driver (CGO_ENABLED=0), registered as "sqlite"
-
-	"github.com/leobsst/frankenphp-cli/internal/core/phpversions"
 )
 
 // Domain is a domain served by a PHP container.
@@ -87,8 +84,7 @@ var schema = []string{
 	)`,
 }
 
-// Open opens path, creating the file, the missing tables and the
-// php_version column of databases older than it.
+// Open opens path, creating the file and the missing tables.
 func Open(path string) (*Store, error) {
 	// busy_timeout: wait up to 5 s for another process (e.g. the DNS
 	// watcher) instead of failing at once
@@ -100,7 +96,7 @@ func Open(path string) (*Store, error) {
 	db.SetMaxOpenConns(1)
 
 	s := &Store{db: db}
-	if err := s.migrate(); err != nil {
+	if err := s.createTables(); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("open %s: %w", path, err)
 	}
@@ -110,23 +106,8 @@ func Open(path string) (*Store, error) {
 // Close releases the database.
 func (s *Store) Close() error { return s.db.Close() }
 
-func (s *Store) migrate() error {
-	// The tables are created in the order earlier releases used, the
-	// php_version column right after domains
-	if _, err := s.db.Exec(schema[0]); err != nil {
-		return err
-	}
-	columns, err := queryList(s.db, "SELECT name FROM pragma_table_info('domains')", scanString)
-	if err != nil {
-		return err
-	}
-	if !slices.Contains(columns, "php_version") {
-		stmt := "ALTER TABLE domains ADD COLUMN php_version TEXT NOT NULL DEFAULT '" + phpversions.Default + "'"
-		if _, err := s.db.Exec(stmt); err != nil {
-			return err
-		}
-	}
-	for _, stmt := range schema[1:] {
+func (s *Store) createTables() error {
+	for _, stmt := range schema {
 		if _, err := s.db.Exec(stmt); err != nil {
 			return err
 		}

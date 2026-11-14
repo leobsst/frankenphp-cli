@@ -1,7 +1,6 @@
 package store
 
 import (
-	"database/sql"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -31,45 +30,6 @@ func check(t *testing.T, err error) {
 	t.Helper()
 	if err != nil {
 		t.Fatal(err)
-	}
-}
-
-// A database created by an early release: domains without
-// php_version, none of the later tables.
-func TestOpenMigratesOldDatabase(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "db.sqlite")
-	raw, err := sql.Open("sqlite", path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = raw.Exec(`CREATE TABLE domains (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		domain TEXT NOT NULL UNIQUE,
-		added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-	); INSERT INTO domains (domain) VALUES ('old.test')`)
-	check(t, err)
-	check(t, raw.Close())
-
-	s, err := Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = s.Close() }()
-
-	want := []Domain{{"old.test", "8.3"}}
-	if got := must(s.Domains()); !reflect.DeepEqual(got, want) {
-		t.Errorf("Domains() = %v, want %v", got, want)
-	}
-	// php_version is the last column, as after the column migration of
-	// earlier releases
-	columns := must(queryList(s.db, "SELECT name FROM pragma_table_info('domains')", scanString))
-	if !reflect.DeepEqual(columns, []string{"id", "domain", "added_at", "php_version"}) {
-		t.Errorf("columns = %v", columns)
-	}
-	for _, table := range []string{"aliases", "proxies", "settings", "configuration"} {
-		if _, err := s.db.Exec("SELECT * FROM " + table); err != nil {
-			t.Errorf("table %s not created: %v", table, err)
-		}
 	}
 }
 

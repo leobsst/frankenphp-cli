@@ -53,8 +53,6 @@ func TestOpenEveryEarlierSchema(t *testing.T) {
 		ddl  []string
 		data []string
 	}{
-		{"v1 domains only", []string{ddlDomainsV1},
-			[]string{`INSERT INTO domains (domain) VALUES ('a.test'), ('b.test')`}},
 		{"v2 php_version", []string{ddlDomainsV2},
 			[]string{`INSERT INTO domains (domain, php_version) VALUES ('a.test', '8.4'), ('b.test', '8.3')`}},
 		{"v1 migrated by an earlier release", []string{ddlDomainsV1, ddlMigrateV1},
@@ -90,9 +88,6 @@ func TestOpenEveryEarlierSchema(t *testing.T) {
 				}
 				domains := must(s.Domains())
 				wantDomains := []Domain{{"a.test", "8.4"}, {"b.test", "8.3"}}
-				if strings.HasPrefix(tc.name, "v1 domains") {
-					wantDomains = []Domain{{"a.test", "8.3"}, {"b.test", "8.3"}}
-				}
 				if !reflect.DeepEqual(domains, wantDomains) {
 					t.Errorf("domains = %v", domains)
 				}
