@@ -11,7 +11,8 @@ import (
 
 func TestMigrate(t *testing.T) {
 	dir := t.TempDir()
-	content := "APP_ENV=dev\nDEFAULT_PHP_VERSION=8.4\nMARIADB_ROOT_PASSWORD=secret\nDNS_IP=\nUSER=ci\nDB_PORT=3306\n"
+	content := "APP_ENV=dev\nDEFAULT_PHP_VERSION=8.4\nMARIADB_ROOT_PASSWORD=secret\nDNS_IP=\nUSER=ci\nDB_PORT=3306\n" +
+		"REDIS_ENABLED=True\nPHP_IMAGE_DISTRO=ubuntu\nWEB_HTTP_PORT=99999\n"
 	for name, data := range map[string]string{".env": content, ".env.example": "UID=\n"} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(data), 0o600); err != nil {
 			t.Fatal(err)
@@ -22,17 +23,21 @@ func TestMigrate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Empty values and defaults are left out, so they follow future defaults
+	// Empty values and defaults are left out, so they follow future defaults;
+	// invalid values too, while a mere case difference is normalized
 	want := Migration{
 		Migrated: true,
-		Imported: []string{"DEFAULT_PHP_VERSION", "MARIADB_ROOT_PASSWORD"},
+		Imported: []string{"DEFAULT_PHP_VERSION", "MARIADB_ROOT_PASSWORD", "REDIS_ENABLED"},
 		Unknown:  []string{"USER"},
+		Invalid:  []string{"PHP_IMAGE_DISTRO", "WEB_HTTP_PORT"},
 		Backup:   filepath.Join(dir, ".env.migrated"),
 	}
 	if !reflect.DeepEqual(m, want) {
 		t.Errorf("migration = %+v, want %+v", m, want)
 	}
-	if !reflect.DeepEqual(e.Vars(), map[string]string{"DEFAULT_PHP_VERSION": "8.4", "MARIADB_ROOT_PASSWORD": "secret"}) {
+	if !reflect.DeepEqual(e.Vars(), map[string]string{
+		"DEFAULT_PHP_VERSION": "8.4", "MARIADB_ROOT_PASSWORD": "secret", "REDIS_ENABLED": "true",
+	}) {
 		t.Errorf("vars = %v", e.Vars())
 	}
 	if data, err := os.ReadFile(m.Backup); err != nil || string(data) != content {

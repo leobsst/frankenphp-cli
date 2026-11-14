@@ -173,6 +173,10 @@ func (a *app) reportMigration(m env.Migration) {
 		if len(m.Unknown) > 0 {
 			a.log.Warning("Not migrated, unknown keys: " + strings.Join(m.Unknown, ", "))
 		}
+		if len(m.Invalid) > 0 {
+			a.log.Warning("Not migrated, invalid values (default kept): " + strings.Join(m.Invalid, ", ") +
+				". Use 'frankenmanager configuration set <name> <value>'.")
+		}
 	case m.Ignored:
 		a.log.Warning("The .env file is no longer read: the configuration lives in db.sqlite. " +
 			"Use 'frankenmanager configuration set <name> <value>', then remove .env.")

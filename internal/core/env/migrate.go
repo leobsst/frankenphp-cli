@@ -38,6 +38,9 @@ type Migration struct {
 	// Unknown are the keys of the file that are not configuration keys:
 	// not imported, still in the renamed file.
 	Unknown []string
+	// Invalid are the keys whose value is rejected (see Definition.Check):
+	// not imported, the default applies.
+	Invalid []string
 	// Backup is the path the file was renamed to, "" when it could not be.
 	Backup string
 	// Ignored is set when a .env file exists but the configuration was
@@ -46,8 +49,9 @@ type Migration struct {
 }
 
 // Migrate imports the .env file of dataDir into the configuration, once:
-// the non-empty values differing from the defaults are stored, then the
-// file is renamed to .env.migrated as a backup. Unknown keys are left out.
+// the valid non-empty values differing from the defaults are stored, then
+// the file is renamed to .env.migrated as a backup. Unknown keys and
+// invalid values are left out.
 func Migrate(dataDir string, b MigrationBackend) (Migration, error) {
 	var m Migration
 	path := filepath.Join(dataDir, FileName)
@@ -68,11 +72,16 @@ func Migrate(dataDir string, b MigrationBackend) (Migration, error) {
 	values := map[string]string{}
 	for key, value := range Parse(string(data)) {
 		def, known := Lookup(key)
+		if known {
+			value = def.canonical(value)
+		}
 		switch {
 		case !known:
 			m.Unknown = append(m.Unknown, key)
 		case value == "" || value == def.DefaultValue():
 			// The default applies anyway, and follows future releases
+		case def.Check(value) != nil:
+			m.Invalid = append(m.Invalid, def.Key)
 		default:
 			values[def.Key] = value
 			m.Imported = append(m.Imported, def.Key)
@@ -80,6 +89,7 @@ func Migrate(dataDir string, b MigrationBackend) (Migration, error) {
 	}
 	slices.Sort(m.Imported)
 	slices.Sort(m.Unknown)
+	slices.Sort(m.Invalid)
 
 	if err := b.SetConfig(values); err != nil {
 		return m, fmt.Errorf("migrate %s: %w", path, err)

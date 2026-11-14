@@ -109,6 +109,17 @@ func (d Definition) Check(value string) error {
 	return nil
 }
 
+// canonical returns the accepted value matching value regardless of case
+// and surrounding spaces ("True" -> "true"), value as is otherwise.
+func (d Definition) canonical(value string) string {
+	for _, v := range d.Values {
+		if strings.EqualFold(v, strings.TrimSpace(value)) {
+			return v
+		}
+	}
+	return value
+}
+
 // Services are the optional services that can be turned on and off live,
 // with their key.
 var Services = map[string]string{
