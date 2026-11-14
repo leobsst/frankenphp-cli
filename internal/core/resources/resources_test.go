@@ -66,7 +66,7 @@ func TestFirstRunExtractsEverything(t *testing.T) {
 		}
 	}
 	for _, dir := range []string{
-		"caddy/sites/custom", "caddy/sites/archive", "caddy/sites/php-8.5", "caddy/certs",
+		"caddy/sites/archive", "caddy/sites/php-8.5", "caddy/certs",
 		"caddy/log/caddy", "caddy/log/php", "caddy/data", "caddy/config", "php/8.2", "database",
 	} {
 		if info, err := os.Stat(e.path(filepath.FromSlash(dir))); err != nil || !info.IsDir() {

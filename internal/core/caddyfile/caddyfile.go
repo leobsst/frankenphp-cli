@@ -5,9 +5,6 @@
 //     when missing: the user may edit it;
 //   - the main caddy/Caddyfile, rewritten every time, where the reverse
 //     proxy terminates TLS for every host and forwards to the containers.
-//
-// The legacy sites/custom/ directory, used by earlier releases, is still
-// migrated.
 package caddyfile
 
 import (
@@ -18,7 +15,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"unicode"
 
 	"github.com/leobsst/frankenphp-cli/internal/core/phpversions"
 	"github.com/leobsst/frankenphp-cli/internal/core/soketi"
@@ -81,8 +77,6 @@ func New(caddyDir, dataDir string, log Logger) *Generator {
 // ArchiveDir is where removed domains' site files are kept.
 func (g *Generator) ArchiveDir() string { return filepath.Join(g.SitesDir, "archive") }
 
-func (g *Generator) customDir() string { return filepath.Join(g.SitesDir, "custom") }
-
 func (g *Generator) versionDir(phpVersion string) string {
 	return filepath.Join(g.SitesDir, "php-"+phpVersion)
 }
@@ -119,10 +113,7 @@ func (g *Generator) GenerateAllForVersions(domains []store.Domain) error {
 }
 
 // GenerateForVersion creates the missing site files of domains in
-// sites/php-<phpVersion>/. A file left in the legacy sites/custom/ is moved
-// there as is and converted to HTTP, keeping the user's changes; otherwise
-// a new one is built from the template. Every other legacy file is moved
-// to this version too.
+// sites/php-<phpVersion>/, built from the template.
 func (g *Generator) GenerateForVersion(domains []string, phpVersion string) error {
 	versionDir := g.versionDir(phpVersion)
 	if err := os.MkdirAll(versionDir, dirMode); err != nil {
@@ -135,14 +126,6 @@ func (g *Generator) GenerateForVersion(domains []string, phpVersion string) erro
 		if exists(path) {
 			continue
 		}
-		legacy := filepath.Join(g.customDir(), simple+suffix)
-		if exists(legacy) {
-			g.Log.Info(fmt.Sprintf("Moving %s%s from custom/ to php-%s/...", simple, suffix, phpVersion))
-			if err := g.moveAndMigrate(legacy, path); err != nil {
-				return err
-			}
-			continue
-		}
 		g.Log.Info(fmt.Sprintf("Creating %s%s (PHP %s)...", simple, suffix, phpVersion))
 		content, err := g.buildWorkerSite(domain, simple)
 		if err != nil {
@@ -153,32 +136,8 @@ func (g *Generator) GenerateForVersion(domains []string, phpVersion string) erro
 		}
 	}
 
-	legacyFiles, err := filepath.Glob(filepath.Join(g.customDir(), "*"+suffix))
-	if err != nil {
-		return err
-	}
-	for _, legacy := range legacyFiles {
-		name := filepath.Base(legacy)
-		target := filepath.Join(versionDir, name)
-		if exists(target) {
-			continue
-		}
-		g.Log.Info(fmt.Sprintf("Moving %s from custom/ to php-%s/...", name, phpVersion))
-		if err := g.moveAndMigrate(legacy, target); err != nil {
-			return err
-		}
-	}
-
 	g.Log.Success("Caddyfile configurations generated")
 	return nil
-}
-
-func (g *Generator) moveAndMigrate(from, to string) error {
-	if err := os.Rename(from, to); err != nil {
-		return err
-	}
-	_, err := migrateFile(to)
-	return err
 }
 
 // buildWorkerSite returns a new site file: the template with full_domain
@@ -235,62 +194,8 @@ func toHTTP(content string) (string, bool) {
 	return out, out != content
 }
 
-// migrateFile converts a site file to HTTP, unless it already starts with
-// http://. It reports whether the file changed.
-func migrateFile(path string) (bool, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return false, err
-	}
-	content := string(data)
-	if strings.HasPrefix(strings.TrimLeftFunc(content, unicode.IsSpace), "http://") {
-		return false, nil
-	}
-	content, changed := toHTTP(content)
-	if !changed {
-		return false, nil
-	}
-	return true, os.WriteFile(path, []byte(content), fileMode)
-}
-
-// MigrateWorkerCaddyfiles converts every site file of sites/custom/ and
-// sites/php-*/ still served over TLS (older releases) to HTTP, and returns
-// how many changed.
-func (g *Generator) MigrateWorkerCaddyfiles() (int, error) {
-	entries, err := os.ReadDir(g.SitesDir)
-	if err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return 0, nil
-		}
-		return 0, err
-	}
-	migrated := 0
-	for _, e := range entries {
-		if !e.IsDir() || (e.Name() != "custom" && !strings.HasPrefix(e.Name(), "php-")) {
-			continue
-		}
-		files, err := filepath.Glob(filepath.Join(g.SitesDir, e.Name(), "*"+suffix))
-		if err != nil {
-			return migrated, err
-		}
-		for _, f := range files {
-			changed, err := migrateFile(f)
-			if err != nil {
-				return migrated, err
-			}
-			if changed {
-				migrated++
-			}
-		}
-	}
-	if migrated > 0 {
-		g.Log.Info(fmt.Sprintf("Migrated %d Caddyfile(s) to HTTP-only worker format", migrated))
-	}
-	return migrated, nil
-}
-
 // MoveToVersion moves a domain's site file from one PHP version directory
-// to another, or from the legacy sites/custom/, replacing the target.
+// to another, replacing the target.
 func (g *Generator) MoveToVersion(domain, fromVersion, toVersion string) error {
 	name := fileName(domain)
 	dstDir := g.versionDir(toVersion)
@@ -306,20 +211,12 @@ func (g *Generator) MoveToVersion(domain, fromVersion, toVersion string) error {
 		g.Log.Info(fmt.Sprintf("Moved %s from PHP %s to PHP %s", name, fromVersion, toVersion))
 		return nil
 	}
-	if legacy := filepath.Join(g.customDir(), name); exists(legacy) {
-		if err := replace(legacy, dst); err != nil {
-			return err
-		}
-		g.Log.Info(fmt.Sprintf("Moved %s to PHP %s", name, toVersion))
-		return nil
-	}
 	g.Log.Warning(fmt.Sprintf("Caddyfile for %s not found", domain))
 	return nil
 }
 
 // Archive moves the site files of domains to sites/archive/, replacing
-// older archives. Each file is searched in the PHP version directories,
-// then in the legacy sites/custom/.
+// older archives. Each file is searched in the PHP version directories.
 func (g *Generator) Archive(domains []string) error {
 	if err := os.MkdirAll(g.ArchiveDir(), dirMode); err != nil {
 		return err
@@ -331,7 +228,7 @@ func (g *Generator) Archive(domains []string) error {
 	for _, domain := range domains {
 		name := fileName(domain)
 		src := ""
-		for _, dir := range append(versionDirs, g.customDir()) {
+		for _, dir := range versionDirs {
 			if p := filepath.Join(dir, name); exists(p) {
 				src = p
 				break

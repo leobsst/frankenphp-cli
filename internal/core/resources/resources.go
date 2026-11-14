@@ -161,7 +161,6 @@ func (e *Extractor) EnsurePHPVersionConfig(phpVersion string) error {
 func (e *Extractor) ensureStructure() error {
 	dirs := []string{
 		e.Dir,
-		e.path("caddy", "sites", "custom"),
 		e.path("caddy", "sites", "archive"),
 	}
 	for _, v := range phpversions.Supported {

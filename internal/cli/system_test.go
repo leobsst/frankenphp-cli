@@ -191,9 +191,9 @@ func TestReset(t *testing.T) {
 		t.Fatal(err)
 	}
 	site := filepath.Join(e.dir, "caddy", "sites", "php-8.4", "app_Caddyfile")
-	legacy := filepath.Join(e.dir, "caddy", "sites", "custom", "old_Caddyfile")
+	other := filepath.Join(e.dir, "caddy", "sites", "php-8.3", "old_Caddyfile")
 	archived := filepath.Join(e.dir, "caddy", "sites", "archive", "gone_Caddyfile")
-	for _, f := range []string{site, legacy, archived} {
+	for _, f := range []string{site, other, archived} {
 		writeFile(t, f, "x")
 	}
 
@@ -229,7 +229,7 @@ func TestReset(t *testing.T) {
 	if p, _, _ := s.Setting("project_path"); p != "/projects" {
 		t.Error("settings cleared")
 	}
-	if exists(site) || exists(legacy) || !exists(archived) {
+	if exists(site) || exists(other) || !exists(archived) {
 		t.Error("wrong Caddyfiles deleted")
 	}
 

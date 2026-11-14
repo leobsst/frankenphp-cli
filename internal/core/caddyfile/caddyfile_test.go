@@ -156,60 +156,6 @@ func TestGenerateForVersionFromTemplate(t *testing.T) {
 	}
 }
 
-func TestGenerateForVersionMovesLegacyFiles(t *testing.T) {
-	dataDir, caddyDir := newCaddyDir(t)
-	custom := filepath.Join(caddyDir, "sites", "custom")
-	write(t, filepath.Join(custom, "old_Caddyfile"), golden(t, "legacy_tls"))
-	write(t, filepath.Join(custom, "other_Caddyfile"), golden(t, "legacy_tls"))
-	log := &memLog{}
-	g := New(caddyDir, dataDir, log)
-
-	if err := g.GenerateAllForVersions([]store.Domain{{Name: "old.test", PHPVersion: "8.3"}}); err != nil {
-		t.Fatal(err)
-	}
-	versionDir := filepath.Join(caddyDir, "sites", "php-8.3")
-	for _, name := range []string{"old_Caddyfile", "other_Caddyfile"} {
-		if got := read(t, filepath.Join(versionDir, name)); got != golden(t, "legacy_http") {
-			t.Errorf("%s not migrated:\n%s", name, got)
-		}
-		if exists(filepath.Join(custom, name)) {
-			t.Errorf("%s left in custom/", name)
-		}
-	}
-	want := []string{
-		"info: Moving old_Caddyfile from custom/ to php-8.3/...",
-		"info: Moving other_Caddyfile from custom/ to php-8.3/...",
-		"success: Caddyfile configurations generated",
-	}
-	if !slices.Equal(log.lines, want) {
-		t.Errorf("log = %v", log.lines)
-	}
-}
-
-func TestMigrateWorkerCaddyfiles(t *testing.T) {
-	caddyDir := t.TempDir()
-	sites := filepath.Join(caddyDir, "sites")
-	write(t, filepath.Join(sites, "custom", "old_Caddyfile"), golden(t, "legacy_tls"))
-	write(t, filepath.Join(sites, "php-8.4", "new_Caddyfile"), golden(t, "legacy_http"))
-	write(t, filepath.Join(sites, "archive", "gone_Caddyfile"), golden(t, "legacy_tls"))
-	log := &memLog{}
-	g := New(caddyDir, caddyDir, log)
-
-	n, err := g.MigrateWorkerCaddyfiles()
-	if err != nil || n != 1 {
-		t.Fatalf("migrated %d, %v", n, err)
-	}
-	if got := read(t, filepath.Join(sites, "custom", "old_Caddyfile")); got != golden(t, "legacy_http") {
-		t.Errorf("migration differs from the reference:\n%s", got)
-	}
-	if read(t, filepath.Join(sites, "archive", "gone_Caddyfile")) != golden(t, "legacy_tls") {
-		t.Error("archive migrated")
-	}
-	if !slices.Equal(log.lines, []string{"info: Migrated 1 Caddyfile(s) to HTTP-only worker format"}) {
-		t.Errorf("log = %v", log.lines)
-	}
-}
-
 // The built-in site must use single braces, which Caddy accepts.
 func TestFallbackSiteWithoutTemplate(t *testing.T) {
 	dir := t.TempDir()
@@ -243,25 +189,25 @@ func TestMoveArchiveRestore(t *testing.T) {
 	log := &memLog{}
 	g := New(caddyDir, caddyDir, log)
 	write(t, filepath.Join(sites, "php-8.3", "my.app_Caddyfile"), "http://my.app.test {\n}\n")
-	write(t, filepath.Join(sites, "custom", "legacy_Caddyfile"), "legacy.test {\n}\n")
+	write(t, filepath.Join(sites, "php-8.3", "blog_Caddyfile"), "http://blog.test {\n}\n")
 
 	if err := g.MoveToVersion("my.app.test", "8.3", "8.4"); err != nil {
 		t.Fatal(err)
 	}
-	if err := g.MoveToVersion("legacy.test", "8.3", "8.4"); err != nil {
+	if err := g.MoveToVersion("blog.test", "8.3", "8.4"); err != nil {
 		t.Fatal(err)
 	}
 	if err := g.MoveToVersion("none.test", "8.3", "8.4"); err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"my.app_Caddyfile", "legacy_Caddyfile"} {
+	for _, name := range []string{"my.app_Caddyfile", "blog_Caddyfile"} {
 		if !exists(filepath.Join(sites, "php-8.4", name)) {
 			t.Errorf("%s not moved", name)
 		}
 	}
 
 	write(t, filepath.Join(sites, "archive", "my.app_Caddyfile"), "older archive")
-	if err := g.Archive([]string{"my.app.test", "legacy.test", "none.test"}); err != nil {
+	if err := g.Archive([]string{"my.app.test", "blog.test", "none.test"}); err != nil {
 		t.Fatal(err)
 	}
 	archived, err := g.ListArchived()
@@ -269,16 +215,16 @@ func TestMoveArchiveRestore(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Only the _Caddyfile suffix is cut: "my.app", not "my"
-	want := []Archived{{"legacy", "legacy.test"}, {"my.app", "my.app.test"}}
+	want := []Archived{{"blog", "blog.test"}, {"my.app", "my.app.test"}}
 	if !slices.Equal(archived, want) {
 		t.Errorf("archived = %v", archived)
 	}
 
-	restored, err := g.RestoreToVersion([]string{"my.app.test", "legacy", "none"}, "8.5")
+	restored, err := g.RestoreToVersion([]string{"my.app.test", "blog", "none"}, "8.5")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(restored, []string{"my.app.test", "legacy.test"}) {
+	if !slices.Equal(restored, []string{"my.app.test", "blog.test"}) {
 		t.Errorf("restored = %v", restored)
 	}
 	if read(t, filepath.Join(sites, "php-8.5", "my.app_Caddyfile")) != "http://my.app.test {\n}\n" {
@@ -287,13 +233,13 @@ func TestMoveArchiveRestore(t *testing.T) {
 
 	want2 := []string{
 		"info: Moved my.app_Caddyfile from PHP 8.3 to PHP 8.4",
-		"info: Moved legacy_Caddyfile to PHP 8.4",
+		"info: Moved blog_Caddyfile from PHP 8.3 to PHP 8.4",
 		"warning: Caddyfile for none.test not found",
 		"info: Archived my.app_Caddyfile",
-		"info: Archived legacy_Caddyfile",
+		"info: Archived blog_Caddyfile",
 		"warning: Caddyfile for none.test not found, skipping archive",
 		"info: Restored my.app_Caddyfile (PHP 8.5)",
-		"info: Restored legacy_Caddyfile (PHP 8.5)",
+		"info: Restored blog_Caddyfile (PHP 8.5)",
 		"warning: Archived Caddyfile for 'none' not found, skipping",
 	}
 	if !slices.Equal(log.lines, want2) {

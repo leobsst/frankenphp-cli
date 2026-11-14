@@ -421,7 +421,7 @@ func (a *app) reset(ctx context.Context, db, caddyfiles bool) (err error) {
 		c.Println(c.Dim("Note: This does NOT affect your MariaDB database data"))
 	}
 	if caddyfiles {
-		c.Println("\n", c.Dim("Caddyfiles reset will delete all files in: "+filepath.Join(sites, "custom")))
+		c.Println("\n", c.Dim("Caddyfiles reset will delete all files in: "+filepath.Join(sites, "php-*")))
 	}
 	c.Println("\n", c.Bold(c.Color(ui.Red, "This action cannot be undone!")), "\n")
 
@@ -448,18 +448,15 @@ func (a *app) reset(ctx context.Context, db, caddyfiles bool) (err error) {
 		if caddyfiles {
 			a.log.Info("Resetting custom Caddyfiles...")
 			deleted := 0
-			// The legacy custom/ directory and every php-<v>/ one
-			for _, pattern := range []string{"custom", "php-*"} {
-				files, err := filepath.Glob(filepath.Join(sites, pattern, "*_Caddyfile"))
-				if err != nil {
+			files, err := filepath.Glob(filepath.Join(sites, "php-*", "*_Caddyfile"))
+			if err != nil {
+				return err
+			}
+			for _, f := range files {
+				if err := os.Remove(f); err != nil {
 					return err
 				}
-				for _, f := range files {
-					if err := os.Remove(f); err != nil {
-						return err
-					}
-					deleted++
-				}
+				deleted++
 			}
 			if deleted > 0 {
 				a.log.Success(fmt.Sprintf("Deleted %d Caddyfile(s)", deleted))

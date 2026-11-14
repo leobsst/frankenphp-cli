@@ -311,9 +311,6 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 	if err := g.GenerateAllForVersions(merged); err != nil {
 		return fail(err)
 	}
-	if _, err := g.MigrateWorkerCaddyfiles(); err != nil {
-		return fail(err)
-	}
 	if err := caddyfile.WriteMain(caddyDir, caddyfile.Main{
 		Domains: merged, Aliases: aliasEntries, Proxies: proxies,
 		DBAdminTarget: e.DBAdminTarget(), WebsocketTarget: soketi.Target(e),
