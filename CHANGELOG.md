@@ -5,17 +5,6 @@ All notable changes to FrankenManager will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### Added
-- `dns-clients` - List the devices using the LAN DNS server (IP, name from the router, MAC address, last query, number of queries), connected ones by default, `--all` and `--json`; `status` shows how many are connected
-- `add-alias` accepts a proxy host as target
-
-### Changed
-- The LAN DNS server is CoreDNS built into FrankenManager, run by its background process instead of the `franken_dns` container, so that it sees the real address of each device; the old container is removed on `start`
-- On Linux, `sudo frankenmanager setup` lets the binary use port 53 (`setcap`)
-- `update` stops a running server before installing and starts it again on the new version, and grants port 53 again on Linux
-
 ## [1.0.0] - 2026-02-10
 
 ### Added
@@ -33,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Merge registered domains with newly provided domains
   - Support for `--force-ssl` flag to regenerate certificates
 - `stop` - Stop all running containers
-- `restart` - Restart all or specific containers (caddy, database, cache, phpmyadmin, dns, soketi)
+- `restart` - Restart all or specific containers (caddy, database, cache, phpmyadmin, soketi) and the LAN DNS server (dns)
   - Support for individual service restart with `--caddy`, `--db`, `--cache`, `--pma`, `--dns`, `--soketi` flags
   - `--force-ssl` option for certificate regeneration during restart
 - `status` - Display current server and container status with real-time Docker state
@@ -44,17 +33,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Optional raw upstream target (e.g. `add-host domain.test 127.0.0.1:8006`) registers the domain(s) as proxy host(s) that reverse-proxy straight to that address instead of getting a PHP container of their own — `--php` is ignored in this mode
   - Dedicated SSL certificate and `/etc/hosts` entry per proxy host
   - Shown in their own table in `frankenmanager list`
-- `add-alias` - Add alternate host(s) that reverse-proxy to an already-configured domain
+- `add-alias` - Add alternate host(s) that reverse-proxy to an already-configured domain or proxy host
   - No per-site Caddyfile or new PHP container: only the reverse proxy's Caddyfile is updated
   - Dedicated SSL certificate and `/etc/hosts` entry per alias
   - Follows the target domain's PHP version automatically, including after `switch-php`
+  - An alias of a proxy host forwards to the same upstream, with the target as `Host` header, and follows upstream changes
   - Shown alongside registered domains in `frankenmanager list`
   - Multiple alias support and optional `--force-ssl` flag
 - `remove-host` - Remove domains and archive their Caddyfiles
   - Multiple domain support
   - Caddyfiles moved to archive directory (not deleted)
   - Automatic `/etc/hosts` cleanup
-  - Also removes alternate hosts (aliases) that target a removed domain
+  - Also removes alternate hosts (aliases) that target a removed domain or proxy host
   - Can remove an alternate host (alias) directly by name, leaving its target untouched
   - Can remove a proxy host directly by name
 - `restore-host` - Restore archived domains
@@ -71,12 +61,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `--status` option to check setup configuration
   - `--remove` option to uninstall privilege configuration
   - Sudoers file management for Linux/macOS
+  - Linux: lets the binary use port 53 for the LAN DNS server (`setcap cap_net_bind_service`), revoked by `--remove`, reported by `--status`
 - `update` - Self-update functionality
   - `--check` option to check for updates without installing
   - `--force` option to force reinstall latest version
   - Automatic update notifications on command execution
   - Refreshes the static files of the data directory right after installing the new version (as the real user under `sudo`)
   - Works on Windows too, from an Administrator terminal: the running `.exe` is moved aside and removed by the next update
+  - Stops a running server before installing and starts it again on the new version (as the real user under `sudo`); a stopped server stays stopped, a failed install restarts the previous version
+  - Linux: grants port 53 again to the new binary, or tells to rerun `sudo frankenmanager setup`
 - `trust-ca` - Share the local mkcert root CA over the LAN (off by default)
   - `on`/`off`/`status` actions, optional `--port` (default `9080`)
   - Serves only the public root certificate, never its private key
@@ -93,8 +86,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Each setting tells how a change applies: live, next command, `restart --dns`/`--database`/`--build`, or stop/start; nothing is restarted behind your back
   - `--show-secrets` to show the passwords, masked by default
 - `service` - Turn an optional service on or off live: `enable`/`disable`/`status` `dns`, `redis` or `soketi`
-  - On a running server, only that service starts or stops, with its certificate, hosts entry, reverse proxy route, DNS records and LAN IP watcher; otherwise it applies on the next start
+  - On a running server, only that service starts or stops, with its certificate, hosts entry, reverse proxy route, DNS records and LAN DNS server process; otherwise it applies on the next start
   - Also triggered by `configuration set` on `REDIS_ENABLED`, `DNS_SERVER` and `SOKETI_ENABLED`
+- `dns-clients` - List the devices using the LAN DNS server: IP, name from the router (DHCP host name), MAC address, last query and number of queries
+  - Connected devices (a query in the last 5 minutes) by default, `--all` adds the idle ones (kept 30 days), `--json` for a machine-readable list
+  - Kept in the `dns_clients` table of `db.sqlite`, emptied by `reset --db`; `status` shows how many devices are connected
 - `completion` - Shell completion script for bash, zsh, fish and PowerShell, completing the setting names (with their description) and values of `configuration set`, for the command and its alias
 - Short CLI alias `fkm` (`CLI_ALIAS` setting, empty for none): `frankenmanager` always stays available
   - A symlink next to the command (`fkm.cmd` on Windows), installed by the install scripts, `setup` and `update`, replaced at once when `CLI_ALIAS` changes
@@ -114,15 +110,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Default app configured through `SOKETI_DEFAULT_APP_ID`, `SOKETI_DEFAULT_APP_KEY` and `SOKETI_DEFAULT_APP_SECRET` (generated on start when empty)
   - Reachable by the PHP apps at `127.0.0.1:SOKETI_PORT` (default `6001`), restartable with `restart --soketi`
 - **phpMyAdmin** (franken_phpmyadmin) - Web-based database management UI
-- **CoreDNS** (franken_dns) - Optional LAN DNS server (`service enable dns`), so other devices on the network reach the `.test` domains without editing their hosts file
+- **CoreDNS** (built in) - Optional LAN DNS server (`service enable dns`), so other devices on the network reach the `.test` domains without editing their hosts file
+  - Embedded in FrankenManager and run by its background process rather than a container, so that it sees the real address of each device (behind Docker's VM on macOS and Windows, a container only sees the VM); the `franken_dns` container of earlier releases is removed on `start`, `restart --dns` and `service enable dns`
+  - Records every device querying it (see `dns-clients`)
   - Resolves every registered domain, alternate host, proxy host and the Soketi host to this machine's LAN IP (or `DNS_IP`); every other query is forwarded to `DNS_UPSTREAM`
   - Listens on every network interface by default (`0.0.0.0:53`), `DNS_LISTEN_IP` and `DNS_PORT` to pin it
-  - Records kept in sync on every domain change (add, remove, restore, alias, proxy host) without restarting the container, with a short TTL (30 s)
+  - Records kept in sync on every domain change (add, remove, restore, alias, proxy host) without restarting the server, with a short TTL (30 s); `DNS_*` setting changes are picked up on their own
   - Follows LAN IP changes (e.g. Wi-Fi to Ethernet) while the server runs, unless `DNS_IP` is set
-    - The watcher runs as a LaunchAgent on macOS and a systemd user unit on Linux: independent of the terminal, back after a reboot or login, relaunched if it crashes (detached background process elsewhere)
+    - The server process runs whenever `DNS_SERVER=true`, as a LaunchAgent on macOS and a systemd user unit on Linux: independent of the terminal, back after a reboot or login, relaunched if it crashes (detached background process elsewhere)
     - macOS: shown as "FrankenManager" in Login Items, through a minimal `FrankenManager.app` shipped in the bundle, instead of the name on the signing certificate
   - `start` and `status` list every LAN address the server answers on (e.g. Wi-Fi and Ethernet at once), to set as primary and secondary DNS servers on the other devices
-  - `restart --dns` refreshes the records and applies the DNS settings changed since the last start
+  - `restart --dns` refreshes the records and restarts the server process
 
 #### Custom Docker Image
 - Composer bundled in the custom FrankenPHP image
