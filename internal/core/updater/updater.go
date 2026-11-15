@@ -31,6 +31,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 	"github.com/leobsst/frankenphp-cli/internal/platform"
 	"github.com/leobsst/frankenphp-cli/internal/version"
 )
@@ -164,7 +165,7 @@ func ArchiveName(goos, goarch string, arm64Hardware bool) (string, error) {
 	case goos == "windows" && goarch == "arm64":
 		name = "windows-arm64"
 	default:
-		return "", fmt.Errorf("Unsupported platform: %s-%s", goos, goarch) //nolint:staticcheck // user-facing message
+		return "", i18n.Errorf("Unsupported platform: %s-%s", goos, goarch)
 	}
 	return BundleName + "-" + name + ".tar.gz", nil
 }
@@ -246,11 +247,11 @@ func (u *Updater) Fetch(ctx context.Context) (Release, error) {
 	req.Header.Set("User-Agent", userAgent)
 	res, err := u.Client.Do(req)
 	if err != nil {
-		return Release{}, fmt.Errorf("Could not reach GitHub (%w).", err) //nolint:staticcheck // user-facing message
+		return Release{}, i18n.Errorf("Could not reach GitHub (%w).", err)
 	}
 	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode/100 != 2 {
-		return Release{}, fmt.Errorf("Could not reach GitHub (%s).", httpError(res)) //nolint:staticcheck // user-facing message
+		return Release{}, i18n.Errorf("Could not reach GitHub (%s).", httpError(res))
 	}
 
 	var data struct {
@@ -262,10 +263,10 @@ func (u *Updater) Fetch(ctx context.Context) (Release, error) {
 		} `json:"assets"`
 	}
 	if err := json.NewDecoder(res.Body).Decode(&data); err != nil {
-		return Release{}, fmt.Errorf("GitHub returned an unreadable response (%w).", err) //nolint:staticcheck // user-facing message
+		return Release{}, i18n.Errorf("GitHub returned an unreadable response (%w).", err)
 	}
 	if data.TagName == nil {
-		return Release{}, errors.New("Unexpected release format from GitHub (missing 'tag_name').") //nolint:staticcheck // user-facing message
+		return Release{}, i18n.NewError("Unexpected release format from GitHub (missing 'tag_name').")
 	}
 	r := Release{Version: strings.TrimLeft(*data.TagName, "v"), Name: data.Name}
 	for _, a := range data.Assets {
@@ -275,7 +276,7 @@ func (u *Updater) Fetch(ctx context.Context) (Release, error) {
 		}
 	}
 	if r.DownloadURL == "" {
-		return Release{}, fmt.Errorf("The latest release (%s) has no build for this platform (%s).", r.Version, archive) //nolint:staticcheck // user-facing message
+		return Release{}, i18n.Errorf("The latest release (%s) has no build for this platform (%s).", r.Version, archive)
 	}
 	return r, nil
 }
@@ -362,11 +363,11 @@ func (u *Updater) Notify() {
 		}
 	}
 	if c.Latest != nil && u.newerThanRunning(*c.Latest) {
-		u.Log.Warning(fmt.Sprintf("A new version is available: %s (current: %s)", c.Latest.Version, u.Version))
+		u.Log.Warning(i18n.Tf("A new version is available: %s (current: %s)", c.Latest.Version, u.Version))
 		if u.GOOS == "windows" {
-			u.Log.Info("Run 'frankenmanager update' in an administrator terminal to update.")
+			u.Log.Info(i18n.T("Run 'frankenmanager update' in an administrator terminal to update."))
 		} else {
-			u.Log.Info("Run 'sudo frankenmanager update' to update.")
+			u.Log.Info(i18n.T("Run 'sudo frankenmanager update' to update."))
 		}
 	}
 }
@@ -375,50 +376,50 @@ func (u *Updater) Notify() {
 // has the new binary resync the static files. It returns false on failure.
 func (u *Updater) Update(ctx context.Context, force bool) bool {
 	if !u.isRelease() {
-		u.Log.Warning("Self-update is only available for pre-compiled binaries.")
-		u.Log.Info("Download the latest binary from GitHub releases.")
+		u.Log.Warning(i18n.T("Self-update is only available for pre-compiled binaries."))
+		u.Log.Info(i18n.T("Download the latest binary from GitHub releases."))
 		return false
 	}
 
-	u.Log.Info("Checking for updates...")
+	u.Log.Info(i18n.T("Checking for updates..."))
 	latest, err := u.Refresh(ctx)
 	if err != nil {
 		u.Log.Error(err.Error())
 		return false
 	}
-	u.Log.Info("Current version: " + u.Version)
-	u.Log.Info("Latest version:  " + latest.Version)
+	u.Log.Info(i18n.Tf("Current version: %s", u.Version))
+	u.Log.Info(i18n.Tf("Latest version:  %s", latest.Version))
 	if !force && !Newer(latest.Version, u.Version) {
-		u.Log.Success("Already on the latest version!")
+		u.Log.Success(i18n.T("Already on the latest version!"))
 		return true
 	}
 
-	u.Log.Info(fmt.Sprintf("Updating to version %s...", latest.Version))
+	u.Log.Info(i18n.Tf("Updating to version %s...", latest.Version))
 	if u.Exe == "" {
-		u.Log.Error("Update failed: cannot locate the running executable.")
+		u.Log.Error(i18n.T("Update failed: cannot locate the running executable."))
 		return false
 	}
 	dir := filepath.Dir(u.Exe)
 	// Before stopping anything: an update without the rights would only
 	// stop the server
 	if err := writable(dir); err != nil {
-		u.Log.Error("Permission denied. Try running with sudo/administrator privileges.")
+		u.Log.Error(i18n.T("Permission denied. Try running with sudo/administrator privileges."))
 		return false
 	}
 	wasRunning := u.ServerRunning != nil && u.ServerRunning(ctx, u.Exe)
 	if wasRunning {
-		u.Log.Info("Stopping the server for the update...")
+		u.Log.Info(i18n.T("Stopping the server for the update..."))
 		if err := u.StopServer(ctx, u.Exe); err != nil {
-			u.Log.Error(fmt.Sprintf("Could not stop the server, update cancelled: %v", err))
+			u.Log.Error(i18n.Tf("Could not stop the server, update cancelled: %v", err))
 			return false
 		}
 	}
 	if err := u.install(ctx, latest.DownloadURL, dir); err != nil {
 		if !errors.Is(err, errDownload) {
 			if errors.Is(err, fs.ErrPermission) {
-				u.Log.Error("Permission denied. Try running with sudo/administrator privileges.")
+				u.Log.Error(i18n.T("Permission denied. Try running with sudo/administrator privileges."))
 			} else {
-				u.Log.Error(fmt.Sprintf("Update failed: %v", err))
+				u.Log.Error(i18n.Tf("Update failed: %v", err))
 			}
 		}
 		if wasRunning {
@@ -428,31 +429,31 @@ func (u *Updater) Update(ctx context.Context, force bool) bool {
 		return false
 	}
 
-	u.Log.Success(fmt.Sprintf("Successfully updated to version %s!", latest.Version))
+	u.Log.Success(i18n.Tf("Successfully updated to version %s!", latest.Version))
 	exe := filepath.Join(dir, u.exeName())
 	u.syncResources(ctx, exe)
 	if u.GrantBindPort != nil {
 		if err := u.GrantBindPort(ctx, exe); err != nil {
-			u.Log.Warning("Run `sudo frankenmanager setup` so the LAN DNS server can use port 53: " + err.Error())
+			u.Log.Warning(i18n.Tf("Run `sudo frankenmanager setup` so the LAN DNS server can use port 53: %s", err.Error()))
 		}
 	}
 	if wasRunning {
 		u.startServer(ctx, exe)
 		return true
 	}
-	u.Log.Info("Please restart FrankenManager to use the new version.")
+	u.Log.Info(i18n.T("Please restart FrankenManager to use the new version."))
 	return true
 }
 
 // startServer starts the server with exe after an update, a failure being
 // only a warning: the update itself is done or reverted.
 func (u *Updater) startServer(ctx context.Context, exe string) {
-	u.Log.Info("Restarting the server...")
+	u.Log.Info(i18n.T("Restarting the server..."))
 	if err := u.StartServer(ctx, exe); err != nil {
-		u.Log.Warning(fmt.Sprintf("Could not restart the server (%v): run `frankenmanager start`.", err))
+		u.Log.Warning(i18n.Tf("Could not restart the server (%v): run `frankenmanager start`.", err))
 		return
 	}
-	u.Log.Success("Server restarted.")
+	u.Log.Success(i18n.T("Server restarted."))
 }
 
 // writable reports whether files can be created in dir.
@@ -508,14 +509,14 @@ func ExtractBundle(archive, dest, exeName string) (string, error) {
 	}
 	bundle := filepath.Join(dest, BundleName)
 	if info, err := os.Stat(filepath.Join(bundle, exeName)); err != nil || !info.Mode().IsRegular() {
-		return "", fmt.Errorf("Release archive does not contain %s/%s", BundleName, exeName) //nolint:staticcheck // user-facing message
+		return "", i18n.Errorf("Release archive does not contain %s/%s", BundleName, exeName)
 	}
 	return bundle, nil
 }
 
 // download saves url to dest, logging a failure as "Download failed: ...".
 func (u *Updater) download(ctx context.Context, url, dest string) bool {
-	u.Log.Info(fmt.Sprintf("Downloading from %s...", url))
+	u.Log.Info(i18n.Tf("Downloading from %s...", url))
 	err := func() error {
 		ctx, cancel := context.WithTimeout(ctx, downloadTimeout)
 		defer cancel()
@@ -530,7 +531,7 @@ func (u *Updater) download(ctx context.Context, url, dest string) bool {
 		}
 		defer func() { _ = res.Body.Close() }()
 		if res.StatusCode/100 != 2 {
-			return fmt.Errorf("HTTP Error %d: %s", res.StatusCode, httpError(res))
+			return i18n.Errorf("HTTP Error %d: %s", res.StatusCode, httpError(res))
 		}
 		f, err := os.Create(dest)
 		if err != nil {
@@ -543,7 +544,7 @@ func (u *Updater) download(ctx context.Context, url, dest string) bool {
 		return f.Close()
 	}()
 	if err != nil {
-		u.Log.Error(fmt.Sprintf("Download failed: %v", err))
+		u.Log.Error(i18n.Tf("Download failed: %v", err))
 		return false
 	}
 	return true
@@ -582,7 +583,7 @@ func extract(archive, dest string) error {
 		}
 		name := path.Clean(hdr.Name)
 		if !filepath.IsLocal(filepath.FromSlash(name)) {
-			return fmt.Errorf("unsafe path in release archive: %s", hdr.Name)
+			return i18n.Errorf("unsafe path in release archive: %s", hdr.Name)
 		}
 		if dir := path.Dir(name); dir != "." {
 			if err := root.MkdirAll(dir, 0o755); err != nil {
@@ -609,13 +610,13 @@ func extract(archive, dest string) error {
 			}
 		case tar.TypeSymlink:
 			if path.IsAbs(hdr.Linkname) || !filepath.IsLocal(filepath.FromSlash(path.Join(path.Dir(name), hdr.Linkname))) {
-				return fmt.Errorf("unsafe link in release archive: %s -> %s", hdr.Name, hdr.Linkname)
+				return i18n.Errorf("unsafe link in release archive: %s -> %s", hdr.Name, hdr.Linkname)
 			}
 			if err := root.Symlink(hdr.Linkname, name); err != nil {
 				return err
 			}
 		default:
-			return fmt.Errorf("unsupported entry in release archive: %s", hdr.Name)
+			return i18n.Errorf("unsupported entry in release archive: %s", hdr.Name)
 		}
 	}
 }
@@ -673,7 +674,7 @@ func swap(bundle, dir string) error {
 // as the real user under sudo. On failure, the next command does it.
 func (u *Updater) syncResources(ctx context.Context, exe string) {
 	if _, err := os.Stat(exe); err != nil {
-		u.Log.Warning("Static files will be updated on the next command.")
+		u.Log.Warning(i18n.T("Static files will be updated on the next command."))
 		return
 	}
 	ctx, cancel := context.WithTimeout(ctx, SyncResourcesTimeout)
@@ -682,9 +683,9 @@ func (u *Updater) syncResources(ctx context.Context, exe string) {
 	switch {
 	case err == nil && code == SyncResourcesNothingToDo:
 	case err != nil || code != 0:
-		u.Log.Warning("Could not update the static files now: they will be on the next command.")
+		u.Log.Warning(i18n.T("Could not update the static files now: they will be on the next command."))
 	default:
-		u.Log.Info("Static files (Dockerfile, compose and Caddy templates, php.ini) updated.")
+		u.Log.Info(i18n.T("Static files (Dockerfile, compose and Caddy templates, php.ini) updated."))
 	}
 }
 

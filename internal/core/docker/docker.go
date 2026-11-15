@@ -24,6 +24,7 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/compose"
 	"github.com/leobsst/frankenphp-cli/internal/core/phpversions"
 	"github.com/leobsst/frankenphp-cli/internal/core/soketi"
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 )
 
 // BuildHashLabel is the image label holding the fingerprint of the inputs
@@ -328,11 +329,11 @@ func (m *Manager) BuildImage(ctx context.Context, b Build) (bool, error) {
 	}
 	image := phpversions.ImageName(b.PHPVersion)
 	if !b.Force && m.IsImageCurrent(ctx, image, hash) {
-		m.Log.Info(fmt.Sprintf("PHP %s image is up to date, skipping build", b.PHPVersion))
+		m.Log.Info(i18n.Tf("PHP %s image is up to date, skipping build", b.PHPVersion))
 		return false, nil
 	}
 
-	m.Log.Info(fmt.Sprintf("Building Docker image for PHP %s...", b.PHPVersion))
+	m.Log.Info(i18n.Tf("Building Docker image for PHP %s...", b.PHPVersion))
 	streamer, verbose := m.Runner.(Streamer)
 	verbose = verbose && m.BuildOutput != nil
 	cmd := []string{"build"}
@@ -354,10 +355,10 @@ func (m *Manager) BuildImage(ctx context.Context, b Build) (bool, error) {
 		// The error is in the logs just shown: the exit code is enough here
 		code, err := streamer.Stream(ctx, m.Dir, m.BuildOutput, cmd...)
 		if err == nil && code != 0 {
-			err = fmt.Errorf("docker build exited with code %d (see the logs above)", code)
+			err = i18n.Errorf("docker build exited with code %d (see the logs above)", code)
 		}
 		if err != nil {
-			return false, &Error{fmt.Sprintf("Failed to build image for PHP %s: %v", b.PHPVersion, err)}
+			return false, &Error{i18n.Tf("Failed to build image for PHP %s: %v", b.PHPVersion, err)}
 		}
 		return true, nil
 	}
@@ -366,7 +367,7 @@ func (m *Manager) BuildImage(ctx context.Context, b Build) (bool, error) {
 		err = errors.New(strings.TrimSpace(string(res.Stderr)))
 	}
 	if err != nil {
-		return false, &Error{fmt.Sprintf("Failed to build image for PHP %s: %v", b.PHPVersion, err)}
+		return false, &Error{i18n.Tf("Failed to build image for PHP %s: %v", b.PHPVersion, err)}
 	}
 	return true, nil
 }
@@ -392,7 +393,7 @@ func (m *Manager) ComposeUp(ctx context.Context, env map[string]string, services
 		err = errors.New(string(res.Stderr))
 	}
 	if err != nil {
-		return &Error{"Failed to start containers: " + err.Error()}
+		return &Error{i18n.Tf("Failed to start containers: %s", err.Error())}
 	}
 	return nil
 }

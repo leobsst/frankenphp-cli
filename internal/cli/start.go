@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -22,11 +21,18 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/stack"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
 	"github.com/leobsst/frankenphp-cli/internal/core/validate"
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 )
 
-// phpVersionHelp is the help of the --php options.
-var phpVersionHelp = fmt.Sprintf("PHP version (%s; %s deprecated). Defaults to DEFAULT_PHP_VERSION",
-	strings.Join(phpversions.Supported, ", "), strings.Join(phpversions.Deprecated, ", "))
+// phpVersionUsage returns the help of the --php options, translated.
+func phpVersionUsage() string {
+	return i18n.Tf("PHP version (%s; %s deprecated). Defaults to DEFAULT_PHP_VERSION",
+		strings.Join(phpversions.Supported, ", "), strings.Join(phpversions.Deprecated, ", "))
+}
+
+// phpVersionHelp is the help of the --php options, in English (built
+// before the language is selected): use phpVersionUsage.
+var phpVersionHelp = phpVersionUsage()
 
 // maxArgs accepts up to n arguments, extra ones being a usage error.
 func maxArgs(n int) cobra.PositionalArgs {
@@ -47,8 +53,8 @@ func newStartCmd(a *app) *cobra.Command {
 	var o startOptions
 	cmd := &cobra.Command{
 		Use:   "start [DOMAINS]",
-		Short: "Start the FrankenPHP development server.",
-		Long: `Start the FrankenPHP development server.
+		Short: i18n.T("Start the FrankenPHP development server."),
+		Long: i18n.T(`Start the FrankenPHP development server.
 
 If domains are not provided, uses domains registered in the database.
 With no domain at all, starts the reverse proxy and databases only
@@ -61,7 +67,7 @@ Examples:
     frankenmanager start "myapp.test api.test" --path /home/projects
     frankenmanager start "myapp.test" --php 8.4
     frankenmanager start  # Uses registered domains from database
-    frankenmanager start --build  # Force a rebuild of the PHP images`,
+    frankenmanager start --build  # Force a rebuild of the PHP images`),
 		Args: maxArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			var domains []string
@@ -72,10 +78,10 @@ Examples:
 		},
 	}
 	f := cmd.Flags()
-	f.StringVarP(&o.path, "path", "p", "", "Project root path (uses the DEFAULT_PROJECT_PATH configuration if not set)")
-	f.BoolVar(&o.forceSSL, "force-ssl", false, "Force SSL certificate regeneration")
-	f.StringVar(&o.php, "php", "", phpVersionHelp)
-	f.BoolVar(&o.build, "build", false, "Rebuild the PHP images even if they are up to date")
+	f.StringVarP(&o.path, "path", "p", "", i18n.T("Project root path (uses the DEFAULT_PROJECT_PATH configuration if not set)"))
+	f.BoolVar(&o.forceSSL, "force-ssl", false, i18n.T("Force SSL certificate regeneration"))
+	f.StringVar(&o.php, "php", "", phpVersionUsage())
+	f.BoolVar(&o.build, "build", false, i18n.T("Rebuild the PHP images even if they are up to date"))
 	return cmd
 }
 
@@ -143,7 +149,7 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 	for _, key := range []string{"UID", "GID"} {
 		if _, err := e.Require(key); err != nil {
 			a.log.Error(err.Error())
-			a.log.Error("Please set UID and GID: frankenmanager configuration set UID <id>")
+			a.log.Error(i18n.T("Please set UID and GID: frankenmanager configuration set UID <id>"))
 			return exitError(1)
 		}
 	}
@@ -163,7 +169,7 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 	if running, err := a.isRunning(ctx, d, s); err != nil {
 		return err
 	} else if running {
-		return errors.New("The server is already running.") //nolint:staticcheck // user-facing message
+		return i18n.NewError("The server is already running.")
 	}
 
 	engines := e.DBEngines()
@@ -176,7 +182,7 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 			if err := e.Set(g.key, env.GeneratePassword()); err != nil {
 				return err
 			}
-			a.log.Info(g.name + " password generated and saved to the configuration")
+			a.log.Info(i18n.Tf("%s password generated and saved to the configuration", g.name))
 		}
 	}
 	generated, err := soketi.EnsureCredentials(e)
@@ -184,7 +190,7 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 		return err
 	}
 	if len(generated) > 0 {
-		a.log.Info(fmt.Sprintf("Soketi %s generated and saved to the configuration", strings.Join(generated, ", ")))
+		a.log.Info(i18n.Tf("Soketi %s generated and saved to the configuration", strings.Join(generated, ", ")))
 	}
 
 	caddyDir := e.ResolveDir("CADDY_DIR", "./caddy", dir)
@@ -202,10 +208,10 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 	merged := slices.Clone(registered)
 	if domains == nil {
 		if len(registered) > 0 {
-			a.log.Info("Using registered domains: " + strings.Join(names, ", "))
+			a.log.Info(i18n.Tf("Using registered domains: %s", strings.Join(names, ", ")))
 		} else {
-			a.log.Info("No PHP domain registered: starting without PHP container.")
-			a.log.Info(`Add hosts later with: frankenmanager add-host "myapp.test"`)
+			a.log.Info(i18n.T("No PHP domain registered: starting without PHP container."))
+			a.log.Info(i18n.T(`Add hosts later with: frankenmanager add-host "myapp.test"`))
 		}
 	} else {
 		var added []string
@@ -216,9 +222,9 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 			}
 		}
 		if len(registered) > 0 {
-			a.log.Info("Registered domains: " + strings.Join(names, ", "))
+			a.log.Info(i18n.Tf("Registered domains: %s", strings.Join(names, ", ")))
 			if len(added) > 0 {
-				a.log.Info(fmt.Sprintf("New domains (PHP %s): %s", php, strings.Join(added, ", ")))
+				a.log.Info(i18n.Tf("New domains (PHP %s): %s", php, strings.Join(added, ", ")))
 			}
 		}
 	}
@@ -226,8 +232,8 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 	// The project path is only needed by PHP containers
 	if len(merged) > 0 {
 		if customPath == "" {
-			a.log.Error("No project path specified and DEFAULT_PROJECT_PATH is not set " +
-				"(frankenmanager configuration set DEFAULT_PROJECT_PATH <path>)")
+			a.log.Error(i18n.T("No project path specified and DEFAULT_PROJECT_PATH is not set " +
+				"(frankenmanager configuration set DEFAULT_PROJECT_PATH <path>)"))
 			return exitError(1)
 		}
 		if err := validate.Directory(customPath); err != nil {
@@ -261,14 +267,14 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 	h := a.deps.Hosts(a.log)
 	var hostsAdded []string
 	fail := func(err error) error {
-		a.log.Error(fmt.Sprintf("An error occurred: %v", err))
-		a.log.Error("Cleaning up...")
+		a.log.Error(i18n.Tf("An error occurred: %v", err))
+		a.log.Error(i18n.T("Cleaning up..."))
 		for _, domain := range hostsAdded {
 			_, _ = h.RemoveEntry(ctx, "127.0.0.1", domain)
 		}
 		// Registered domains are unrelated to this failure: put them back
 		_ = s.SetDomains(registered)
-		a.log.Error("Cleanup complete. The server did not start.")
+		a.log.Error(i18n.T("Cleanup complete. The server did not start."))
 		return exitError(1)
 	}
 
@@ -373,7 +379,7 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 	}
 
 	a.con.Println()
-	a.log.Success("Web server started!")
+	a.log.Success(i18n.T("Web server started!"))
 	for _, v := range versions {
 		var vd []string
 		for _, m := range merged {
@@ -384,14 +390,14 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 		a.log.Info(fmt.Sprintf("  PHP %s: %s", v, strings.Join(vd, ", ")))
 	}
 	if soketi.Enabled(e) {
-		a.log.Info(fmt.Sprintf("Soketi WebSocket server: wss://%s (apps: 127.0.0.1:%s)", soketi.Domain, soketi.Port(e)))
+		a.log.Info(i18n.Tf("Soketi WebSocket server: wss://%s (apps: 127.0.0.1:%s)", soketi.Domain, soketi.Port(e)))
 	}
 	if listen != "" {
 		ip, err := dns.ResolveIP(e)
 		if err != nil {
 			return err
 		}
-		a.log.Info("LAN DNS server listening on " + listen)
+		a.log.Info(i18n.Tf("LAN DNS server listening on %s", listen))
 		addrs, err := dns.ServerAddresses(e)
 		if err != nil {
 			return err
@@ -400,11 +406,11 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 			a.log.Info(line)
 		}
 		if watched {
-			a.log.Info("  The domains follow this machine's LAN IP when it changes.")
+			a.log.Info(i18n.T("  The domains follow this machine's LAN IP when it changes."))
 		}
 		if strings.HasPrefix(ip, "127.") {
-			a.log.Warning("No LAN IP detected: the domains resolve to this machine only. " +
-				"Set DNS_IP to this machine's LAN IP: frankenmanager configuration set DNS_IP <ip>")
+			a.log.Warning(i18n.T("No LAN IP detected: the domains resolve to this machine only. " +
+				"Set DNS_IP to this machine's LAN IP: frankenmanager configuration set DNS_IP <ip>"))
 		}
 	}
 	return nil

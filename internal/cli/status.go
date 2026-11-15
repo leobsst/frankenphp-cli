@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -13,13 +12,14 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/dnswatcher"
 	"github.com/leobsst/frankenphp-cli/internal/core/docker"
 	"github.com/leobsst/frankenphp-cli/internal/core/phpversions"
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 	"github.com/leobsst/frankenphp-cli/internal/ui"
 )
 
 func newStatusCmd(a *app) *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
-		Short: "Show the current server status.",
+		Short: i18n.T("Show the current server status."),
 		Args:  noArgs,
 		RunE:  func(cmd *cobra.Command, _ []string) error { return a.status(cmd.Context()) },
 	}
@@ -55,11 +55,11 @@ func (a *app) status(ctx context.Context) (err error) {
 	running := docker.IsRunning(statuses, active)
 
 	c := a.con
-	c.Println("\n", c.Bold("=== FrankenPHP Server Status ==="), "\n")
+	c.Println("\n", c.Bold(i18n.T("=== FrankenPHP Server Status ===")), "\n")
 	if running {
-		c.Println("Status: ", c.Color(ui.Green, "running"))
+		c.Println(i18n.Tf("Status: %s", c.Color(ui.Green, i18n.T("running"))))
 	} else {
-		c.Println("Status: ", c.Color(ui.Red, "stopped"))
+		c.Println(i18n.Tf("Status: %s", c.Color(ui.Red, i18n.T("stopped"))))
 	}
 
 	listen, err := dns.ListenAddress(e)
@@ -71,7 +71,7 @@ func (a *app) status(ctx context.Context) (err error) {
 		if err != nil {
 			return err
 		}
-		c.Println("LAN DNS server: ", listen, " (domains resolve to ", recordsIP, ")")
+		c.Println(i18n.Tf("LAN DNS server: %s (domains resolve to %s)", listen, recordsIP))
 		addrs, err := dns.ServerAddresses(e)
 		if err != nil {
 			return err
@@ -81,11 +81,11 @@ func (a *app) status(ctx context.Context) (err error) {
 		}
 		if running {
 			if a.dnsProcessState(dir) != "running" {
-				c.Println("  Server: ", c.Color(ui.Red, "not running"), " (run `restart --dns`)")
+				c.Println(i18n.Tf("  Server: %s (run `restart --dns`)", c.Color(ui.Red, i18n.T("not running"))))
 			} else {
-				c.Println("  Server: ", c.Color(ui.Green, "running"))
+				c.Println(i18n.Tf("  Server: %s", c.Color(ui.Green, i18n.T("running"))))
 				if dnswatcher.FollowsIP(e) {
-					c.Println("  Follows LAN IP changes: ", c.Color(ui.Green, "yes"))
+					c.Println(i18n.Tf("  Follows LAN IP changes: %s", c.Color(ui.Green, i18n.T("yes"))))
 				}
 				clients, err := s.DNSClients()
 				if err != nil {
@@ -97,22 +97,22 @@ func (a *app) status(ctx context.Context) (err error) {
 						connected++
 					}
 				}
-				c.Println(fmt.Sprintf("  Devices connected: %d (frankenmanager dns-clients)", connected))
+				c.Println(i18n.Tf("  Devices connected: %d (frankenmanager dns-clients)", connected))
 			}
 		}
 	}
 
 	if len(domains) > 0 {
-		c.Println("\n", c.Bold("Domains:"))
-		t := ui.Table{Columns: []ui.Column{{Header: "Domain", Width: 30}, {Header: "PHP Version", Width: 12}}}
+		c.Println("\n", c.Bold(i18n.T("Domains:")))
+		t := ui.Table{Columns: []ui.Column{{Header: i18n.T("Domain"), Width: 30}, {Header: i18n.T("PHP Version"), Width: 12}}}
 		for _, d := range domains {
 			t.Rows = append(t.Rows, []string{d.Name, "PHP " + d.PHPVersion})
 		}
 		c.PrintTable(t)
 	}
 
-	c.Println("\n", c.Bold("Containers:"))
-	t := ui.Table{Columns: []ui.Column{{Header: "Container", Width: 25}, {Header: "Status", Width: 12}, {Header: "Health", Width: 12}}}
+	c.Println("\n", c.Bold(i18n.T("Containers:")))
+	t := ui.Table{Columns: []ui.Column{{Header: i18n.T("Container"), Width: 25}, {Header: i18n.T("Status"), Width: 12}, {Header: i18n.T("Health"), Width: 12}}}
 	row := func(name string) {
 		st := statuses.Get(name)
 		state := c.Color(ui.Red, st.State)
@@ -120,7 +120,8 @@ func (a *app) status(ctx context.Context) (err error) {
 		case "running":
 			state = c.Color(ui.Green, st.State)
 		case docker.NotFound.State:
-			state = c.Dim(st.State)
+			// Docker's own states are shown as they are; this one is ours
+			state = c.Dim(i18n.T("not found"))
 		}
 		health := c.Color(ui.Yellow, st.Health)
 		switch st.Health {

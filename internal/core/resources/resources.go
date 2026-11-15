@@ -10,7 +10,6 @@ package resources
 
 import (
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -18,6 +17,7 @@ import (
 
 	assets "github.com/leobsst/frankenphp-cli"
 	"github.com/leobsst/frankenphp-cli/internal/core/phpversions"
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 	"github.com/leobsst/frankenphp-cli/internal/platform"
 	"github.com/leobsst/frankenphp-cli/internal/version"
 )
@@ -74,7 +74,7 @@ func (e *Extractor) Ensure() error {
 		return e.SyncStatic()
 	}
 
-	e.Log.Info("Initializing FrankenManager data directory: " + e.Dir)
+	e.Log.Info(i18n.Tf("Initializing FrankenManager data directory: %s", e.Dir))
 
 	// Docker creates an empty directory when it mounts a file that does not
 	// exist: remove those before copying the real files
@@ -101,7 +101,7 @@ func (e *Extractor) Ensure() error {
 		return err
 	}
 
-	e.Log.Info("FrankenManager initialized successfully.")
+	e.Log.Info(i18n.T("FrankenManager initialized successfully."))
 	return nil
 }
 
@@ -195,7 +195,7 @@ func permissionError(err error, dataDir string) error {
 	if errors.As(err, &pathErr) && pathErr.Path != "" {
 		name = pathErr.Path
 	}
-	return fmt.Errorf("Permission denied on %s: the FrankenManager data directory is probably "+ //nolint:staticcheck // user-facing message
+	return i18n.Errorf("Permission denied on %s: the FrankenManager data directory is probably "+
 		"owned by root (created by a previous sudo run). Fix it with: sudo chown -R \"$(whoami)\" \"%s\"",
 		name, dataDir)
 }
@@ -218,7 +218,7 @@ func (e *Extractor) removeDirsAtFilePaths() error {
 			if err := os.RemoveAll(p); err != nil {
 				return err
 			}
-			e.Log.Warning("Removed incorrectly created directory: " + p)
+			e.Log.Warning(i18n.Tf("Removed incorrectly created directory: %s", p))
 		}
 	}
 	return nil

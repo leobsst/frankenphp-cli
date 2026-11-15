@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"errors"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -16,6 +15,7 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/soketi"
 	"github.com/leobsst/frankenphp-cli/internal/core/stack"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 )
 
 // restartTargets are the --<target> options of restart, in the order they
@@ -37,8 +37,8 @@ func newRestartCmd(a *app) *cobra.Command {
 	}
 	cmd := &cobra.Command{
 		Use:   "restart",
-		Short: "Restart the FrankenPHP development server or specific containers.",
-		Long: `Restart the FrankenPHP development server or specific containers.
+		Short: i18n.T("Restart the FrankenPHP development server or specific containers."),
+		Long: i18n.T(`Restart the FrankenPHP development server or specific containers.
 
 Examples:
     frankenmanager restart                    # Restart all containers
@@ -47,7 +47,7 @@ Examples:
     frankenmanager restart --cache --pma      # Restart Redis and phpMyAdmin
     frankenmanager restart --dns              # Restart the LAN DNS server
     frankenmanager restart --soketi           # Restart the Soketi WebSocket server
-    frankenmanager restart --build            # Rebuild PHP images, then restart`,
+    frankenmanager restart --build            # Rebuild PHP images, then restart`),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			var targets []string
@@ -60,20 +60,20 @@ Examples:
 		},
 	}
 	f := cmd.Flags()
-	f.BoolVar(&forceSSL, "force-ssl", false, "Force SSL certificate regeneration")
-	f.BoolVar(selected["caddy"], "caddy", false, "Restart only the web server / Caddy container")
+	f.BoolVar(&forceSSL, "force-ssl", false, i18n.T("Force SSL certificate regeneration"))
+	f.BoolVar(selected["caddy"], "caddy", false, i18n.T("Restart only the web server / Caddy container"))
 	// Options with two long names: the second one is a hidden alias
 	alias := func(name, short, help string) {
 		f.BoolVar(selected[name], name, false, help)
 		f.BoolVar(selected[name], short, false, help)
 		_ = f.MarkHidden(short)
 	}
-	alias("database", "db", "Restart only the database container (alias: --db)")
-	f.BoolVar(selected["cache"], "cache", false, "Restart only the Redis cache container (REDIS_ENABLED=true)")
-	alias("phpmyadmin", "pma", "Restart only the phpMyAdmin container (alias: --pma)")
-	f.BoolVar(selected["dns"], "dns", false, "Restart only the LAN DNS server (DNS_SERVER=true)")
-	alias("soketi", "ws", "Restart only the Soketi WebSocket server (SOKETI_ENABLED=true) (alias: --ws)")
-	f.BoolVar(&build, "build", false, "Rebuild the PHP images and recreate their containers")
+	alias("database", "db", i18n.T("Restart only the database container (alias: --db)"))
+	f.BoolVar(selected["cache"], "cache", false, i18n.T("Restart only the Redis cache container (REDIS_ENABLED=true)"))
+	alias("phpmyadmin", "pma", i18n.T("Restart only the phpMyAdmin container (alias: --pma)"))
+	f.BoolVar(selected["dns"], "dns", false, i18n.T("Restart only the LAN DNS server (DNS_SERVER=true)"))
+	alias("soketi", "ws", i18n.T("Restart only the Soketi WebSocket server (SOKETI_ENABLED=true) (alias: --ws)"))
+	f.BoolVar(&build, "build", false, i18n.T("Rebuild the PHP images and recreate their containers"))
 	return cmd
 }
 
@@ -97,7 +97,7 @@ func (a *app) restart(ctx context.Context, forceSSL bool, targets []string, buil
 	if running, err := a.isRunning(ctx, d, s); err != nil {
 		return err
 	} else if !running {
-		return errors.New("The server is not running.") //nolint:staticcheck // user-facing message
+		return i18n.NewError("The server is not running.")
 	}
 	active, err := s.ActivePHPVersions()
 	if err != nil {
@@ -114,9 +114,9 @@ func (a *app) restart(ctx context.Context, forceSSL bool, targets []string, buil
 		return false
 	}
 	if all {
-		a.log.Info("Restarting web server...")
+		a.log.Info(i18n.T("Restarting web server..."))
 	} else {
-		a.log.Info("Restarting " + strings.Join(targets, ", ") + "...")
+		a.log.Info(i18n.Tf("Restarting %s...", strings.Join(targets, ", ")))
 	}
 
 	if all || has("caddy") {
@@ -126,7 +126,7 @@ func (a *app) restart(ctx context.Context, forceSSL bool, targets []string, buil
 		}
 		domains = append(domains, soketi.Domains(e)...)
 		a.con.Println()
-		a.log.Info("Generating SSL certificates...")
+		a.log.Info(i18n.T("Generating SSL certificates..."))
 		// <CADDY_DIR>/certs, like the other commands, not CERTS_DIR
 		certs, err := a.ssl(e.CertsDir(dir))
 		if err != nil {
@@ -146,7 +146,7 @@ func (a *app) restart(ctx context.Context, forceSSL bool, targets []string, buil
 			return err
 		}
 		if customPath == "" {
-			return errors.New("No project path known: set DEFAULT_PROJECT_PATH (frankenmanager configuration set) " + //nolint:staticcheck // user-facing message
+			return i18n.NewError("No project path known: set DEFAULT_PROJECT_PATH (frankenmanager configuration set) " +
 				"or use 'stop' then 'start --build --path <path>'.")
 		}
 		if err := stack.BuildImages(ctx, d, e, a.log, customPath, active, true); err != nil {
@@ -157,7 +157,7 @@ func (a *app) restart(ctx context.Context, forceSSL bool, targets []string, buil
 			return err
 		}
 	} else if build {
-		a.log.Info("No PHP domain registered: no image to build.")
+		a.log.Info(i18n.T("No PHP domain registered: no image to build."))
 	}
 
 	if all || has("dns") {
@@ -198,11 +198,11 @@ func (a *app) restart(ctx context.Context, forceSSL bool, targets []string, buil
 					}
 				}
 			case t == "cache" && !redis:
-				a.log.Warning("Redis is disabled: run 'frankenmanager service enable redis' to use it.")
+				a.log.Warning(i18n.T("Redis is disabled: run 'frankenmanager service enable redis' to use it."))
 			case t == "soketi" && !websocket:
-				a.log.Warning("Soketi is disabled: run 'frankenmanager service enable soketi' to use it.")
+				a.log.Warning(i18n.T("Soketi is disabled: run 'frankenmanager service enable soketi' to use it."))
 			case t == "dns" && !dnsOn:
-				a.log.Warning("The LAN DNS server is disabled: run 'frankenmanager service enable dns'.")
+				a.log.Warning(i18n.T("The LAN DNS server is disabled: run 'frankenmanager service enable dns'."))
 			case t == "dns":
 				// The background process, restarted above
 			default:
@@ -223,9 +223,9 @@ func (a *app) restart(ctx context.Context, forceSSL bool, targets []string, buil
 
 	a.con.Println()
 	if all {
-		a.log.Success("Web server restarted!")
+		a.log.Success(i18n.T("Web server restarted!"))
 	} else {
-		a.log.Success("Container(s) restarted: " + strings.Join(targets, ", "))
+		a.log.Success(i18n.Tf("Container(s) restarted: %s", strings.Join(targets, ", ")))
 	}
 	return nil
 }
@@ -241,7 +241,7 @@ func (a *app) refreshDNS(ctx context.Context, dir string, d *docker.Manager, e *
 	if err != nil {
 		return err
 	}
-	a.log.Info("LAN DNS server: domains resolve to " + ip)
+	a.log.Info(i18n.Tf("LAN DNS server: domains resolve to %s", ip))
 	return nil
 }
 
