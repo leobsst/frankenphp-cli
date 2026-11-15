@@ -77,7 +77,7 @@ Also available under its short alias, fkm by default (CLI_ALIAS setting).`,
 
 	root.AddCommand(newStartCmd(a), newStopCmd(a), newRestartCmd(a),
 		newAddHostCmd(a), newAddAliasCmd(a), newRemoveHostCmd(a), newRestoreHostCmd(a), newSwitchPHPCmd(a),
-		newExecCmd(a), newListCmd(a), newStatusCmd(a), newTrustCACmd(a), newSetupCmd(a), newResetCmd(a), newUpdateCmd(a),
+		newExecCmd(a), newListCmd(a), newDNSClientsCmd(a), newStatusCmd(a), newTrustCACmd(a), newSetupCmd(a), newResetCmd(a), newUpdateCmd(a),
 		newConfigurationCmd(a), newServiceCmd(a), newCompletionCmd(a))
 
 	root.AddCommand(newInternalCmds(a)...)
