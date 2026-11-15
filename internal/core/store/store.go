@@ -6,13 +6,14 @@ package store
 import (
 	"database/sql"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	_ "modernc.org/sqlite" // pure Go driver (CGO_ENABLED=0), registered as "sqlite"
+
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 )
 
 // Domain is a domain served by a PHP container.
@@ -124,14 +125,14 @@ func Open(path string) (*Store, error) {
 	dsn := "file:" + filepath.ToSlash(path) + "?_pragma=busy_timeout(5000)"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
-		return nil, fmt.Errorf("open %s: %w", path, err)
+		return nil, i18n.Errorf("open %s: %w", path, err)
 	}
 	db.SetMaxOpenConns(1)
 
 	s := &Store{db: db}
 	if err := s.createTables(); err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("open %s: %w", path, err)
+		return nil, i18n.Errorf("open %s: %w", path, err)
 	}
 	return s, nil
 }

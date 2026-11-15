@@ -2,8 +2,6 @@ package cli
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"slices"
 	"strings"
 
@@ -14,6 +12,7 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/env"
 	"github.com/leobsst/frankenphp-cli/internal/core/soketi"
 	"github.com/leobsst/frankenphp-cli/internal/core/stack"
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 	"github.com/leobsst/frankenphp-cli/internal/ui"
 )
 
@@ -33,36 +32,28 @@ var composeServices = map[string]string{"redis": "cache", "soketi": "soketi"}
 // serviceContainers maps a containerized optional service to its container.
 var serviceContainers = map[string]string{"redis": compose.RedisContainer, "soketi": soketi.ContainerName}
 
-// enabledLabel is how the messages show a service state.
-func enabledLabel(on bool) string {
-	if on {
-		return "enabled"
-	}
-	return "disabled"
-}
-
 func newServiceCmd(a *app) *cobra.Command {
 	return &cobra.Command{
 		Use:   "service ACTION [NAME]",
-		Short: "Turn an optional service (dns, redis, soketi) on or off, live.",
-		Long: `Turn an optional service on or off, live.
+		Short: i18n.T("Turn an optional service (dns, redis, soketi) on or off, live."),
+		Long: i18n.Tf(`Turn an optional service on or off, live.
 
 When the server runs, the service is started or stopped at once, without
 restarting anything else. Otherwise, the change applies on the next start.
 
 ACTION: enable, disable, or status.
-NAME:   ` + strings.Join(serviceNames, ", ") + ` (status: all when omitted).
+NAME:   %s (status: all when omitted).
 
 Examples:
     frankenmanager service enable redis    # Start a Redis server
     frankenmanager service disable dns     # Stop the LAN DNS server
-    frankenmanager service status          # Show every optional service`,
+    frankenmanager service status          # Show every optional service`, strings.Join(serviceNames, ", ")),
 		Args: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 0 {
-				return usageError{errors.New("Missing argument 'ACTION'.")} //nolint:staticcheck // user-facing message
+				return usageError{i18n.NewError("Missing argument 'ACTION'.")}
 			}
 			if len(args) == 1 && args[0] != "status" {
-				return usageError{errors.New("Missing argument 'NAME'.")} //nolint:staticcheck // user-facing message
+				return usageError{i18n.NewError("Missing argument 'NAME'.")}
 			}
 			return maxArgs(2)(cmd, args)
 		},
@@ -80,7 +71,7 @@ Examples:
 			if len(args) == 2 {
 				name = strings.ToLower(args[1])
 				if _, ok := env.Services[name]; !ok {
-					return usageError{fmt.Errorf("Unknown service '%s'. Use %s.", args[1], strings.Join(serviceNames, ", "))} //nolint:staticcheck // user-facing message
+					return usageError{i18n.Errorf("Unknown service '%s'. Use %s.", args[1], strings.Join(serviceNames, ", "))}
 				}
 			}
 			switch args[0] {
@@ -89,7 +80,7 @@ Examples:
 			case "status":
 				return a.serviceStatus(cmd.Context(), name)
 			}
-			return usageError{fmt.Errorf("Unknown action '%s'. Use enable, disable, or status.", args[0])} //nolint:staticcheck // user-facing message
+			return usageError{i18n.Errorf("Unknown action '%s'. Use enable, disable, or status.", args[0])}
 		},
 	}
 }
@@ -111,7 +102,11 @@ func (a *app) setService(ctx context.Context, name string, on bool) error {
 		value = "true"
 	}
 	if e.Get(key) == value {
-		a.log.Info(fmt.Sprintf("Service %s is already %s.", name, enabledLabel(on)))
+		if on {
+			a.log.Info(i18n.Tf("Service %s is already enabled.", name))
+		} else {
+			a.log.Info(i18n.Tf("Service %s is already disabled.", name))
+		}
 		return nil
 	}
 	if err := e.Set(key, value); err != nil {
@@ -131,8 +126,9 @@ func (a *app) serviceStatus(ctx context.Context, only string) error {
 		return err
 	}
 	statuses := a.docker(dir).ContainerStatuses(ctx)
-	t := ui.Table{Title: "Optional services", Columns: []ui.Column{
-		{Header: "Service", Color: ui.Cyan}, {Header: "Enabled"}, {Header: "State"}, {Header: "Setting", Faint: true},
+	t := ui.Table{Title: i18n.T("Optional services"), Columns: []ui.Column{
+		{Header: i18n.T("Service"), Color: ui.Cyan}, {Header: i18n.T("Enabled")}, {Header: i18n.T("State")},
+		{Header: i18n.T("Setting"), Faint: true},
 	}}
 	for _, name := range serviceNames {
 		if only != "" && name != only {
@@ -154,7 +150,6 @@ func (a *app) serviceStatus(ctx context.Context, only string) error {
 // hosts entry, reverse proxy route, DNS records and watcher).
 func (a *app) applyService(ctx context.Context, dir string, e *env.Env, name string) (err error) {
 	on := e.Get(env.Services[name]) == "true"
-	state := enabledLabel(on)
 
 	d := a.docker(dir)
 	s, err := a.openStore(dir)
@@ -167,7 +162,11 @@ func (a *app) applyService(ctx context.Context, dir string, e *env.Env, name str
 		return err
 	}
 	if !running {
-		a.log.Success(fmt.Sprintf("Service %s %s. It applies on the next start.", name, state))
+		if on {
+			a.log.Success(i18n.Tf("Service %s enabled. It applies on the next start.", name))
+		} else {
+			a.log.Success(i18n.Tf("Service %s disabled. It applies on the next start.", name))
+		}
 		return nil
 	}
 
@@ -233,16 +232,16 @@ func (a *app) applyService(ctx context.Context, dir string, e *env.Env, name str
 	switch {
 	case name == "dns" && on:
 		// The background process, started or stopped below
-		a.log.Info("Starting dns...")
+		a.log.Info(i18n.Tf("Starting %s...", name))
 	case name == "dns":
-		a.log.Info("Stopping dns...")
+		a.log.Info(i18n.Tf("Stopping %s...", name))
 	case on:
-		a.log.Info(fmt.Sprintf("Starting %s...", name))
+		a.log.Info(i18n.Tf("Starting %s...", name))
 		if err := d.ComposeUp(ctx, vars, composeServices[name]); err != nil {
 			return err
 		}
 	default:
-		a.log.Info(fmt.Sprintf("Stopping %s...", name))
+		a.log.Info(i18n.Tf("Stopping %s...", name))
 		d.StopContainer(ctx, serviceContainers[name])
 	}
 	if name == "soketi" {
@@ -258,7 +257,11 @@ func (a *app) applyService(ctx context.Context, dir string, e *env.Env, name str
 		}
 	}
 
-	a.log.Success(fmt.Sprintf("Service %s %s.", name, state))
+	if on {
+		a.log.Success(i18n.Tf("Service %s enabled.", name))
+	} else {
+		a.log.Success(i18n.Tf("Service %s disabled.", name))
+	}
 	switch {
 	case on && name == "dns":
 		ip, err := dns.ResolveIP(e)
@@ -269,11 +272,11 @@ func (a *app) applyService(ctx context.Context, dir string, e *env.Env, name str
 		if err != nil {
 			return err
 		}
-		a.log.Info(fmt.Sprintf("LAN DNS server listening on %s (domains resolve to %s)", listen, ip))
+		a.log.Info(i18n.Tf("LAN DNS server listening on %s (domains resolve to %s)", listen, ip))
 	case on && name == "soketi":
-		a.log.Info(fmt.Sprintf("Soketi WebSocket server: wss://%s (apps: 127.0.0.1:%s)", soketi.Domain, soketi.Port(e)))
+		a.log.Info(i18n.Tf("Soketi WebSocket server: wss://%s (apps: 127.0.0.1:%s)", soketi.Domain, soketi.Port(e)))
 	case on && name == "redis":
-		a.log.Info("Redis listening on 127.0.0.1:" + e.Get("REDIS_PORT"))
+		a.log.Info(i18n.Tf("Redis listening on 127.0.0.1:%s", e.Get("REDIS_PORT")))
 	}
 	return nil
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/env"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
 	"github.com/leobsst/frankenphp-cli/internal/core/validate"
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 	"github.com/leobsst/frankenphp-cli/internal/platform"
 	"github.com/leobsst/frankenphp-cli/internal/ui"
 )
@@ -24,8 +25,8 @@ func newConfigurationCmd(a *app) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:     "configuration",
 		Aliases: []string{"config"},
-		Short:   "Show or change the configuration.",
-		Long: `Show or change the configuration, stored in db.sqlite.
+		Short:   i18n.T("Show or change the configuration."),
+		Long: i18n.T(`Show or change the configuration, stored in db.sqlite.
 
 Some changes apply at once (optional services, CLI alias, defaults read by
 the next command); others need a restart, which the command tells.
@@ -35,34 +36,34 @@ Examples:
     frankenmanager configuration get DEFAULT_PHP_VERSION
     frankenmanager configuration set DEFAULT_PHP_VERSION 8.4
     frankenmanager configuration set REDIS_ENABLED true   # Starts Redis at once
-    frankenmanager configuration reset WEB_HTTPS_PORT     # Back to the default`,
+    frankenmanager configuration reset WEB_HTTPS_PORT     # Back to the default`),
 		Args: noArgs,
 		RunE: func(*cobra.Command, []string) error { return a.configList(showSecrets) },
 	}
-	cmd.Flags().BoolVar(&showSecrets, "show-secrets", false, "Show the passwords and secrets in clear")
+	cmd.Flags().BoolVar(&showSecrets, "show-secrets", false, i18n.T("Show the passwords and secrets in clear"))
 
 	list := &cobra.Command{
 		Use:   "list",
-		Short: "List every setting with its value and how a change applies.",
+		Short: i18n.T("List every setting with its value and how a change applies."),
 		Args:  noArgs,
 		RunE:  func(*cobra.Command, []string) error { return a.configList(showSecrets) },
 	}
-	list.Flags().BoolVar(&showSecrets, "show-secrets", false, "Show the passwords and secrets in clear")
+	list.Flags().BoolVar(&showSecrets, "show-secrets", false, i18n.T("Show the passwords and secrets in clear"))
 
 	get := &cobra.Command{
 		Use:               "get NAME",
-		Short:             "Print the value of a setting.",
+		Short:             i18n.T("Print the value of a setting."),
 		Args:              rangeArgs(1, "NAME"),
 		ValidArgsFunction: completeConfigArgs(false),
 		RunE:              func(_ *cobra.Command, args []string) error { return a.configGet(args[0]) },
 	}
 	set := &cobra.Command{
 		Use:   "set NAME VALUE",
-		Short: "Change a setting, applying it live when possible.",
-		Long: `Change a setting, applying it live when possible.
+		Short: i18n.T("Change a setting, applying it live when possible."),
+		Long: i18n.T(`Change a setting, applying it live when possible.
 
 An empty VALUE ("") is allowed for the settings without a default (e.g.
-DNS_IP: auto-detect). Use 'reset' to go back to a default.`,
+DNS_IP: auto-detect). Use 'reset' to go back to a default.`),
 		Args:              rangeArgs(2, "NAME", "VALUE"),
 		ValidArgsFunction: completeConfigArgs(true),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -71,7 +72,7 @@ DNS_IP: auto-detect). Use 'reset' to go back to a default.`,
 	}
 	reset := &cobra.Command{
 		Use:               "reset NAME",
-		Short:             "Put a setting back to its default.",
+		Short:             i18n.T("Put a setting back to its default."),
 		Args:              rangeArgs(1, "NAME"),
 		ValidArgsFunction: completeConfigArgs(false),
 		RunE:              func(cmd *cobra.Command, args []string) error { return a.configSet(cmd.Context(), args[0], nil) },
@@ -88,7 +89,7 @@ func completeConfigArgs(withValue bool) cobra.CompletionFunc {
 		case len(args) == 0:
 			var names []string
 			for _, d := range env.Definitions() {
-				names = append(names, d.Key+"\t"+d.Description)
+				names = append(names, d.Key+"\t"+d.Describe())
 			}
 			return names, cobra.ShellCompDirectiveNoFileComp
 		case len(args) == 1 && withValue:
@@ -101,7 +102,7 @@ func completeConfigArgs(withValue bool) cobra.CompletionFunc {
 			case strings.HasSuffix(d.Key, "_PATH") || strings.HasSuffix(d.Key, "_DIR"):
 				return nil, cobra.ShellCompDirectiveFilterDirs
 			case d.DefaultValue() != "":
-				return []string{d.DefaultValue() + "\tdefault"}, cobra.ShellCompDirectiveNoFileComp
+				return []string{d.DefaultValue() + "\t" + i18n.T("default")}, cobra.ShellCompDirectiveNoFileComp
 			}
 		}
 		return nil, cobra.ShellCompDirectiveNoFileComp
@@ -121,13 +122,10 @@ func lookupSetting(name string) (env.Definition, error) {
 			close = append(close, k)
 		}
 	}
-	msg := fmt.Sprintf("Unknown setting '%s'.", name)
 	if len(close) > 0 {
-		msg += " Did you mean: " + strings.Join(close, ", ") + "?"
-	} else {
-		msg += " Run 'frankenmanager configuration list' to see them."
+		return env.Definition{}, usageError{i18n.Errorf("Unknown setting '%s'. Did you mean: %s?", name, strings.Join(close, ", "))}
 	}
-	return env.Definition{}, usageError{errors.New(msg)}
+	return env.Definition{}, usageError{i18n.Errorf("Unknown setting '%s'. Run 'frankenmanager configuration list' to see them.", name)}
 }
 
 // configList shows every setting.
@@ -140,14 +138,14 @@ func (a *app) configList(showSecrets bool) error {
 	if err != nil {
 		return err
 	}
-	t := ui.Table{Title: "Configuration (" + filepath.Join(dir, "db.sqlite") + ")", Columns: []ui.Column{
-		{Header: "Setting", Color: ui.Cyan}, {Header: "Value", Color: ui.Green},
-		{Header: "Source", Faint: true}, {Header: "Applies", Faint: true},
+	t := ui.Table{Title: i18n.Tf("Configuration (%s)", filepath.Join(dir, "db.sqlite")), Columns: []ui.Column{
+		{Header: i18n.T("Setting"), Color: ui.Cyan}, {Header: i18n.T("Value"), Color: ui.Green},
+		{Header: i18n.T("Source"), Faint: true}, {Header: i18n.T("Applies"), Faint: true},
 	}}
 	for _, d := range env.Definitions() {
-		value, source := e.Get(d.Key), "default"
+		value, source := e.Get(d.Key), i18n.T("default")
 		if e.IsSet(d.Key) {
-			source = "custom"
+			source = i18n.T("custom")
 		}
 		if d.Secret && value != "" && !showSecrets {
 			value = "********"
@@ -155,7 +153,7 @@ func (a *app) configList(showSecrets bool) error {
 		t.Rows = append(t.Rows, []string{d.Key, value, source, d.Apply.Label()})
 	}
 	a.con.PrintTable(t)
-	a.log.Info("Change a setting: frankenmanager configuration set <name> <value>")
+	a.log.Info(i18n.T("Change a setting: frankenmanager configuration set <name> <value>"))
 	return nil
 }
 
@@ -218,7 +216,7 @@ func (a *app) configSet(ctx context.Context, name string, value *string) error {
 		shown = "********"
 	}
 	if now == old {
-		a.log.Info(fmt.Sprintf("%s = %s (unchanged)", d.Key, shown))
+		a.log.Info(i18n.Tf("%s = %s (unchanged)", d.Key, shown))
 		return nil
 	}
 	a.log.Success(fmt.Sprintf("%s = %s", d.Key, shown))
@@ -236,9 +234,9 @@ func (a *app) configSet(ctx context.Context, name string, value *string) error {
 		return err
 	}
 	if running {
-		a.log.Warning("The server is running: apply the change with '" + d.Apply.Hint() + "'.")
+		a.log.Warning(i18n.Tf("The server is running: apply the change with '%s'.", d.Apply.Hint()))
 	} else {
-		a.log.Info("The change applies on the next start.")
+		a.log.Info(i18n.T("The change applies on the next start."))
 	}
 	return nil
 }
@@ -278,13 +276,13 @@ func (a *app) syncAlias(old, now string) error {
 	}
 	if old != now && old != "" {
 		if removed, err := inst.Remove(old); err != nil {
-			a.log.Warning(fmt.Sprintf("Could not remove the alias %s: %v", inst.Path(old), err))
+			a.log.Warning(i18n.Tf("Could not remove the alias %s: %v", inst.Path(old), err))
 		} else if removed {
-			a.log.Info("Alias '" + old + "' removed.")
+			a.log.Info(i18n.Tf("Alias '%s' removed.", old))
 		}
 	}
 	if now == "" {
-		a.log.Info("No alias: use '" + alias.Command + "'.")
+		a.log.Info(i18n.Tf("No alias: use '%s'.", alias.Command))
 		return nil
 	}
 	return a.installAlias(inst, now, false)
@@ -298,25 +296,25 @@ func (a *app) installAlias(inst *alias.Installer, name string, quiet bool) error
 	var conflict *alias.ConflictError
 	switch {
 	case errors.As(err, &conflict):
-		a.log.Warning(fmt.Sprintf("Alias '%s' not installed: %v. Choose another one with "+
+		a.log.Warning(i18n.Tf("Alias '%s' not installed: %v. Choose another one with "+
 			"'frankenmanager configuration set %s <name>'.", name, err, env.AliasKey))
 		return nil
 	case errors.Is(err, fs.ErrPermission):
-		a.log.Warning(fmt.Sprintf("Alias '%s' not installed: %s is not writable. Run: %s",
+		a.log.Warning(i18n.Tf("Alias '%s' not installed: %s is not writable. Run: %s",
 			name, inst.BinDir, inst.ManualCommand(name)))
 		return nil
 	case err != nil:
 		return err
 	}
 	if !already || !quiet {
-		a.log.Success(fmt.Sprintf("Alias '%s' ready: '%s <command>' works like '%s <command>'.",
+		a.log.Success(i18n.Tf("Alias '%s' ready: '%s <command>' works like '%s <command>'.",
 			name, name, alias.Command))
 	}
 	if other := inst.Shadowed(name); other != "" {
-		a.log.Warning(fmt.Sprintf("'%s' runs %s, found first in PATH.", name, other))
+		a.log.Warning(i18n.Tf("'%s' runs %s, found first in PATH.", name, other))
 	}
 	if !already && !quiet {
-		a.log.Info("Shell completion: reload it (see 'frankenmanager completion --help') to complete '" + name + "' too.")
+		a.log.Info(i18n.Tf("Shell completion: reload it (see 'frankenmanager completion --help') to complete '%s' too.", name))
 	}
 	return nil
 }
@@ -339,7 +337,7 @@ func (a *app) ensureAliasIn(binDir string) {
 		inst.BinDir, inst.Target = binDir, alias.CommandFile(inst.GOOS)
 	}
 	if err := a.installAlias(inst, name, true); err != nil {
-		a.log.Warning(fmt.Sprintf("Alias '%s' not installed: %v", name, err))
+		a.log.Warning(i18n.Tf("Alias '%s' not installed: %v", name, err))
 	}
 }
 

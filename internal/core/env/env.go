@@ -5,7 +5,6 @@
 package env
 
 import (
-	"fmt"
 	"maps"
 	"path/filepath"
 	"slices"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/leobsst/frankenphp-cli/internal/core/phpversions"
 	"github.com/leobsst/frankenphp-cli/internal/core/soketi"
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 	"github.com/leobsst/frankenphp-cli/internal/randstr"
 )
 
@@ -142,7 +142,7 @@ func (e *Env) Require(key string) (string, error) {
 	if v := e.Get(key); v != "" {
 		return v, nil
 	}
-	return "", fmt.Errorf("Required configuration '%s' is not set (frankenmanager configuration set %s <value>)", key, key) //nolint:staticcheck // user-facing message
+	return "", i18n.Errorf("Required configuration '%s' is not set (frankenmanager configuration set %s <value>)", key, key)
 }
 
 // Set stores a value.
@@ -201,8 +201,8 @@ func (e *Env) ExtraSystemPackages(phpVersion string) (packages, warning string, 
 		return e.ExtraPackages(phpVersion, "APT"), "", nil
 	}
 	if e.ExtraPackages(phpVersion, "APT") != "" {
-		warning = "EXTRA_APT_PACKAGES is ignored on Alpine images: use EXTRA_APK_PACKAGES, " +
-			"or set PHP_IMAGE_DISTRO=trixie."
+		warning = i18n.T("EXTRA_APT_PACKAGES is ignored on Alpine images: use EXTRA_APK_PACKAGES, " +
+			"or set PHP_IMAGE_DISTRO=trixie.")
 	}
 	return e.ExtraPackages(phpVersion, "APK"), warning, nil
 }

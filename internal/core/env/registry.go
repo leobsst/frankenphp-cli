@@ -54,9 +54,9 @@ func (a Apply) Hint() string {
 func (a Apply) Label() string {
 	switch a {
 	case ApplyLive:
-		return "live"
+		return i18n.T("live")
 	case ApplyAlias:
-		return "immediate"
+		return i18n.T("immediate")
 	case ApplyRecreate:
 		return "stop/start"
 	case ApplyRebuild:
@@ -66,13 +66,18 @@ func (a Apply) Label() string {
 	case ApplyRestartDB:
 		return "restart --database"
 	}
-	return "next command"
+	return i18n.T("next command")
 }
 
 // Definition describes a configuration key.
 type Definition struct {
-	Key         string
+	Key string
+	// Description is the English description, marked with i18n.N: Describe
+	// translates it.
 	Description string
+	// descFormat and descArg build Description when it depends on a value
+	// (the PHP version of the EXTRA_*_PACKAGES_<version> keys).
+	descFormat, descArg string
 	// Default is the value used when the key is not set (may be computed,
 	// e.g. UID).
 	Default func() string
@@ -87,6 +92,14 @@ type Definition struct {
 	Service string
 }
 
+// Describe returns the description of d in the selected language.
+func (d Definition) Describe() string {
+	if d.descFormat != "" {
+		return fmt.Sprintf(i18n.T(d.descFormat), d.descArg)
+	}
+	return i18n.T(d.Description)
+}
+
 // DefaultValue returns the default of d, "" when none.
 func (d Definition) DefaultValue() string {
 	if d.Default == nil {
@@ -99,12 +112,12 @@ func (d Definition) DefaultValue() string {
 // "use the built-in behavior" for keys without a default.
 func (d Definition) Check(value string) error {
 	if d.Values != nil && !slices.Contains(d.Values, value) {
-		return fmt.Errorf("Invalid value '%s' for %s: expected one of %s", //nolint:staticcheck // user-facing message
+		return i18n.Errorf("Invalid value '%s' for %s: expected one of %s",
 			value, d.Key, strings.Join(d.Values, ", "))
 	}
 	if d.Validate != nil && value != "" {
 		if err := d.Validate(value); err != nil {
-			return fmt.Errorf("Invalid value '%s' for %s: %w", value, d.Key, err) //nolint:staticcheck // user-facing message
+			return i18n.Errorf("Invalid value '%s' for %s: %w", value, d.Key, err)
 		}
 	}
 	return nil
@@ -145,14 +158,14 @@ func static(v string) func() string { return func() string { return v } }
 func validatePort(v string) error {
 	n, err := strconv.Atoi(v)
 	if err != nil || n < 1 || n > 65535 {
-		return fmt.Errorf("not a port number (1-65535)")
+		return i18n.NewError("not a port number (1-65535)")
 	}
 	return nil
 }
 
 func validateIP(v string) error {
 	if _, err := netip.ParseAddr(v); err != nil {
-		return fmt.Errorf("not an IPv4 or IPv6 address")
+		return i18n.NewError("not an IPv4 or IPv6 address")
 	}
 	return nil
 }
@@ -168,7 +181,7 @@ func validateIPs(v string) error {
 
 func validateID(v string) error {
 	if n, err := strconv.Atoi(v); err != nil || n < 0 {
-		return fmt.Errorf("not a numeric ID")
+		return i18n.NewError("not a numeric ID")
 	}
 	return nil
 }
@@ -176,7 +189,7 @@ func validateID(v string) error {
 func validateDBEngines(v string) error {
 	for _, e := range strings.Split(v, ",") {
 		if !slices.Contains(validDBEngines, strings.ToLower(strings.TrimSpace(e))) {
-			return fmt.Errorf("unknown engine '%s' (expected a comma-separated list of %s)",
+			return i18n.Errorf("unknown engine '%s' (expected a comma-separated list of %s)",
 				strings.TrimSpace(e), strings.Join(validDBEngines, ", "))
 		}
 	}
@@ -187,7 +200,7 @@ var packetSize = regexp.MustCompile(`^[0-9]+[KMG]?$`)
 
 func validatePacketSize(v string) error {
 	if !packetSize.MatchString(v) {
-		return fmt.Errorf("expected a size such as 16M or 512M")
+		return i18n.NewError("expected a size such as 16M or 512M")
 	}
 	return nil
 }
@@ -197,10 +210,10 @@ var aliasName = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_-]{0,31}$`)
 // ValidateAlias checks a CLI alias name.
 func ValidateAlias(v string) error {
 	if !aliasName.MatchString(v) {
-		return fmt.Errorf("expected a command name (letters, digits, - and _, starting with a letter)")
+		return i18n.NewError("expected a command name (letters, digits, - and _, starting with a letter)")
 	}
 	if strings.EqualFold(v, "frankenmanager") {
-		return fmt.Errorf("frankenmanager is always available, choose another name")
+		return i18n.NewError("frankenmanager is always available, choose another name")
 	}
 	return nil
 }
@@ -223,92 +236,99 @@ var definitions = buildDefinitions()
 
 func buildDefinitions() []Definition {
 	defs := []Definition{
-		{Key: "APP_ENV", Description: "dev for local development; prod/production only on a public/cloud server",
+		{Key: "APP_ENV", Description: i18n.N("dev for local development; prod/production only on a public/cloud server"),
 			Default: static("dev"), Values: []string{"dev", "prod", "production"}, Apply: ApplyRecreate},
-		{Key: "UID", Description: "User ID the containers run as (defaults to the current user)",
+		{Key: "UID", Description: i18n.N("User ID the containers run as (defaults to the current user)"),
 			Default: currentID(true), Validate: validateID, Apply: ApplyRecreate},
-		{Key: "GID", Description: "Group ID the containers run as (defaults to the current group)",
+		{Key: "GID", Description: i18n.N("Group ID the containers run as (defaults to the current group)"),
 			Default: currentID(false), Validate: validateID, Apply: ApplyRecreate},
-		{Key: "WWWGROUP", Description: "Group ID of the www-data user in the PHP images",
+		{Key: "WWWGROUP", Description: i18n.N("Group ID of the www-data user in the PHP images"),
 			Validate: validateID, Apply: ApplyRebuild},
-		{Key: AliasKey, Description: "Short alias of the frankenmanager command (empty: no alias)",
+		{Key: AliasKey, Description: i18n.N("Short alias of the frankenmanager command (empty: no alias)"),
 			Default: static(DefaultAlias), Validate: ValidateAlias, Apply: ApplyAlias},
 		{Key: LanguageKey, Description: i18n.N("Language of the messages: auto follows the system language (LANG, LC_ALL...)"),
 			Default: static(i18n.Auto), Values: append([]string{i18n.Auto}, i18n.Languages()...), Apply: ApplyNow},
-		{Key: "DEFAULT_PROJECT_PATH", Description: "Projects root used when start has no --path",
+		{Key: "DEFAULT_PROJECT_PATH", Description: i18n.N("Projects root used when start has no --path"),
 			Apply: ApplyNow},
-		{Key: "DEFAULT_PHP_VERSION", Description: "PHP version of new domains when --php is not given",
+		{Key: "DEFAULT_PHP_VERSION", Description: i18n.N("PHP version of new domains when --php is not given"),
 			Default: static(phpversions.Default), Values: phpversions.Supported, Apply: ApplyNow},
-		{Key: "CADDY_DIR", Description: "Caddy files directory (relative to the data directory, or absolute)",
+		{Key: "CADDY_DIR", Description: i18n.N("Caddy files directory (relative to the data directory, or absolute)"),
 			Default: static("./caddy"), Apply: ApplyRecreate},
-		{Key: "DATABASE_DIR", Description: "Database data directory (relative to the data directory, or absolute)",
+		{Key: "DATABASE_DIR", Description: i18n.N("Database data directory (relative to the data directory, or absolute)"),
 			Default: static("./database"), Apply: ApplyRecreate},
-		{Key: "EXPOSE_SERVICES", Description: "Expose the service ports to the network instead of 127.0.0.1",
+		{Key: "EXPOSE_SERVICES", Description: i18n.N("Expose the service ports to the network instead of 127.0.0.1"),
 			Default: static("false"), Values: booleans, Apply: ApplyRecreate},
-		{Key: "WEB_HTTP_PORT", Description: "HTTP port of the web server",
+		{Key: "WEB_HTTP_PORT", Description: i18n.N("HTTP port of the web server"),
 			Default: static("80"), Validate: validatePort, Apply: ApplyRecreate},
-		{Key: "WEB_HTTPS_PORT", Description: "HTTPS port of the web server",
+		{Key: "WEB_HTTPS_PORT", Description: i18n.N("HTTPS port of the web server"),
 			Default: static("443"), Validate: validatePort, Apply: ApplyRecreate},
 
-		{Key: "DB_ENGINES", Description: "Database engines, comma-separated: mariadb, mysql, postgresql",
+		{Key: "DB_ENGINES", Description: i18n.N("Database engines, comma-separated: mariadb, mysql, postgresql"),
 			Default: static("mariadb"), Validate: validateDBEngines, Apply: ApplyRecreate},
-		{Key: "DB_PORT", Description: "MariaDB port", Default: static("3306"), Validate: validatePort, Apply: ApplyRecreate},
-		{Key: "MARIADB_VERSION", Description: "MariaDB image version", Default: static("10.11.9"), Apply: ApplyRecreate},
-		{Key: "MARIADB_ROOT_PASSWORD", Description: "MariaDB root password (generated on start when empty)",
+		{Key: "DB_PORT", Description: i18n.N("MariaDB port"), Default: static("3306"), Validate: validatePort, Apply: ApplyRecreate},
+		{Key: "MARIADB_VERSION", Description: i18n.N("MariaDB image version"), Default: static("10.11.9"), Apply: ApplyRecreate},
+		{Key: "MARIADB_ROOT_PASSWORD", Description: i18n.N("MariaDB root password (generated on start when empty)"),
 			Secret: true, Apply: ApplyRestartDB},
-		{Key: "MYSQL_VERSION", Description: "MySQL image version", Default: static("8.0"), Apply: ApplyRecreate},
-		{Key: "MYSQL_PORT", Description: "MySQL port", Default: static("3307"), Validate: validatePort, Apply: ApplyRecreate},
-		{Key: "MYSQL_ROOT_PASSWORD", Description: "MySQL root password (generated on start when empty)",
+		{Key: "MYSQL_VERSION", Description: i18n.N("MySQL image version"), Default: static("8.0"), Apply: ApplyRecreate},
+		{Key: "MYSQL_PORT", Description: i18n.N("MySQL port"), Default: static("3307"), Validate: validatePort, Apply: ApplyRecreate},
+		{Key: "MYSQL_ROOT_PASSWORD", Description: i18n.N("MySQL root password (generated on start when empty)"),
 			Secret: true, Apply: ApplyRestartDB},
-		{Key: "MYSQL_MAX_ALLOWED_PACKET", Description: "Maximum packet size of MariaDB and MySQL",
+		{Key: "MYSQL_MAX_ALLOWED_PACKET", Description: i18n.N("Maximum packet size of MariaDB and MySQL"),
 			Default: static("512M"), Validate: validatePacketSize, Apply: ApplyRecreate},
-		{Key: "POSTGRES_VERSION", Description: "PostgreSQL image version", Default: static("16"), Apply: ApplyRecreate},
-		{Key: "POSTGRES_USER", Description: "PostgreSQL user", Default: static("postgres"), Apply: ApplyRecreate},
-		{Key: "POSTGRES_PASSWORD", Description: "PostgreSQL password (generated on start when empty)",
+		{Key: "POSTGRES_VERSION", Description: i18n.N("PostgreSQL image version"), Default: static("16"), Apply: ApplyRecreate},
+		{Key: "POSTGRES_USER", Description: i18n.N("PostgreSQL user"), Default: static("postgres"), Apply: ApplyRecreate},
+		{Key: "POSTGRES_PASSWORD", Description: i18n.N("PostgreSQL password (generated on start when empty)"),
 			Secret: true, Apply: ApplyRecreate},
-		{Key: "POSTGRES_PORT", Description: "PostgreSQL port", Default: static("5432"), Validate: validatePort, Apply: ApplyRecreate},
-		{Key: "PMA_PORT", Description: "phpMyAdmin port (dev only)", Default: static("8080"), Validate: validatePort, Apply: ApplyRecreate},
-		{Key: "PGADMIN_PORT", Description: "pgAdmin port (dev only)", Default: static("8081"), Validate: validatePort, Apply: ApplyRecreate},
+		{Key: "POSTGRES_PORT", Description: i18n.N("PostgreSQL port"), Default: static("5432"), Validate: validatePort, Apply: ApplyRecreate},
+		{Key: "PMA_PORT", Description: i18n.N("phpMyAdmin port (dev only)"), Default: static("8080"), Validate: validatePort, Apply: ApplyRecreate},
+		{Key: "PGADMIN_PORT", Description: i18n.N("pgAdmin port (dev only)"), Default: static("8081"), Validate: validatePort, Apply: ApplyRecreate},
 
-		{Key: "REDIS_ENABLED", Description: "Run a Redis cache server",
+		{Key: "REDIS_ENABLED", Description: i18n.N("Run a Redis cache server"),
 			Default: static("false"), Values: booleans, Apply: ApplyLive, Service: "redis"},
-		{Key: "REDIS_PORT", Description: "Redis port", Default: static("6379"), Validate: validatePort, Apply: ApplyRecreate},
+		{Key: "REDIS_PORT", Description: i18n.N("Redis port"), Default: static("6379"), Validate: validatePort, Apply: ApplyRecreate},
 
-		{Key: "SOKETI_ENABLED", Description: "Run a Soketi WebSocket server at wss://ws.frankenmanager.test",
+		{Key: "SOKETI_ENABLED", Description: i18n.N("Run a Soketi WebSocket server at wss://ws.frankenmanager.test"),
 			Default: static("false"), Values: booleans, Apply: ApplyLive, Service: "soketi"},
-		{Key: "SOKETI_PORT", Description: "Soketi port", Default: static("6001"), Validate: validatePort, Apply: ApplyRecreate},
-		{Key: "SOKETI_DEFAULT_APP_ID", Description: "Soketi app ID (generated on start when empty)", Apply: ApplyRecreate},
-		{Key: "SOKETI_DEFAULT_APP_KEY", Description: "Soketi app key (generated on start when empty)", Apply: ApplyRecreate},
-		{Key: "SOKETI_DEFAULT_APP_SECRET", Description: "Soketi app secret (generated on start when empty)",
+		{Key: "SOKETI_PORT", Description: i18n.N("Soketi port"), Default: static("6001"), Validate: validatePort, Apply: ApplyRecreate},
+		{Key: "SOKETI_DEFAULT_APP_ID", Description: i18n.N("Soketi app ID (generated on start when empty)"), Apply: ApplyRecreate},
+		{Key: "SOKETI_DEFAULT_APP_KEY", Description: i18n.N("Soketi app key (generated on start when empty)"), Apply: ApplyRecreate},
+		{Key: "SOKETI_DEFAULT_APP_SECRET", Description: i18n.N("Soketi app secret (generated on start when empty)"),
 			Secret: true, Apply: ApplyRecreate},
 
-		{Key: "DNS_SERVER", Description: "Run a LAN DNS server resolving every domain to this machine",
+		{Key: "DNS_SERVER", Description: i18n.N("Run a LAN DNS server resolving every domain to this machine"),
 			Default: static("false"), Values: booleans, Apply: ApplyLive, Service: "dns"},
-		{Key: "DNS_IP", Description: "IP the domains resolve to (empty: this machine's LAN IP, followed)",
+		{Key: "DNS_IP", Description: i18n.N("IP the domains resolve to (empty: this machine's LAN IP, followed)"),
 			Validate: validateIP, Apply: ApplyRestartDNS},
-		{Key: "DNS_LISTEN_IP", Description: "Address the DNS server listens on (empty: every interface)",
+		{Key: "DNS_LISTEN_IP", Description: i18n.N("Address the DNS server listens on (empty: every interface)"),
 			Validate: validateIP, Apply: ApplyRestartDNS},
-		{Key: "DNS_PORT", Description: "Port of the DNS server", Default: static("53"), Validate: validatePort, Apply: ApplyRestartDNS},
-		{Key: "DNS_UPSTREAM", Description: "Space-separated resolvers for the other queries",
+		{Key: "DNS_PORT", Description: i18n.N("Port of the DNS server"), Default: static("53"), Validate: validatePort, Apply: ApplyRestartDNS},
+		{Key: "DNS_UPSTREAM", Description: i18n.N("Space-separated resolvers for the other queries"),
 			Default: static("1.1.1.1 8.8.8.8"), Validate: validateIPs, Apply: ApplyRestartDNS},
 
-		{Key: "PHP_IMAGE_DISTRO", Description: "Base distribution of the PHP images",
+		{Key: "PHP_IMAGE_DISTRO", Description: i18n.N("Base distribution of the PHP images"),
 			Default: static(phpversions.DefaultDistro), Values: phpversions.Distros, Apply: ApplyRebuild},
-		{Key: "INSTALL_PDFTK", Description: "Install pdftk in the PHP images (adds a Java runtime, ~200 MB)",
+		{Key: "INSTALL_PDFTK", Description: i18n.N("Install pdftk in the PHP images (adds a Java runtime, ~200 MB)"),
 			Default: static("false"), Values: booleans, Apply: ApplyRebuild},
 	}
-	for _, t := range []struct{ kind, what string }{
-		{"APK", "Alpine packages"}, {"APT", "Debian packages"}, {"COMPOSER", "global Composer packages"},
+	for _, t := range []struct{ kind, all, one string }{
+		{"APK", i18n.N("Extra Alpine packages of every PHP image, space-separated"),
+			i18n.N("Extra Alpine packages of the PHP %s image only")},
+		{"APT", i18n.N("Extra Debian packages of every PHP image, space-separated"),
+			i18n.N("Extra Debian packages of the PHP %s image only")},
+		{"COMPOSER", i18n.N("Extra global Composer packages of every PHP image, space-separated"),
+			i18n.N("Extra global Composer packages of the PHP %s image only")},
 	} {
 		defs = append(defs, Definition{
 			Key:         "EXTRA_" + t.kind + "_PACKAGES",
-			Description: "Extra " + t.what + " of every PHP image, space-separated",
+			Description: t.all,
 			Apply:       ApplyRebuild,
 		})
 		for _, v := range phpversions.Supported {
 			defs = append(defs, Definition{
 				Key:         "EXTRA_" + t.kind + "_PACKAGES_" + strings.ReplaceAll(v, ".", ""),
-				Description: "Extra " + t.what + " of the PHP " + v + " image only",
+				Description: fmt.Sprintf(t.one, v),
+				descFormat:  t.one,
+				descArg:     v,
 				Apply:       ApplyRebuild,
 			})
 		}

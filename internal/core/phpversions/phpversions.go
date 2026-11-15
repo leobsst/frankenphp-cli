@@ -2,9 +2,10 @@
 package phpversions
 
 import (
-	"fmt"
 	"slices"
 	"strings"
+
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 )
 
 // Supported lists the supported PHP versions, in order.
@@ -35,7 +36,7 @@ var internalPorts = map[string][2]int{
 // user as a plain message listing the supported versions.
 func Validate(version string) error {
 	if !slices.Contains(Supported, version) {
-		return fmt.Errorf("Unsupported PHP version '%s'. Supported: %s", //nolint:staticcheck // user-facing message
+		return i18n.Errorf("Unsupported PHP version '%s'. Supported: %s",
 			version, strings.Join(Supported, ", "))
 	}
 	return nil
@@ -58,7 +59,7 @@ func ResolveDistro(envValue string) (string, error) {
 	}
 	distro := strings.ToLower(strings.TrimSpace(envValue))
 	if !slices.Contains(Distros, distro) {
-		return "", fmt.Errorf("Unsupported PHP_IMAGE_DISTRO '%s'. Supported: %s", //nolint:staticcheck // user-facing message
+		return "", i18n.Errorf("Unsupported PHP_IMAGE_DISTRO '%s'. Supported: %s",
 			envValue, strings.Join(Distros, ", "))
 	}
 	return distro, nil
@@ -93,6 +94,6 @@ func DeprecationWarning(version string) string {
 	if !slices.Contains(Deprecated, version) {
 		return ""
 	}
-	return fmt.Sprintf("PHP %s is deprecated and will be removed in a future release. "+
+	return i18n.Tf("PHP %s is deprecated and will be removed in a future release. "+
 		"Consider upgrading to PHP %s or later.", version, Default)
 }

@@ -2,7 +2,6 @@ package env
 
 import (
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -10,6 +9,7 @@ import (
 	"time"
 
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 )
 
 const (
@@ -92,10 +92,10 @@ func Migrate(dataDir string, b MigrationBackend) (Migration, error) {
 	slices.Sort(m.Invalid)
 
 	if err := b.SetConfig(values); err != nil {
-		return m, fmt.Errorf("migrate %s: %w", path, err)
+		return m, i18n.Errorf("migrate %s: %w", path, err)
 	}
 	if err := b.SetSetting(store.SettingEnvMigrated, time.Now().UTC().Format(time.RFC3339)); err != nil {
-		return m, fmt.Errorf("migrate %s: %w", path, err)
+		return m, i18n.Errorf("migrate %s: %w", path, err)
 	}
 	m.Migrated = true
 
