@@ -21,7 +21,7 @@
 - Multi-site management with custom local domains (`.test`)
 - **Multiple PHP versions** (8.2, 8.3, 8.4, 8.5) running simultaneously, per-domain
 - Live PHP version switching per domain (`switch-php`)
-- Alternate hosts (aliases) that reverse-proxy to an existing domain's site (`add-alias`), with no extra Caddyfile or container
+- Alternate hosts (aliases) that reverse-proxy to an existing domain's site or proxy host's upstream (`add-alias`), with no extra Caddyfile or container
 - Proxy hosts that reverse-proxy straight to a raw upstream address (`add-host <domain> <target>`), with no PHP container or per-site Caddyfile
 - Automated SSL certificate generation via mkcert
 - Optional extra apt/Composer packages in the PHP image, scoped per PHP version
@@ -141,7 +141,7 @@ frankenmanager setup --status
 | `frankenmanager list` | List all registered domains with their PHP versions |
 | `frankenmanager add-host <domains> [--php <version>]` | Add new domains while server is running |
 | `frankenmanager add-host <domain> <target>` | Add domain(s) that reverse-proxy to a raw upstream address (e.g. `127.0.0.1:8006`) |
-| `frankenmanager add-alias <target> <aliases>` | Add alternate host(s) that reverse-proxy to an existing domain |
+| `frankenmanager add-alias <target> <aliases>` | Add alternate host(s) that reverse-proxy to an existing domain or proxy host |
 | `frankenmanager remove-host <domains>` | Remove domains (or alternate hosts) while server is running |
 | `frankenmanager restore-host [domains] [--php <version>]` | Restore archived domains |
 | `frankenmanager switch-php <domain> --php <version>` | Switch the PHP version for a domain (live, no downtime for other domains) |
@@ -322,7 +322,7 @@ frankenmanager exec myapp.test "php artisan config:clear && php artisan cache:cl
 ```
 
 - Everything after the domain is passed to the command as-is (options such as `-v` or `--help` included).
-- Alternate hosts (aliases) use their target domain's PHP version; proxy hosts have none.
+- Alternate hosts (aliases) use their target domain's PHP version; proxy hosts, and aliases of proxy hosts, have none.
 - The server doesn't need to be running, but the PHP image of the version must have been built (`start` / `add-host`).
 - A TTY is allocated when run from a terminal (e.g. `php artisan tinker`), and `exec` exits with the command's exit code.
 
@@ -484,7 +484,7 @@ This will:
 
 #### Add an alternate host (alias)
 
-`add-alias` attaches one or more extra domains to a host that's already configured with `add-host`/`start`. Unlike `add-host`, it does **not** create a per-site Caddyfile or a new PHP container: the alias gets its own SSL certificate and `/etc/hosts` entry, and is added to the reverse proxy's Caddyfile only, forwarding to the target domain's existing site.
+`add-alias` attaches one or more extra domains to a host that's already configured with `add-host`/`start`. Unlike `add-host`, it does **not** create a per-site Caddyfile or a new PHP container: the alias gets its own SSL certificate and `/etc/hosts` entry, and is added to the reverse proxy's Caddyfile only, forwarding to the target's existing site: the PHP site of a domain, or the upstream of a proxy host (with the target as `Host` header in both cases).
 
 ```bash
 # Add a single alternate host for an existing domain
@@ -495,16 +495,19 @@ frankenmanager add-alias "myapp.test" "alt1.test alt2.test"
 
 # Force SSL certificate regeneration
 frankenmanager add-alias "myapp.test" "myapp-alt.test" --force-ssl
+
+# Add an alternate host for a proxy host (added with add-host DOMAIN TARGET)
+frankenmanager add-alias "proxy.test" "proxy-alt.test"
 ```
 
 This will:
-1. Validate the target domain is already configured
+1. Validate the target domain or proxy host is already configured
 2. Generate SSL certificates for the alias domain(s)
 3. Add entries to `/etc/hosts`
 4. Add the alias to the reverse proxy Caddyfile (no per-site Caddyfile, no new PHP container)
 5. Restart only the reverse proxy
 
-An alias always follows its target's PHP version — including if the target is later moved with `switch-php`. Aliases are shown alongside registered domains in `frankenmanager list`.
+An alias always follows its target's PHP version — including if the target is later moved with `switch-php` — or its proxy host's upstream. Aliases are shown alongside registered domains in `frankenmanager list`.
 
 #### Remove a host
 
@@ -527,7 +530,7 @@ This will:
 2. Archive the Caddyfile to `caddy/sites/archive/` (not deleted) — skipped for aliases and proxy hosts, which have no Caddyfile of their own
 3. Restart only the FrankenPHP container
 
-Removing a domain also removes any alternate hosts (aliases) pointing to it, since they'd otherwise be left proxying to a domain that no longer exists.
+Removing a domain or a proxy host also removes any alternate hosts (aliases) pointing to it, since they'd otherwise be left proxying to a host that no longer exists.
 
 #### Restore an archived host
 
