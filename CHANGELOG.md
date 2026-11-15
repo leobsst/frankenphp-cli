@@ -5,6 +5,17 @@ All notable changes to FrankenManager will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- `dns-clients` - List the devices using the LAN DNS server (IP, name from the router, MAC address, last query, number of queries), connected ones by default, `--all` and `--json`; `status` shows how many are connected
+- `add-alias` accepts a proxy host as target
+
+### Changed
+- The LAN DNS server is CoreDNS built into FrankenManager, run by its background process instead of the `franken_dns` container, so that it sees the real address of each device; the old container is removed on `start`
+- On Linux, `sudo frankenmanager setup` lets the binary use port 53 (`setcap`)
+- `update` stops a running server before installing and starts it again on the new version, and grants port 53 again on Linux
+
 ## [1.0.0] - 2026-02-10
 
 ### Added

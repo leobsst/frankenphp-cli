@@ -139,6 +139,7 @@ frankenmanager setup --status
 | `frankenmanager restart [options] [--build]` | Restart all or specific containers |
 | `frankenmanager status` | Show current server and container status |
 | `frankenmanager list` | List all registered domains with their PHP versions |
+| `frankenmanager dns-clients [--all] [--json]` | List the devices using the LAN DNS server (connected in the last 5 minutes, or all) |
 | `frankenmanager add-host <domains> [--php <version>]` | Add new domains while server is running |
 | `frankenmanager add-host <domain> <target>` | Add domain(s) that reverse-proxy to a raw upstream address (e.g. `127.0.0.1:8006`) |
 | `frankenmanager add-alias <target> <aliases>` | Add alternate host(s) that reverse-proxy to an existing domain or proxy host |
@@ -415,7 +416,7 @@ frankenmanager restart --build
 | `--database` | `--db` | franken_mariadb | MariaDB database server |
 | `--cache` | - | franken_redis | Redis cache server (when `REDIS_ENABLED=true`) |
 | `--phpmyadmin` | `--pma` | franken_phpmyadmin | phpMyAdmin database UI |
-| `--dns` | - | franken_dns | LAN DNS server (when `DNS_SERVER=true`) |
+| `--dns` | - | (background process) | LAN DNS server (when `DNS_SERVER=true`) |
 | `--soketi` | `--ws` | franken_soketi | Soketi WebSocket server (when `SOKETI_ENABLED=true`) |
 
 **Notes:**
@@ -665,7 +666,7 @@ Changing a credential (`configuration set SOKETI_DEFAULT_APP_KEY ...`) takes eff
 
 ### LAN DNS server
 
-The `/etc/hosts` entries only exist on your machine: other devices on the network can't resolve your `.test` domains. Instead of editing the hosts file of each device, you can turn on an optional DNS server container ([CoreDNS](https://coredns.io)):
+The `/etc/hosts` entries only exist on your machine: other devices on the network can't resolve your `.test` domains. Instead of editing the hosts file of each device, you can turn on an optional DNS server ([CoreDNS](https://coredns.io), built into FrankenManager):
 
 ```bash
 frankenmanager service enable dns
@@ -688,13 +689,28 @@ Domains added or removed with `add-host`, `add-alias`, `remove-host` or `restore
 | `DNS_UPSTREAM` | `1.1.1.1 8.8.8.8` | Space-separated resolvers for every other query. Use your router's or company's DNS if public resolvers are blocked |
 
 **Notes:**
-- The domains follow your machine's LAN IP: while the server runs, a background process checks it every few seconds and, when it changes (Wi-Fi to Ethernet, new DHCP lease...), updates the records, which CoreDNS reloads on its own. Nothing to restart. `status` shows whether it is active ("Follows LAN IP changes"); it is off when `DNS_IP` is set, since the IP is then fixed.
+- The server is not a container: it runs in a FrankenManager background process on your machine, so that it sees the real address of each device (behind Docker's VM on macOS and Windows, a container only sees the VM). `status` shows whether it runs ("Server") and how many devices are connected; `frankenmanager restart --dns` restarts it. Releases before it ran a `franken_dns` container: `start`, `restart --dns` and `service enable dns` remove it so that it frees port 53.
+- The domains follow your machine's LAN IP: the same process checks it every few seconds and, when it changes (Wi-Fi to Ethernet, new DHCP lease...), updates the records, which the server reloads on its own. Nothing to restart. `status` shows "Follows LAN IP changes"; it is off when `DNS_IP` is set, since the IP is then fixed. Changing a `DNS_*` setting is picked up within a few seconds too.
 - That process doesn't depend on your terminal: on macOS it runs as a LaunchAgent (`~/Library/LaunchAgents/dev.frankenmanager.dns-watcher.plist`), on Linux as a systemd user unit (`frankenmanager-dns-watcher.service`). It comes back on its own after a reboot or a new login, like the containers, and is relaunched if it crashes; `stop` removes it. macOS may notify you that a background item was added: it is listed as "FrankenManager" in System Settings > General > Login Items, through the `FrankenManager.app` shipped in the install directory (`/usr/local/lib/frankenmanager/`). On Windows, or on Linux without a systemd user instance (e.g. WSL), it is a plain background process: run `frankenmanager restart --dns` after a reboot. Its log is `.dns_watcher.log` in the FrankenManager directory.
+- On Linux, port 53 is reserved to root: `sudo frankenmanager setup` lets the FrankenManager binary use it (`setcap cap_net_bind_service`, needs `libcap2-bin` on Debian/Ubuntu or `libcap` on Fedora/Arch); `update` grants it again to the new binary. Without it, the server can't start and its log tells you so. macOS and Windows need nothing.
+- On macOS, if the firewall is on, macOS may ask once whether to allow incoming connections for `frankenmanager`: allow them, or the other devices can't reach the server.
 - The other devices still reach the DNS server through the IP you gave them: if your machine's IP changes, they lose it too. Reserve a fixed IP for your machine in your router's DHCP settings (one per network interface, e.g. Wi-Fi and Ethernet) to avoid reconfiguring them.
 - `DNS_UPSTREAM` defaults to public resolvers rather than your machine's own: if the router hands this server out, your machine may itself resolve through it, and forwarding to its own resolver would loop.
 - Anyone on your network can query this server while it runs. It only answers for your registered domains and forwards the rest, so it exposes no more than your web server already does.
 - Combine it with [`trust-ca`](#share-the-root-ca-over-your-lan) so the other devices also trust the HTTPS certificates.
 - Setting up a phone, tablet or simulator: see [iOS and Android devices](#ios-and-android-devices).
+
+#### Connected devices
+
+The server records every device that queries it, so you can check that a device really uses it:
+
+```bash
+frankenmanager dns-clients          # Devices connected in the last 5 minutes
+frankenmanager dns-clients --all    # Also the idle ones (kept 30 days)
+frankenmanager dns-clients --json   # Machine-readable list
+```
+
+Each device shows its IP, its name when your router knows it (DHCP host name), its MAC address when it is on the same network (`*` marks a private address, which phones change per network), when it last queried the server and how many queries it sent. A device is connected when it queried the server in the last 5 minutes: devices re-query often, as the records live 30 seconds. The list is kept in `db.sqlite` (`dns_clients` table); `reset --db` empties it.
 
 ### iOS and Android devices
 
@@ -869,6 +885,10 @@ sudo frankenmanager update --force
 **Note**: the binary is installed in a system directory (e.g. `/usr/local/lib`), so `frankenmanager update` and `frankenmanager update --force` need to be run with `sudo` (or as an administrator). `frankenmanager update --check` does not modify anything and does not require elevated privileges.
 
 Once the new version is installed, `update` also refreshes the static files of your data directory (`Dockerfile`, `docker-compose*.yml`, `docker/entrypoint.sh`, `caddy/Caddyfile.worker`, `caddy/Caddyfile.template`, `php/php.ini`, `php/php-prod.ini`), as your user even under `sudo`. Generated files (`caddy/Caddyfile`, `docker-compose-generated.yml`, per-site Caddyfiles) and the per-version `php/<version>/php.ini` are left untouched.
+
+When a new version is installed and the server runs, `update` stops it first (`frankenmanager stop`) and starts it again on the new version right after (`frankenmanager start`), both as your user even under `sudo`; a stopped server stays stopped, and nothing is stopped when you are already up to date. If the install fails, the server is started again on the version still installed.
+
+On Linux, `update` also gives the new binary the permission to use port 53 for the [LAN DNS server](#lan-dns-server), which replacing the file drops; if it can't, it tells you to run `sudo frankenmanager setup`.
 
 `update` also installs the [CLI alias](#cli-alias) when missing (releases before it had none).
 
@@ -1134,7 +1154,9 @@ frankenphp-cli/
 │   │   ├── caserver/           Root CA sharing (trust-ca)
 │   │   ├── compose/            docker-compose-generated.yml
 │   │   ├── dns/                LAN DNS server (CoreDNS) config
-│   │   ├── dnswatcher/         LAN IP watcher (LaunchAgent, systemd unit)
+│   │   ├── dnsclients/         Devices of the LAN DNS server
+│   │   ├── dnswatcher/         LAN DNS server process (LaunchAgent, systemd unit)
+│   │   ├── embeddns/           Embedded CoreDNS
 │   │   ├── docker/             docker CLI wrapper, image builds
 │   │   ├── alias/              CLI alias (fkm) next to the command
 │   │   ├── env/                Configuration: settings registry
@@ -1179,7 +1201,6 @@ frankenphp-cli/
 | Soketi (optional) | `franken_soketi` | 6001 | WebSocket server, when `SOKETI_ENABLED=true`, served at `wss://ws.frankenmanager.test` |
 | phpMyAdmin | `franken_phpmyadmin` | 8080 | Database UI for MariaDB and MySQL (dev only), also served at `https://localhost` (see [Databases](#databases)) |
 | pgAdmin (optional) | `franken_pgadmin` | 8081 | Database UI for PostgreSQL (dev only), served at `https://localhost` when PostgreSQL is the only engine |
-| CoreDNS (optional) | `franken_dns` | 53 (LAN IP only) | LAN DNS server, when `DNS_SERVER=true` |
 
 Only containers for PHP versions that have at least one domain are started: with no PHP domain at all, no FrankenPHP container runs.
 
@@ -1274,7 +1295,7 @@ This is expected: mkcert's root CA is only trusted on the machine that installed
 
 ### Another device can't resolve the domains
 
-The domains are only in your machine's `/etc/hosts`. Turn on the [LAN DNS server](#lan-dns-server) and set it as that device's DNS server (see [iOS and Android devices](#ios-and-android-devices) for phones and emulators). If it still fails, check that `frankenmanager status` shows `franken_dns` running and that your firewall allows incoming traffic on port 53 (UDP and TCP). If your machine's IP changed (new network, Wi-Fi to Ethernet), the records follow it on their own, but update the DNS server set on the device. If `status` shows "Follows LAN IP changes: no", run `frankenmanager restart --dns`.
+The domains are only in your machine's `/etc/hosts`. Turn on the [LAN DNS server](#lan-dns-server) and set it as that device's DNS server (see [iOS and Android devices](#ios-and-android-devices) for phones and emulators). If it still fails, check that `frankenmanager status` shows the LAN DNS server running (otherwise read `.dns_watcher.log`), that `frankenmanager dns-clients` lists the device (if not, its queries don't reach your machine) and that your firewall allows incoming traffic on port 53 (UDP and TCP). If your machine's IP changed (new network, Wi-Fi to Ethernet), the records follow it on their own, but update the DNS server set on the device. If `status` shows "Server: not running", run `frankenmanager restart --dns`.
 
 ### mkcert not found
 
