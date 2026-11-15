@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/leobsst/frankenphp-cli/internal/command"
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 	"github.com/leobsst/frankenphp-cli/internal/platform"
 )
 
@@ -118,14 +119,14 @@ func (in *Installer) IsInstalled() bool { return in.Run.LookPath("mkcert") != ""
 func (in *Installer) Instructions() string {
 	switch in.GOOS {
 	case "darwin":
-		return `To install mkcert on macOS:
+		return i18n.T(`To install mkcert on macOS:
 
     brew install mkcert
     brew install nss  # if using Firefox
 
-Or download from: https://github.com/FiloSottile/mkcert/releases`
+Or download from: https://github.com/FiloSottile/mkcert/releases`)
 	case "windows":
-		return `To install mkcert on Windows:
+		return i18n.T(`To install mkcert on Windows:
 
     # Using Chocolatey
     choco install mkcert
@@ -133,9 +134,9 @@ Or download from: https://github.com/FiloSottile/mkcert/releases`
     # Using Scoop
     scoop install mkcert
 
-    # Or download from: https://github.com/FiloSottile/mkcert/releases`
+    # Or download from: https://github.com/FiloSottile/mkcert/releases`)
 	}
-	return `To install mkcert on Linux:
+	return i18n.T(`To install mkcert on Linux:
 
     # Ubuntu/Debian
     sudo apt install libnss3-tools
@@ -146,7 +147,7 @@ Or download from: https://github.com/FiloSottile/mkcert/releases`
     sudo pacman -S mkcert
 
     # Fedora
-    sudo dnf install mkcert`
+    sudo dnf install mkcert`)
 }
 
 // run runs a command, reporting a failure to start as a failed result.
@@ -187,11 +188,11 @@ func (in *Installer) brew(ctx context.Context, env map[string]string, args ...st
 // trusts the CA in Firefox and Java. It reports whether mkcert is there.
 func (in *Installer) Install(ctx context.Context) bool {
 	if in.IsInstalled() {
-		in.Log.Info("mkcert is already installed")
+		in.Log.Info(i18n.T("mkcert is already installed"))
 		return true
 	}
 	in.installNSS(ctx)
-	in.Log.Info("Attempting to install mkcert...")
+	in.Log.Info(i18n.T("Attempting to install mkcert..."))
 
 	var err error
 	ok := false
@@ -204,7 +205,7 @@ func (in *Installer) Install(ctx context.Context) bool {
 		ok, err = in.installLinux(ctx)
 	}
 	if err != nil {
-		in.Log.Error(fmt.Sprintf("Failed to install mkcert: %v", err))
+		in.Log.Error(i18n.Tf("Failed to install mkcert: %v", err))
 		in.Log.Info("")
 		in.Log.Info(in.Instructions())
 		return false
@@ -233,49 +234,49 @@ func (in *Installer) installNSS(ctx context.Context) bool {
 		return true // Firefox on Windows needs no NSS
 	case "darwin":
 		if in.Run.LookPath("brew") == "" {
-			in.Log.Warning("Homebrew not found, skipping NSS install for Firefox support.")
+			in.Log.Warning(i18n.T("Homebrew not found, skipping NSS install for Firefox support."))
 			return false
 		}
-		in.Log.Info("Installing nss via Homebrew...")
+		in.Log.Info(i18n.T("Installing nss via Homebrew..."))
 		if res := in.brew(ctx, nil, "install", "nss"); !res.OK() {
-			in.Log.Warning("Failed to install nss: " + string(res.Stderr))
+			in.Log.Warning(i18n.Tf("Failed to install nss: %s", res.Stderr))
 			return false
 		}
-		in.Log.Success("nss installed successfully!")
+		in.Log.Success(i18n.T("nss installed successfully!"))
 		return true
 	}
 	for _, n := range linuxNSS {
 		if in.Run.LookPath(n.manager) == "" {
 			continue
 		}
-		in.Log.Info(fmt.Sprintf("Installing %s via %s...", n.pkg, n.manager))
+		in.Log.Info(i18n.Tf("Installing %s via %s...", n.pkg, n.manager))
 		if n.manager == "apt-get" {
 			in.run(ctx, "sudo", "apt-get", "update")
 		}
 		args := append(append([]string{n.manager}, n.args...), n.pkg)
 		if res := in.run(ctx, "sudo", args...); !res.OK() {
-			in.Log.Warning(fmt.Sprintf("Failed to install %s: %s", n.pkg, res.Stderr))
+			in.Log.Warning(i18n.Tf("Failed to install %s: %s", n.pkg, res.Stderr))
 			return false
 		}
-		in.Log.Success(n.pkg + " installed successfully!")
+		in.Log.Success(i18n.Tf("%s installed successfully!", n.pkg))
 		return true
 	}
-	in.Log.Warning("No supported package manager found, skipping NSS install for Firefox support.")
+	in.Log.Warning(i18n.T("No supported package manager found, skipping NSS install for Firefox support."))
 	return false
 }
 
 func (in *Installer) installMacOS(ctx context.Context) bool {
 	if in.Run.LookPath("brew") == "" {
-		in.Log.Warning("Homebrew not found. Please install mkcert manually:")
+		in.Log.Warning(i18n.T("Homebrew not found. Please install mkcert manually:"))
 		in.Log.Info(in.Instructions())
 		return false
 	}
-	in.Log.Info("Installing mkcert via Homebrew...")
+	in.Log.Info(i18n.T("Installing mkcert via Homebrew..."))
 	if res := in.brew(ctx, nil, "install", "mkcert"); !res.OK() {
-		in.Log.Error("Homebrew installation failed: " + string(res.Stderr))
+		in.Log.Error(i18n.Tf("Homebrew installation failed: %s", res.Stderr))
 		return false
 	}
-	in.Log.Success("mkcert installed successfully!")
+	in.Log.Success(i18n.T("mkcert installed successfully!"))
 	return true
 }
 
@@ -291,12 +292,12 @@ func DownloadURL(arch string) string {
 func (in *Installer) installLinux(ctx context.Context) (bool, error) {
 	arch, ok := linuxArch[in.GOARCH]
 	if !ok {
-		in.Log.Warning("Unsupported architecture: " + in.GOARCH)
+		in.Log.Warning(i18n.Tf("Unsupported architecture: %s", in.GOARCH))
 		in.Log.Info(in.Instructions())
 		return false, nil
 	}
 	url := DownloadURL(arch)
-	in.Log.Info(fmt.Sprintf("Downloading mkcert from %s...", url))
+	in.Log.Info(i18n.Tf("Downloading mkcert from %s...", url))
 
 	destDir := in.BinDir
 	if !in.IsAdmin() {
@@ -309,7 +310,7 @@ func (in *Installer) installLinux(ctx context.Context) (bool, error) {
 	tmp := dest + ".download"
 	if err := in.Download(ctx, url, tmp); err != nil {
 		_ = os.Remove(tmp)
-		in.Log.Error(fmt.Sprintf("Download failed: %v", err))
+		in.Log.Error(i18n.Tf("Download failed: %v", err))
 		return false, nil
 	}
 	if err := os.Chmod(tmp, 0o755); err != nil {
@@ -319,30 +320,30 @@ func (in *Installer) installLinux(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	if !in.IsAdmin() {
-		in.Log.Warning("Installed to " + dest)
-		in.Log.Info("Make sure ~/.local/bin is in your PATH")
+		in.Log.Warning(i18n.Tf("Installed to %s", dest))
+		in.Log.Info(i18n.T("Make sure ~/.local/bin is in your PATH"))
 	}
-	in.Log.Success("mkcert installed successfully!")
+	in.Log.Success(i18n.T("mkcert installed successfully!"))
 	return true, nil
 }
 
 func (in *Installer) installWindows(ctx context.Context) bool {
 	if in.Run.LookPath("choco") != "" {
-		in.Log.Info("Installing mkcert via Chocolatey...")
+		in.Log.Info(i18n.T("Installing mkcert via Chocolatey..."))
 		if in.run(ctx, "choco", "install", "mkcert", "-y").OK() {
-			in.Log.Success("mkcert installed successfully!")
+			in.Log.Success(i18n.T("mkcert installed successfully!"))
 			return true
 		}
 	}
 	if in.Run.LookPath("scoop") != "" {
-		in.Log.Info("Installing mkcert via Scoop...")
+		in.Log.Info(i18n.T("Installing mkcert via Scoop..."))
 		in.run(ctx, "scoop", "bucket", "add", "extras") // mkcert is in the extras bucket
 		if in.run(ctx, "scoop", "install", "mkcert").OK() {
-			in.Log.Success("mkcert installed successfully!")
+			in.Log.Success(i18n.T("mkcert installed successfully!"))
 			return true
 		}
 	}
-	in.Log.Warning("Neither Chocolatey nor Scoop found.")
+	in.Log.Warning(i18n.T("Neither Chocolatey nor Scoop found."))
 	in.Log.Info(in.Instructions())
 	return false
 }
@@ -468,7 +469,7 @@ func writePEM(path, blockType string, der []byte, mode os.FileMode) error {
 func (in *Installer) SetupCA(ctx context.Context) bool {
 	mkcert := in.Run.LookPath("mkcert")
 	if mkcert == "" {
-		in.Log.Error("mkcert is not installed")
+		in.Log.Error(i18n.T("mkcert is not installed"))
 		return false
 	}
 	caRoot := in.CARoot(ctx, mkcert)
@@ -480,7 +481,7 @@ func (in *Installer) SetupCA(ctx context.Context) bool {
 				in.uninstallCA(ctx, mkcert)
 			}
 			if err := GenerateCA(caRoot); err != nil {
-				in.Log.Error(fmt.Sprintf("Failed to generate the CA: %v", err))
+				in.Log.Error(i18n.Tf("Failed to generate the CA: %v", err))
 				return false
 			}
 		}
@@ -505,39 +506,39 @@ func (in *Installer) updateHomebrewCABundle(ctx context.Context) {
 	// The upgrade must not upgrade PHP or OpenSSL along with it
 	env := map[string]string{"HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK": "1"}
 	action := "postinstall"
-	in.Log.Info("Adding the CA to Homebrew's CA bundle (PHP, curl)...")
+	in.Log.Info(i18n.T("Adding the CA to Homebrew's CA bundle (PHP, curl)..."))
 	if res := in.brew(ctx, nil, "outdated", "--quiet", "ca-certificates"); strings.TrimSpace(string(res.Stdout)) != "" {
 		action = "upgrade"
-		in.Log.Info("Upgrading Homebrew's ca-certificates first...")
+		in.Log.Info(i18n.T("Upgrading Homebrew's ca-certificates first..."))
 	}
 	if res := in.brew(ctx, env, action, "ca-certificates"); !res.OK() {
-		in.Log.Warning(fmt.Sprintf("Could not update Homebrew's CA bundle: %s", strings.TrimSpace(string(res.Stderr))))
-		in.Log.Info("Host PHP may reject local certificates (cURL error 60). Run it by hand:")
+		in.Log.Warning(i18n.Tf("Could not update Homebrew's CA bundle: %s", strings.TrimSpace(string(res.Stderr))))
+		in.Log.Info(i18n.T("Host PHP may reject local certificates (cURL error 60). Run it by hand:"))
 		in.Log.Info("  brew " + action + " ca-certificates")
 		return
 	}
-	in.Log.Success("Homebrew's CA bundle now trusts the FrankenManager CA!")
+	in.Log.Success(i18n.T("Homebrew's CA bundle now trusts the FrankenManager CA!"))
 }
 
 // uninstallCA removes the trusted CA before it is replaced, so that the
 // old one does not stay trusted next to ours. Best effort.
 func (in *Installer) uninstallCA(ctx context.Context, mkcert string) {
-	in.Log.Info("Removing the existing CA from the trust store before replacing it...")
+	in.Log.Info(i18n.T("Removing the existing CA from the trust store before replacing it..."))
 	res := in.runMkcert(ctx, mkcert, in.GOOS != "windows", "-uninstall")
 	if !res.OK() {
-		in.Log.Info("Could not remove the previous CA (continuing anyway): " + strings.TrimSpace(string(res.Stderr)))
+		in.Log.Info(i18n.Tf("Could not remove the previous CA (continuing anyway): %s", strings.TrimSpace(string(res.Stderr))))
 	}
 }
 
 func (in *Installer) runInstall(ctx context.Context, mkcert string) bool {
-	in.Log.Info("Installing FrankenManager CA (may require admin password)...")
+	in.Log.Info(i18n.T("Installing FrankenManager CA (may require admin password)..."))
 	// The system trust store needs root on macOS and Linux
 	res := in.runMkcert(ctx, mkcert, in.GOOS != "windows", "-install")
 	if !res.OK() {
-		in.Log.Error("Failed to install CA: " + string(res.Stderr))
+		in.Log.Error(i18n.Tf("Failed to install CA: %s", res.Stderr))
 		return false
 	}
-	in.Log.Success("mkcert CA installed successfully!")
+	in.Log.Success(i18n.T("mkcert CA installed successfully!"))
 	return true
 }
 

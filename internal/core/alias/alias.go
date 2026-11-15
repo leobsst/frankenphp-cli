@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 	"github.com/leobsst/frankenphp-cli/internal/platform"
 )
 
@@ -34,7 +35,7 @@ const shimMarker = "REM FrankenManager alias"
 type ConflictError struct{ Path string }
 
 func (e *ConflictError) Error() string {
-	return fmt.Sprintf("%s already exists and is not a FrankenManager alias", e.Path)
+	return i18n.Tf("%s already exists and is not a FrankenManager alias", e.Path)
 }
 
 // Installer installs aliases in BinDir, pointing to Target.

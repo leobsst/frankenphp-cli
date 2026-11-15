@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/leobsst/frankenphp-cli/internal/core/compose"
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 )
 
 // DefaultRetries is how many times (one per second) a server is tried
@@ -137,27 +138,27 @@ func (m *Manager) Sync(ctx context.Context, engine, container, newPassword strin
 		current = m.working(ctx, engine, container, newPassword)
 	}
 	if current == "" {
-		m.Log.Info(label(engine) + " password sync skipped (could not connect)")
+		m.Log.Info(i18n.Tf("%s password sync skipped (could not connect)", label(engine)))
 		return false, nil
 	}
 	if current == newPassword {
 		if err := m.save(engine, newPassword); err != nil {
 			return false, err
 		}
-		m.Log.Info(label(engine) + " password already in sync")
+		m.Log.Info(i18n.Tf("%s password already in sync", label(engine)))
 		return true, nil
 	}
 
 	sql := fmt.Sprintf("ALTER USER 'root'@'%%' IDENTIFIED BY '%s'; "+
 		"ALTER USER 'root'@'localhost' IDENTIFIED BY '%s'; FLUSH PRIVILEGES;", newPassword, newPassword)
 	if code, _ := m.Docker.Exec(ctx, container, client(engine), "-u", "root", "-p"+current, "-e", sql); code != 0 {
-		m.Log.Error("Failed to sync " + label(engine) + " password")
+		m.Log.Error(i18n.Tf("Failed to sync %s password", label(engine)))
 		return false, nil
 	}
 	if err := m.save(engine, newPassword); err != nil {
 		return false, err
 	}
-	m.Log.Success(label(engine) + " password updated to match the configuration")
+	m.Log.Success(i18n.Tf("%s password updated to match the configuration", label(engine)))
 	return true, nil
 }
 

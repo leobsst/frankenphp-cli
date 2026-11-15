@@ -3,13 +3,13 @@ package ssl
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/leobsst/frankenphp-cli/internal/command"
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 )
 
 const (
@@ -17,8 +17,6 @@ const (
 	maxAge = 30 * 24 * time.Hour
 	// certMode is the mode of every file of the certs directory.
 	certMode = 0o750
-
-	setupHint = "Run `sudo frankenmanager setup --install-mkcert` first."
 )
 
 // Error is a certificate failure.
@@ -51,7 +49,7 @@ func New(certsDir string, log Logger) (*Manager, error) {
 func (m *Manager) mkcert() (string, error) {
 	p := m.Run.LookPath("mkcert")
 	if p == "" {
-		return "", &Error{"mkcert not found. Please install mkcert first."}
+		return "", &Error{i18n.T("mkcert not found. Please install mkcert first.")}
 	}
 	return p, nil
 }
@@ -66,16 +64,16 @@ func (m *Manager) InstallCA(ctx context.Context) error {
 	}
 	res, err := m.Run.Run(ctx, command.Cmd{Name: mkcert, Args: []string{"-CAROOT"}})
 	if err != nil || !res.OK() {
-		return &Error{"Could not determine mkcert's CA root. " + setupHint}
+		return &Error{i18n.T("Could not determine mkcert's CA root. Run `sudo frankenmanager setup --install-mkcert` first.")}
 	}
 	caRoot := strings.TrimSpace(string(res.Stdout))
 	cert, key := filepath.Join(caRoot, "rootCA.pem"), filepath.Join(caRoot, "rootCA-key.pem")
 	if !isFile(cert) || !isFile(key) {
-		return &Error{"No root CA installed yet. " + setupHint}
+		return &Error{i18n.T("No root CA installed yet. Run `sudo frankenmanager setup --install-mkcert` first.")}
 	}
 	if f, err := os.Open(key); err != nil {
 		// Typically left owned by root by an older `sudo frankenmanager setup`
-		return &Error{fmt.Sprintf("Cannot read the root CA key %s (permission denied). "+
+		return &Error{i18n.Tf("Cannot read the root CA key %s (permission denied). "+
 			"Run `sudo frankenmanager setup --install-mkcert` again to fix its "+
 			`ownership, or: sudo chown -R "$(whoami)" "%s"`, key, caRoot)}
 	} else {
@@ -105,7 +103,7 @@ func (m *Manager) GenerateLocalhost(ctx context.Context) error {
 	}
 	res, err := m.generate(ctx, mkcert, "localhost")
 	if err != nil || !res.OK() {
-		return &Error{"Failed to generate localhost certificate: " + failure(res, err)}
+		return &Error{i18n.Tf("Failed to generate localhost certificate: %s", failure(res, err))}
 	}
 	return nil
 }
@@ -124,7 +122,7 @@ func (m *Manager) GenerateDomain(ctx context.Context, domain string, force bool)
 	}
 	res, err := m.generate(ctx, mkcert, domain)
 	if err != nil || !res.OK() {
-		return false, &Error{fmt.Sprintf("Failed to generate certificate for %s: %s", domain, failure(res, err))}
+		return false, &Error{i18n.Tf("Failed to generate certificate for %s: %s", domain, failure(res, err))}
 	}
 	return true, nil
 }
@@ -156,7 +154,7 @@ func (m *Manager) GenerateAll(ctx context.Context, domains []string, force, prod
 		return err
 	}
 	if !production {
-		m.Log.Info("Creating SSL certificates for: " + strings.Join(domains, ", "))
+		m.Log.Info(i18n.Tf("Creating SSL certificates for: %s", strings.Join(domains, ", ")))
 		for _, d := range domains {
 			generated, err := m.GenerateDomain(ctx, d, force)
 			if err != nil {
@@ -164,11 +162,11 @@ func (m *Manager) GenerateAll(ctx context.Context, domains []string, force, prod
 			}
 			if !generated {
 				age, _ := m.age(d)
-				m.Log.Info(fmt.Sprintf("Certificate for %s still valid (%d days old), skipping", d,
+				m.Log.Info(i18n.Tf("Certificate for %s still valid (%d days old), skipping", d,
 					int(age/(24*time.Hour))))
 			}
 		}
-		m.Log.Success("SSL certificates generated!")
+		m.Log.Success(i18n.T("SSL certificates generated!"))
 	}
 
 	entries, err := os.ReadDir(m.Dir)

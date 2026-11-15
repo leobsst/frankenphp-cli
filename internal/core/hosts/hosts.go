@@ -10,7 +10,6 @@ package hosts
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"regexp"
 	"runtime"
@@ -18,6 +17,7 @@ import (
 
 	"github.com/leobsst/frankenphp-cli/internal/command"
 	"github.com/leobsst/frankenphp-cli/internal/core/privilege"
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 	"github.com/leobsst/frankenphp-cli/internal/platform"
 )
 
@@ -96,20 +96,20 @@ func (m *Manager) write(ctx context.Context, content string) error {
 		// Windows uses \r\n line endings
 		content = strings.ReplaceAll(content, "\n", "\r\n")
 		if !m.IsAdmin() {
-			return &Error{"Failed to write hosts file. Run as Administrator: " +
-				"FrankenManager needs an Administrator terminal to modify " + m.Path}
+			return &Error{i18n.Tf("Failed to write hosts file. Run as Administrator: "+
+				"FrankenManager needs an Administrator terminal to modify %s", m.Path)}
 		}
 		if err := writeInPlace(m.Path, content); err != nil {
-			return &Error{fmt.Sprintf("Failed to write hosts file. Run as Administrator: %v", err)}
+			return &Error{i18n.Tf("Failed to write hosts file. Run as Administrator: %v", err)}
 		}
 		return nil
 	}
 	res, err := m.Run.Run(ctx, command.Cmd{Name: "sudo", Args: []string{"tee", m.Path}, Stdin: []byte(content)})
 	if err != nil {
-		return &Error{fmt.Sprintf("Failed to write hosts file: %v", err)}
+		return &Error{i18n.Tf("Failed to write hosts file: %v", err)}
 	}
 	if !res.OK() {
-		return &Error{"Failed to write hosts file: " + string(res.Stderr)}
+		return &Error{i18n.Tf("Failed to write hosts file: %s", res.Stderr)}
 	}
 	return nil
 }
@@ -161,7 +161,7 @@ func (m *Manager) AddEntry(ctx context.Context, ip, hostname string) (bool, erro
 		return false, err
 	}
 	if found {
-		m.Log.Info(fmt.Sprintf("%s\t%s already exists", ip, hostname))
+		m.Log.Info(i18n.Tf("%s\t%s already exists", ip, hostname))
 		return false, nil
 	}
 
@@ -169,10 +169,10 @@ func (m *Manager) AddEntry(ctx context.Context, ip, hostname string) (bool, erro
 		if _, err := m.Helper.RunHelper(ctx, "add", ip, hostname); err != nil {
 			return false, nil // the helper failure is silent
 		}
-		m.Log.Success(fmt.Sprintf("Added %s\t%s to hosts file", ip, hostname))
+		m.Log.Success(i18n.Tf("Added %s\t%s to hosts file", ip, hostname))
 		if ip == loopbackV4 {
 			if _, err := m.Helper.RunHelper(ctx, "add", loopbackV6, hostname); err == nil {
-				m.Log.Success(fmt.Sprintf("Added %s\t%s to hosts file", loopbackV6, hostname))
+				m.Log.Success(i18n.Tf("Added %s\t%s to hosts file", loopbackV6, hostname))
 			}
 		}
 		return true, nil
@@ -189,7 +189,7 @@ func (m *Manager) AddEntry(ctx context.Context, ip, hostname string) (bool, erro
 	if err := m.write(ctx, content+entry); err != nil {
 		return false, err
 	}
-	m.Log.Success(fmt.Sprintf("Added %s\t%s to hosts file", ip, hostname))
+	m.Log.Success(i18n.Tf("Added %s\t%s to hosts file", ip, hostname))
 	return true, nil
 }
 
@@ -207,13 +207,13 @@ func (m *Manager) RemoveEntry(ctx context.Context, ip, hostname string) (bool, e
 		return false, err
 	}
 	if !found {
-		m.Log.Info(hostname + " not found in hosts file")
+		m.Log.Info(i18n.Tf("%s not found in hosts file", hostname))
 		return false, nil
 	}
 
 	if m.canUseHelper(ctx) {
 		if _, err := m.Helper.RunHelper(ctx, "remove", ip, hostname); err == nil {
-			m.Log.Success(fmt.Sprintf("Removed %s\t%s from hosts file", ip, hostname))
+			m.Log.Success(i18n.Tf("Removed %s\t%s from hosts file", ip, hostname))
 			if ip == loopbackV4 {
 				_, _ = m.Helper.RunHelper(ctx, "remove", loopbackV6, hostname)
 			}
@@ -239,7 +239,7 @@ func (m *Manager) RemoveEntry(ctx context.Context, ip, hostname string) (bool, e
 	if err := m.write(ctx, strings.Join(kept, "\n")+"\n"); err != nil {
 		return false, err
 	}
-	m.Log.Success("Removed " + hostname + " from hosts file")
+	m.Log.Success(i18n.Tf("Removed %s from hosts file", hostname))
 	return true, nil
 }
 

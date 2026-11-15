@@ -15,7 +15,6 @@ package privilege
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"os/user"
@@ -25,6 +24,7 @@ import (
 	"time"
 
 	"github.com/leobsst/frankenphp-cli/internal/command"
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 	"github.com/leobsst/frankenphp-cli/internal/platform"
 )
 
@@ -139,14 +139,14 @@ func (m *Manager) CanUseHelper(ctx context.Context) bool {
 // output, or an error carrying the helper's message.
 func (m *Manager) RunHelper(ctx context.Context, action, ip, hostname string) (string, error) {
 	if !exists(m.HelperPath) {
-		return "", errors.New("Helper script not installed. Run 'frankenmanager setup' first.") //nolint:staticcheck // user-facing message
+		return "", i18n.Errorf("Helper script not installed. Run 'frankenmanager setup' first.")
 	}
 	ctx, cancel := context.WithTimeout(ctx, helperTimeout)
 	defer cancel()
 	res, err := m.Run.Run(ctx, command.Cmd{Name: "sudo", Args: []string{m.HelperPath, action, ip, hostname}})
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
-		return "", errors.New("Helper script timed out") //nolint:staticcheck // user-facing message
+		return "", i18n.Errorf("Helper script timed out")
 	case err != nil:
 		return "", err
 	case !res.OK():
@@ -170,10 +170,10 @@ func (m *Manager) Setup(ctx context.Context) error {
 
 func (m *Manager) setupUnix(ctx context.Context) error {
 	if !m.IsAdmin() {
-		return &Error{"Setup requires root privileges. Please run with: sudo frankenmanager setup"}
+		return &Error{i18n.T("Setup requires root privileges. Please run with: sudo frankenmanager setup")}
 	}
 
-	m.Log.Info("Creating helper script at " + m.HelperPath)
+	m.Log.Info(i18n.Tf("Creating helper script at %s", m.HelperPath))
 	if err := os.WriteFile(m.HelperPath, []byte(HelperScript(m.HostsPath)), 0o755); err != nil {
 		return err
 	}
@@ -189,11 +189,11 @@ func (m *Manager) setupUnix(ctx context.Context) error {
 		return err
 	}
 	if err := m.installSudoers(ctx, SudoersContent(username, m.HelperPath, m.SudoersPath)); err != nil {
-		return &Error{fmt.Sprintf("Failed to configure sudoers: %v", err)}
+		return &Error{i18n.Tf("Failed to configure sudoers: %v", err)}
 	}
 
-	m.Log.Success("Privilege configuration complete!")
-	m.Log.Info("You can now run frankenmanager start/stop without sudo prompts")
+	m.Log.Success(i18n.T("Privilege configuration complete!"))
+	m.Log.Info(i18n.T("You can now run frankenmanager start/stop without sudo prompts"))
 	return nil
 }
 
@@ -212,9 +212,9 @@ func (m *Manager) installSudoers(ctx context.Context, content string) error {
 		return err
 	}
 	if !res.OK() {
-		return &Error{"Invalid sudoers syntax: " + string(res.Stderr)}
+		return &Error{i18n.Tf("Invalid sudoers syntax: %s", res.Stderr)}
 	}
-	m.Log.Info("Installing sudoers configuration at " + m.SudoersPath)
+	m.Log.Info(i18n.Tf("Installing sudoers configuration at %s", m.SudoersPath))
 	if err := os.Chmod(tmp, 0o440); err != nil {
 		return err
 	}
@@ -239,21 +239,21 @@ func sudoUser() (string, error) {
 func (m *Manager) setupWindows() error {
 	if !m.IsAdmin() {
 		m.administratorHelp("setup")
-		return &Error{"Administrator privileges required"}
+		return &Error{i18n.T("Administrator privileges required")}
 	}
 	m.removeWindowsHelper()
-	m.Log.Success("The hosts file can be modified from this Administrator terminal.")
-	m.Log.Info("Run FrankenManager from an Administrator terminal whenever it changes the hosts file")
-	m.Log.Info("(start, stop, add-host, add-alias, remove-host, restore-host).")
+	m.Log.Success(i18n.T("The hosts file can be modified from this Administrator terminal."))
+	m.Log.Info(i18n.T("Run FrankenManager from an Administrator terminal whenever it changes the hosts file"))
+	m.Log.Info(i18n.T("(start, stop, add-host, add-alias, remove-host, restore-host)."))
 	return nil
 }
 
 func (m *Manager) administratorHelp(cmd string) {
-	m.Log.Error("Setup requires Administrator privileges.")
-	m.Log.Info("Please run this command in an Administrator terminal:")
-	m.Log.Info("  1. Right-click on PowerShell or Command Prompt")
-	m.Log.Info("  2. Select 'Run as administrator'")
-	m.Log.Info("  3. Run: frankenmanager " + cmd)
+	m.Log.Error(i18n.T("Setup requires Administrator privileges."))
+	m.Log.Info(i18n.T("Please run this command in an Administrator terminal:"))
+	m.Log.Info(i18n.T("  1. Right-click on PowerShell or Command Prompt"))
+	m.Log.Info(i18n.T("  2. Select 'Run as administrator'"))
+	m.Log.Info(i18n.Tf("  3. Run: frankenmanager %s", cmd))
 }
 
 // removeWindowsHelper deletes the PowerShell helper of earlier releases and
@@ -262,9 +262,9 @@ func (m *Manager) removeWindowsHelper() bool {
 	if !exists(m.WindowsHelperPath) {
 		return false
 	}
-	m.Log.Info("Removing helper script: " + m.WindowsHelperPath)
+	m.Log.Info(i18n.Tf("Removing helper script: %s", m.WindowsHelperPath))
 	if err := os.Remove(m.WindowsHelperPath); err != nil {
-		m.Log.Warning(fmt.Sprintf("Could not remove %s: %v", m.WindowsHelperPath, err))
+		m.Log.Warning(i18n.Tf("Could not remove %s: %v", m.WindowsHelperPath, err))
 		return false
 	}
 	_ = os.Remove(filepath.Dir(m.WindowsHelperPath)) // only when empty
@@ -275,39 +275,39 @@ func (m *Manager) removeWindowsHelper() bool {
 func (m *Manager) Remove() error {
 	if m.windows() {
 		if m.removeWindowsHelper() {
-			m.Log.Success("Helper script removed")
+			m.Log.Success(i18n.T("Helper script removed"))
 		} else {
-			m.Log.Info("No helper script found")
+			m.Log.Info(i18n.T("No helper script found"))
 		}
 		m.Log.Info("")
-		m.Log.Info("To restore default hosts file permissions:")
-		m.Log.Info("  1. Right-click on " + m.HostsPath)
-		m.Log.Info("  2. Go to Properties -> Security")
-		m.Log.Info("  3. Remove any custom user permissions")
+		m.Log.Info(i18n.T("To restore default hosts file permissions:"))
+		m.Log.Info(i18n.Tf("  1. Right-click on %s", m.HostsPath))
+		m.Log.Info(i18n.T("  2. Go to Properties -> Security"))
+		m.Log.Info(i18n.T("  3. Remove any custom user permissions"))
 		return nil
 	}
 
 	if !m.IsAdmin() {
-		return &Error{"Removal requires root privileges. Please run with: sudo frankenmanager setup --remove"}
+		return &Error{i18n.T("Removal requires root privileges. Please run with: sudo frankenmanager setup --remove")}
 	}
 	removed := false
-	for _, f := range []struct{ label, path string }{
-		{"helper script", m.HelperPath},
-		{"sudoers configuration", m.SudoersPath},
+	for _, f := range []struct{ msg, path string }{
+		{i18n.Tf("Removing helper script: %s", m.HelperPath), m.HelperPath},
+		{i18n.Tf("Removing sudoers configuration: %s", m.SudoersPath), m.SudoersPath},
 	} {
 		if !exists(f.path) {
 			continue
 		}
-		m.Log.Info(fmt.Sprintf("Removing %s: %s", f.label, f.path))
+		m.Log.Info(f.msg)
 		if err := os.Remove(f.path); err != nil {
 			return err
 		}
 		removed = true
 	}
 	if removed {
-		m.Log.Success("Privilege configuration removed")
+		m.Log.Success(i18n.T("Privilege configuration removed"))
 	} else {
-		m.Log.Info("No privilege configuration found")
+		m.Log.Info(i18n.T("No privilege configuration found"))
 	}
 	return nil
 }
