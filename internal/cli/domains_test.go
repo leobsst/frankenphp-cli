@@ -211,7 +211,7 @@ func TestRemoveHost(t *testing.T) {
 	mustContain(t, out,
 		"WARNING: Domain 'ghost.test' is not configured, skipping.\n",
 		"-- Domain 'app.test' is duplicated in input, skipping.\n",
-		"-- Also removing alternate host(s) pointing to removed domain(s): alt.test\n",
+		"-- Also removing alternate host(s) pointing to removed host(s): alt.test\n",
 		"-- Stopping frankenphp-8.4 (no more domains)...\n",
 		"-- \nCaddyfiles archived to: ",
 		"-- Removed alternate hosts:\n--   - alt.test\n",

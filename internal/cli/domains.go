@@ -390,17 +390,19 @@ func newAddAliasCmd(a *app) *cobra.Command {
 	var forceSSL bool
 	cmd := &cobra.Command{
 		Use:   "add-alias TARGET ALIASES",
-		Short: "Add alternate host(s) that reverse-proxy to an already-configured domain.",
-		Long: `Add alternate host(s) that reverse-proxy to an already-configured domain.
+		Short: "Add alternate host(s) that reverse-proxy to an already-configured domain or proxy host.",
+		Long: `Add alternate host(s) that reverse-proxy to an already-configured domain or proxy host.
 
 This is like 'add-host', but instead of creating a new site with its own
 Caddyfile and PHP container, each alternate host gets its own SSL
 certificate and hosts entry and is added to the reverse proxy's Caddyfile
-only, forwarding to the target domain's existing site.
+only, forwarding to the target's existing site: the PHP site of a domain,
+or the upstream of a proxy host.
 
 Examples:
     frankenmanager add-alias "myapp.test" "myapp-alt.test"
-    frankenmanager add-alias "myapp.test" "alt1.test alt2.test" --force-ssl`,
+    frankenmanager add-alias "myapp.test" "alt1.test alt2.test" --force-ssl
+    frankenmanager add-alias "proxied.test" "proxied-alt.test"`,
 		Args: rangeArgs(2, "TARGET", "ALIASES"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return a.addAlias(cmd.Context(), args[0], strings.Fields(args[1]), forceSSL)
@@ -410,7 +412,8 @@ Examples:
 	return cmd
 }
 
-// addAlias adds alternate hosts forwarding to an existing domain.
+// addAlias adds alternate hosts forwarding to an existing domain or proxy
+// host.
 func (a *app) addAlias(ctx context.Context, target string, aliases []string, forceSSL bool) (err error) {
 	r, err := a.openRunning(ctx, "The server is not running. Use 'start' command instead.")
 	if err != nil {
@@ -422,12 +425,27 @@ func (a *app) addAlias(ctx context.Context, target string, aliases []string, for
 	if err != nil {
 		return err
 	}
-	if !slices.Contains(domains, target) {
-		return &validate.Error{Msg: fmt.Sprintf("Domain '%s' is not configured. Add it first with 'add-host'.", target)}
-	}
-	php, _, err := r.s.DomainPHPVersion(target)
+	proxies, err := r.s.Proxies()
 	if err != nil {
 		return err
+	}
+	isProxy := func(d string) bool {
+		return slices.ContainsFunc(proxies, func(p store.Proxy) bool { return p.Domain == d })
+	}
+	// serves is what the aliases forward to, for the summary
+	var serves string
+	if slices.Contains(domains, target) {
+		php, _, err := r.s.DomainPHPVersion(target)
+		if err != nil {
+			return err
+		}
+		serves = "PHP " + php
+	} else if upstream, ok, err := r.s.ProxyTarget(target); err != nil {
+		return err
+	} else if ok {
+		serves = "proxy " + upstream
+	} else {
+		return &validate.Error{Msg: fmt.Sprintf("Domain '%s' is not configured. Add it first with 'add-host'.", target)}
 	}
 	existing, err := r.s.Aliases()
 	if err != nil {
@@ -445,7 +463,7 @@ func (a *app) addAlias(ctx context.Context, target string, aliases []string, for
 		switch {
 		case domain == target:
 			a.log.Info(fmt.Sprintf("'%s' is the target domain itself, skipping.", domain))
-		case slices.Contains(domains, domain):
+		case slices.Contains(domains, domain), isProxy(domain):
 			a.log.Info(fmt.Sprintf("Domain '%s' is already a registered host, skipping.", domain))
 		case isAlias(domain):
 			a.log.Info(fmt.Sprintf("'%s' is already configured as an alias, skipping.", domain))
@@ -497,7 +515,7 @@ func (a *app) addAlias(ctx context.Context, target string, aliases []string, for
 	a.log.Success("Alternate host(s) added successfully!")
 	a.log.Info("Added aliases:")
 	for _, domain := range added {
-		a.log.Info(fmt.Sprintf("  - https://%s -> %s (PHP %s)", domain, target, php))
+		a.log.Info(fmt.Sprintf("  - https://%s -> %s (%s)", domain, target, serves))
 	}
 	return nil
 }

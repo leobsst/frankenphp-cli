@@ -100,6 +100,26 @@ func TestWriteMainSkipsRegisteredWebsocketHost(t *testing.T) {
 	}
 }
 
+// An alias of a proxy host forwards to its upstream with the target as Host.
+func TestWriteMainProxyAlias(t *testing.T) {
+	caddyDir := t.TempDir()
+	err := WriteMain(caddyDir, Main{
+		Aliases: []store.AliasEntry{{Alias: "alt.test", Upstream: "127.0.0.1:8006", Target: "api.test"}},
+		Proxies: []store.Proxy{{Domain: "api.test", Target: "127.0.0.1:8006"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "alt.test {\n" +
+		"\ttls /certs/alt.test.pem /certs/alt.test-key.pem\n" +
+		"\treverse_proxy 127.0.0.1:8006 {\n" +
+		"\t\theader_up Host \"api.test\"\n" +
+		"\t}\n"
+	if got := read(t, filepath.Join(caddyDir, MainName)); !strings.Contains(got, want) {
+		t.Errorf("proxy alias block missing, want:\n%s\ngot:\n%s", want, got)
+	}
+}
+
 // https://localhost forwards to the database admin UI, unless there is none
 // or the user registered localhost.
 func TestWriteMainLocalhostBlock(t *testing.T) {

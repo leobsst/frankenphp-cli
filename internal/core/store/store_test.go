@@ -93,15 +93,19 @@ func TestAliases(t *testing.T) {
 	check(t, s.AddDomains([]string{"app.test", "api.test"}, "8.4"))
 	check(t, s.AddAliases([]string{"www.app.test", "app.local"}, "app.test"))
 	check(t, s.AddAliases([]string{"docs.api.test"}, "api.test"))
+	check(t, s.AddProxies([]string{"proxied.test"}, "127.0.0.1:8006"))
+	check(t, s.AddAliases([]string{"alt.proxied.test"}, "proxied.test"))
 	check(t, s.AddAliases([]string{"orphan.test"}, "gone.test"))
 	check(t, s.AddAliases([]string{"app.local"}, "api.test")) // ignored, already an alias
 
-	// Aliases of a missing target are skipped; versions follow the target
+	// Aliases of a missing target are skipped; versions and upstreams follow
+	// the target
 	_ = must(s.UpdateDomainPHPVersion("app.test", "8.5"))
 	wantEntries := []AliasEntry{
-		{"www.app.test", "8.5", "app.test"},
-		{"app.local", "8.5", "app.test"},
-		{"docs.api.test", "8.4", "api.test"},
+		{Alias: "www.app.test", PHPVersion: "8.5", Target: "app.test"},
+		{Alias: "app.local", PHPVersion: "8.5", Target: "app.test"},
+		{Alias: "docs.api.test", PHPVersion: "8.4", Target: "api.test"},
+		{Alias: "alt.proxied.test", Upstream: "127.0.0.1:8006", Target: "proxied.test"},
 	}
 	if got := must(s.AliasEntries()); !reflect.DeepEqual(got, wantEntries) {
 		t.Errorf("AliasEntries() = %v, want %v", got, wantEntries)

@@ -165,17 +165,18 @@ func (a *app) removeHost(ctx context.Context, names []string) (err error) {
 		if err := r.s.RemoveDomains(domains); err != nil {
 			return err
 		}
-		// The requested aliases, then those of the removed domains
+		// The requested aliases, then those of the removed domains and
+		// proxy hosts
 		if err := r.s.RemoveAliases(aliases); err != nil {
 			return err
 		}
-		cascaded, err := r.s.RemoveAliasesForTargets(domains)
+		cascaded, err := r.s.RemoveAliasesForTargets(append(slices.Clone(domains), proxies...))
 		if err != nil {
 			return err
 		}
 		removedAliases = append(slices.Clone(aliases), cascaded...)
 		if len(cascaded) > 0 {
-			a.log.Info("Also removing alternate host(s) pointing to removed domain(s): " + strings.Join(cascaded, ", "))
+			a.log.Info("Also removing alternate host(s) pointing to removed host(s): " + strings.Join(cascaded, ", "))
 		}
 		for _, al := range removedAliases {
 			removeEntry(al)

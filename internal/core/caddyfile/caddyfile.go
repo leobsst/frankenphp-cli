@@ -334,7 +334,7 @@ func exists(p string) bool {
 // Main is what the main Caddyfile serves.
 type Main struct {
 	Domains []store.Domain     // served by their PHP container
-	Aliases []store.AliasEntry // served by their target's container
+	Aliases []store.AliasEntry // served by their target's container or upstream
 	Proxies []store.Proxy      // forwarded to a raw upstream
 	// DBAdminTarget is the database admin UI https://localhost forwards
 	// to, "" for none (see env.DBAdminTarget).
@@ -366,11 +366,17 @@ func WriteMain(caddyDir string, m Main) error {
 		registered[d.Name] = true
 	}
 	for _, a := range m.Aliases {
-		block, err := proxyBlock(a.Alias, a.PHPVersion, a.Target)
-		if err != nil {
-			return err
+		if a.Upstream != "" {
+			// Alias of a proxy host: its upstream, seeing the target host
+			lines = append(lines, rawProxyBlock(a.Alias, a.Upstream,
+				"\t\theader_up Host \""+a.Target+"\"")...)
+		} else {
+			block, err := proxyBlock(a.Alias, a.PHPVersion, a.Target)
+			if err != nil {
+				return err
+			}
+			lines = append(lines, block...)
 		}
-		lines = append(lines, block...)
 		registered[a.Alias] = true
 	}
 	for _, p := range m.Proxies {
@@ -406,9 +412,14 @@ func proxyBlock(domain, phpVersion, upstreamHost string) ([]string, error) {
 	), nil
 }
 
-// rawProxyBlock forwards domain to target as is (host:port or URL).
-func rawProxyBlock(domain, target string) []string {
-	return siteBlock(domain, "\treverse_proxy "+target)
+// rawProxyBlock forwards domain to target as is (host:port or URL), with
+// the given reverse_proxy subdirectives if any.
+func rawProxyBlock(domain, target string, directives ...string) []string {
+	if len(directives) == 0 {
+		return siteBlock(domain, "\treverse_proxy "+target)
+	}
+	proxy := append([]string{"\treverse_proxy " + target + " {"}, directives...)
+	return siteBlock(domain, append(proxy, "\t}")...)
 }
 
 func siteBlock(domain string, proxy ...string) []string {

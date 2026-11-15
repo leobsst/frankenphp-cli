@@ -20,17 +20,21 @@ type Domain struct {
 	PHPVersion string
 }
 
-// Alias is an alternate host reverse-proxying to an existing domain.
+// Alias is an alternate host reverse-proxying to an existing domain or
+// proxy host.
 type Alias struct {
 	Alias  string
 	Target string
 }
 
-// AliasEntry is an alias with the PHP version of its target, resolved when
-// read: an alias follows its target's version changes.
+// AliasEntry is an alias with what its target serves, resolved when read:
+// an alias follows its target's PHP version or upstream changes. Exactly
+// one of PHPVersion (target is a domain) and Upstream (target is a proxy
+// host) is set.
 type AliasEntry struct {
 	Alias      string
 	PHPVersion string
+	Upstream   string
 	Target     string
 }
 
@@ -308,16 +312,19 @@ func (s *Store) Aliases() ([]Alias, error) {
 	})
 }
 
-// AliasEntries returns the aliases whose target domain exists, with its PHP
-// version, in insertion order. Aliases of a missing target are skipped.
+// AliasEntries returns the aliases whose target exists, with the PHP
+// version of a target domain or the upstream of a target proxy host, in
+// insertion order. Aliases of a missing target are skipped.
 func (s *Store) AliasEntries() ([]AliasEntry, error) {
-	const q = `SELECT a.alias_domain, d.php_version, a.target_domain
+	const q = `SELECT a.alias_domain, COALESCE(d.php_version, ''), COALESCE(p.target, ''), a.target_domain
 		FROM aliases a
-		JOIN domains d ON d.domain = a.target_domain
+		LEFT JOIN domains d ON d.domain = a.target_domain
+		LEFT JOIN proxies p ON p.domain = a.target_domain
+		WHERE d.domain IS NOT NULL OR p.domain IS NOT NULL
 		ORDER BY a.id`
 	return queryList(s.db, q, func(r *sql.Rows) (AliasEntry, error) {
 		var a AliasEntry
-		return a, r.Scan(&a.Alias, &a.PHPVersion, &a.Target)
+		return a, r.Scan(&a.Alias, &a.PHPVersion, &a.Upstream, &a.Target)
 	})
 }
 
@@ -336,8 +343,8 @@ func (s *Store) RemoveAliases(aliases []string) error {
 	return s.execEach("DELETE FROM aliases WHERE alias_domain = ?", aliases)
 }
 
-// RemoveAliasesForTargets removes the aliases of the given domains and
-// returns them, in insertion order (cascade of `remove-host`).
+// RemoveAliasesForTargets removes the aliases of the given domains or proxy
+// hosts and returns them, in insertion order (cascade of `remove-host`).
 func (s *Store) RemoveAliasesForTargets(targets []string) ([]string, error) {
 	if len(targets) == 0 {
 		return nil, nil
@@ -383,7 +390,8 @@ func (s *Store) AddProxies(domains []string, target string) error {
 	return s.execEach("INSERT OR IGNORE INTO proxies (domain, target) VALUES (?, ?)", domains, target)
 }
 
-// RemoveProxies removes proxy hosts.
+// RemoveProxies removes proxy hosts. Their aliases are left (see
+// RemoveAliasesForTargets).
 func (s *Store) RemoveProxies(domains []string) error {
 	return s.execEach("DELETE FROM proxies WHERE domain = ?", domains)
 }
