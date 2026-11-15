@@ -123,7 +123,7 @@ func TestAliases(t *testing.T) {
 	}
 
 	check(t, s.RemoveAliases([]string{"orphan.test"}))
-	want := []Alias{{"docs.api.test", "api.test"}}
+	want := []Alias{{"docs.api.test", "api.test"}, {"alt.proxied.test", "proxied.test"}}
 	if got := must(s.Aliases()); !reflect.DeepEqual(got, want) {
 		t.Errorf("Aliases() = %v, want %v", got, want)
 	}
