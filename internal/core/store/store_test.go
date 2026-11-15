@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 )
 
 func openTemp(t *testing.T) (*Store, string) {
@@ -161,13 +162,49 @@ func TestSettingsAndReset(t *testing.T) {
 	check(t, s.AddDomains([]string{"a.test"}, "8.3"))
 	check(t, s.AddAliases([]string{"b.test"}, "a.test"))
 	check(t, s.AddProxies([]string{"c.test"}, "127.0.0.1:1"))
+	check(t, s.RecordDNSClients(map[string]DNSSighting{"192.168.1.42": {Queries: 1, Last: time.Now()}}))
 	check(t, s.Reset())
 
-	if d, a, p := must(s.Domains()), must(s.Aliases()), must(s.Proxies()); len(d)+len(a)+len(p) != 0 {
-		t.Errorf("after Reset: %v %v %v", d, a, p)
+	if d, a, p, c := must(s.Domains()), must(s.Aliases()), must(s.Proxies()), must(s.DNSClients()); len(d)+len(a)+len(p)+len(c) != 0 {
+		t.Errorf("after Reset: %v %v %v %v", d, a, p, c)
 	}
 	// `reset --db` keeps the settings
 	if v, _, _ := s.Setting(SettingProjectPath); v != "/b" {
 		t.Errorf("setting lost by Reset: %q", v)
+	}
+}
+
+func TestDNSClients(t *testing.T) {
+	s, _ := openTemp(t)
+	t0 := time.Unix(1_800_000_000, 0)
+
+	check(t, s.RecordDNSClients(map[string]DNSSighting{
+		"192.168.1.42": {Queries: 3, Last: t0},
+		"192.168.1.50": {Queries: 1, Last: t0.Add(-time.Hour)},
+	}))
+	// Later sightings add up and move last_seen, first_seen stays
+	check(t, s.RecordDNSClients(map[string]DNSSighting{"192.168.1.42": {Queries: 1, Last: t0.Add(2 * time.Minute)}}))
+	check(t, s.SetDNSClientIdentity("192.168.1.42", "iphone.home", "aa:bb:cc:dd:ee:ff", t0))
+
+	want := []DNSClient{
+		{IP: "192.168.1.42", Name: "iphone.home", MAC: "aa:bb:cc:dd:ee:ff", FirstSeen: t0,
+			LastSeen: t0.Add(2 * time.Minute), Queries: 4, IdentityAt: t0},
+		{IP: "192.168.1.50", FirstSeen: t0.Add(-time.Hour), LastSeen: t0.Add(-time.Hour), Queries: 1},
+	}
+	if got := must(s.DNSClients()); !reflect.DeepEqual(got, want) {
+		t.Errorf("DNSClients() =\n%+v\nwant\n%+v", got, want)
+	}
+
+	// An older sighting never moves last_seen back
+	check(t, s.RecordDNSClients(map[string]DNSSighting{"192.168.1.42": {Queries: 1, Last: t0}}))
+	if got := must(s.DNSClients())[0]; !got.LastSeen.Equal(t0.Add(2*time.Minute)) || got.Queries != 5 {
+		t.Errorf("after an older sighting: %+v", got)
+	}
+
+	if n := must(s.PruneDNSClients(t0.Add(-30 * time.Minute))); n != 1 {
+		t.Errorf("pruned %d, want 1", n)
+	}
+	if got := must(s.DNSClients()); len(got) != 1 || got[0].IP != "192.168.1.42" {
+		t.Errorf("after prune: %+v", got)
 	}
 }

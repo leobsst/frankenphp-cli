@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	_ "modernc.org/sqlite" // pure Go driver (CGO_ENABLED=0), registered as "sqlite"
 )
@@ -44,6 +45,23 @@ type Proxy struct {
 	Target string
 }
 
+// DNSClient is a device that queried the LAN DNS server.
+type DNSClient struct {
+	IP         string    `json:"ip"`
+	Name       string    `json:"name"` // best effort, "" when unknown
+	MAC        string    `json:"mac"`  // best effort, "" when unknown
+	FirstSeen  time.Time `json:"first_seen"`
+	LastSeen   time.Time `json:"last_seen"`
+	Queries    int64     `json:"queries"`
+	IdentityAt time.Time `json:"-"` // last name/MAC lookup, zero when never
+}
+
+// DNSSighting is what the server saw of a client since the last write.
+type DNSSighting struct {
+	Queries int64
+	Last    time.Time
+}
+
 // SettingProjectPath stores the projects root given to `start`.
 const SettingProjectPath = "project_path"
 
@@ -74,6 +92,17 @@ var schema = []string{
 		domain TEXT NOT NULL UNIQUE,
 		target TEXT NOT NULL,
 		added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	)`,
+	// The devices of the LAN DNS server, times in Unix seconds. Unknown to
+	// earlier releases, which leave it alone
+	`CREATE TABLE IF NOT EXISTS dns_clients (
+		ip TEXT PRIMARY KEY,
+		name TEXT NOT NULL DEFAULT '',
+		mac TEXT NOT NULL DEFAULT '',
+		first_seen INTEGER NOT NULL,
+		last_seen INTEGER NOT NULL,
+		queries INTEGER NOT NULL DEFAULT 0,
+		identity_at INTEGER NOT NULL DEFAULT 0
 	)`,
 	`CREATE TABLE IF NOT EXISTS settings (
 		key TEXT PRIMARY KEY,
@@ -396,11 +425,65 @@ func (s *Store) RemoveProxies(domains []string) error {
 	return s.execEach("DELETE FROM proxies WHERE domain = ?", domains)
 }
 
-// Reset empties domains, aliases and proxies (`reset --db`). Settings are
-// kept.
+// --- DNS clients -------------------------------------------------------------
+
+// RecordDNSClients adds the sightings to their clients, creating the new
+// ones, in one transaction.
+func (s *Store) RecordDNSClients(sightings map[string]DNSSighting) error {
+	if len(sightings) == 0 {
+		return nil
+	}
+	return s.inTx(func(tx *sql.Tx) error {
+		for ip, v := range sightings {
+			last := v.Last.Unix()
+			if _, err := tx.Exec(`INSERT INTO dns_clients (ip, first_seen, last_seen, queries) VALUES (?, ?, ?, ?)
+				ON CONFLICT(ip) DO UPDATE SET last_seen = MAX(last_seen, excluded.last_seen),
+					queries = queries + excluded.queries`, ip, last, last, v.Queries); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// DNSClients returns the clients, the most recently seen first.
+func (s *Store) DNSClients() ([]DNSClient, error) {
+	const q = `SELECT ip, name, mac, first_seen, last_seen, queries, identity_at
+		FROM dns_clients ORDER BY last_seen DESC, ip`
+	return queryList(s.db, q, func(r *sql.Rows) (DNSClient, error) {
+		var c DNSClient
+		var first, last, identity int64
+		err := r.Scan(&c.IP, &c.Name, &c.MAC, &first, &last, &c.Queries, &identity)
+		c.FirstSeen, c.LastSeen = time.Unix(first, 0), time.Unix(last, 0)
+		if identity != 0 {
+			c.IdentityAt = time.Unix(identity, 0)
+		}
+		return c, err
+	})
+}
+
+// SetDNSClientIdentity stores the name and MAC found for a client at at.
+func (s *Store) SetDNSClientIdentity(ip, name, mac string, at time.Time) error {
+	_, err := s.db.Exec("UPDATE dns_clients SET name = ?, mac = ?, identity_at = ? WHERE ip = ?",
+		name, mac, at.Unix(), ip)
+	return err
+}
+
+// PruneDNSClients removes the clients last seen before before and returns
+// how many.
+func (s *Store) PruneDNSClients(before time.Time) (int64, error) {
+	res, err := s.db.Exec("DELETE FROM dns_clients WHERE last_seen < ?", before.Unix())
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+// Reset empties domains, aliases, proxies and DNS clients (`reset --db`).
+// Settings are kept.
 func (s *Store) Reset() error {
 	return s.inTx(func(tx *sql.Tx) error {
-		for _, table := range []string{"domains", "aliases", "proxies"} {
+		for _, table := range []string{"domains", "aliases", "proxies", "dns_clients"} {
 			if _, err := tx.Exec("DELETE FROM " + table); err != nil {
 				return err
 			}
