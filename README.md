@@ -31,6 +31,7 @@
 - Optional Redis cache server, turned on and off live (`service enable redis`)
 - Optional Soketi WebSocket server (`service enable soketi`), served over TLS at `wss://ws.frankenmanager.test`
 - Short `fkm` alias of the command (configurable, `frankenmanager` always works)
+- Messages in English or French, following the system language or forced with `CLI_LANGUAGE`
 - phpMyAdmin / pgAdmin for database management, served at `https://localhost`
 - Automatic `/etc/hosts` management (passwordless after setup)
 - Optional LAN DNS server so other devices reach your domains without editing their hosts file
@@ -1006,7 +1007,7 @@ Names are case-insensitive and values are checked (`true`/`false`, ports, PHP ve
 |---------|----------|--------------|
 | live | `REDIS_ENABLED`, `DNS_SERVER`, `SOKETI_ENABLED` | The service starts or stops at once (same as `service enable\|disable`) |
 | immediate | `CLI_ALIAS` | The alias is replaced at once |
-| next command | `DEFAULT_PHP_VERSION`, `DEFAULT_PROJECT_PATH` | Read by the next command |
+| next command | `CLI_LANGUAGE`, `DEFAULT_PHP_VERSION`, `DEFAULT_PROJECT_PATH` | Read by the next command |
 | `restart --dns` | `DNS_IP`, `DNS_LISTEN_IP`, `DNS_PORT`, `DNS_UPSTREAM` | Refreshes the LAN DNS server |
 | `restart --database` | `MARIADB_ROOT_PASSWORD`, `MYSQL_ROOT_PASSWORD` | Syncs the root passwords |
 | `restart --build` | `PHP_IMAGE_DISTRO`, `INSTALL_PDFTK`, `EXTRA_*_PACKAGES*`, `WWWGROUP` | Rebuilds the PHP images |
@@ -1026,6 +1027,7 @@ frankenmanager completion powershell >> $PROFILE
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `CLI_ALIAS` | `fkm` | Short alias of the command, see [CLI alias](#cli-alias) (empty: none) |
+| `CLI_LANGUAGE` | `auto` | Language of the messages: `auto`, `en` or `fr`, see [Language](#language) |
 | `APP_ENV` | `dev` | `dev` for local development (always the case on a workstation), `prod`/`production` only to run FrankenManager on a public/cloud server, see [Production Mode](#production-mode) |
 | `DEFAULT_PHP_VERSION` | `8.3` | Default PHP version for new domains (`8.2` (deprecated), `8.3`, `8.4`, `8.5`) |
 | `UID` | (current user) | System user ID for file ownership |
@@ -1103,6 +1105,19 @@ frankenmanager configuration reset CLI_ALIAS    # Back to fkm
 
 An existing file of that name that is not a FrankenManager alias is never replaced: the command warns instead. When the directory is not writable, it prints the command to create the alias by hand (e.g. `sudo ln -s frankenmanager /usr/local/bin/fkm`). If another `fkm` comes first in your `PATH`, the command warns that `fkm` runs the other program. The default is `fkm` rather than `fm`, which macOS already ships as `/usr/bin/fm`.
 
+### Language
+
+The messages, the help and the errors are in English or French. By default (`auto`) FrankenManager follows the system language: `LC_ALL`, `LC_MESSAGES` or `LANG`, otherwise the macOS or Windows display language; any language other than French gives English.
+
+```bash
+frankenmanager configuration set CLI_LANGUAGE fr     # Always French
+frankenmanager configuration set CLI_LANGUAGE en     # Always English
+frankenmanager configuration reset CLI_LANGUAGE      # Back to the system language
+FRANKENMANAGER_LANG=en frankenmanager status         # This command only, e.g. in a script
+```
+
+`FRANKENMANAGER_LANG` wins over the setting: scripts that read the output can set it to `en`. The command names, options, setting names and exit codes are the same in every language.
+
 ### Databases
 
 Enable one or more engines with `DB_ENGINES` (e.g. `DB_ENGINES=mariadb,mysql,postgresql`). Their root passwords are generated on the first start and stored in the configuration (`db.sqlite` of the data directory):
@@ -1146,6 +1161,7 @@ frankenphp-cli/
 ├── cmd/
 │   ├── frankenmanager/         The CLI
 │   ├── frankenmanager-agent/   Executable of FrankenManager.app (macOS)
+│   ├── i18ncheck/              Checks the translations against the code
 │   └── release/                Builds the release archives
 ├── internal/
 │   ├── cli/                    Commands (cobra)
@@ -1172,6 +1188,7 @@ frankenphp-cli/
 │   │   ├── store/              SQLite state (db.sqlite)
 │   │   ├── updater/            Self-update
 │   │   └── validate/           Input validation
+│   ├── i18n/                   Translations: language selection, locales/<lang>/*.json
 │   ├── platform/               OS-specific code (paths, elevation, processes)
 │   ├── release/                Release archives and checksums
 │   └── ui/                     Log lines and tables
@@ -1231,6 +1248,16 @@ The tests never reach the network, Docker or your real data directory: external 
 make lint     # golangci-lint, the version of the CI (fetched by go run)
 make hooks    # once per clone: lint the changed Go code before each commit
 ```
+
+### Translations
+
+The English text in the code is the message ID: it goes through `internal/i18n` (`i18n.T`, `i18n.Tf`, `i18n.Tn`, `i18n.Errorf`...), and its translations live in `internal/i18n/locales/<lang>/*.json` (English text → translation). A message without translation shows in English.
+
+```bash
+make i18n     # every message translated, no stale translation, same printf verbs
+```
+
+The CI and the pre-commit hook run it. To add a language, add a `locales/<lang>/` directory: it becomes a value of `CLI_LANGUAGE`.
 
 ### Release archives
 

@@ -174,6 +174,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Color-coded console output and tables, plain when the output is not a terminal
 - Detailed error messages and troubleshooting hints
 - Comprehensive help system for all commands
+- Messages, help and errors in English or French: the system language by default (`LC_ALL`, `LC_MESSAGES`, `LANG`, then the macOS or Windows display language), forced with the `CLI_LANGUAGE` setting (`auto`, `en`, `fr`) or, for one command, the `FRANKENMANAGER_LANG` environment variable
+  - `make i18n` (`cmd/i18ncheck`, run by the CI and the pre-commit hook) checks that every message is translated, that no translation is stale and that both sides use the same printf verbs
 - `--verbose` global option: shows the `docker build` logs whenever a command builds a PHP image
 - Input validation for domain names and paths
 - Platform-specific path handling
