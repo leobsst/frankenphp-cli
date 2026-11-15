@@ -194,6 +194,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Distribution
 - Release archives for 7 targets (`frankenmanager-<platform>.tar.gz`), each holding a `frankenmanager/` directory with the executable (plus `FrankenManager.app` on macOS), bare executables, and `SHA256SUMS.txt`
+- Every release bundle carries the project `LICENSE` and a `THIRD_PARTY_NOTICES.txt` gathering the license, `NOTICE` and `PATENTS` files of the Go modules compiled into it for that platform, plus the Go license; the release fails when a module has no license file
 - macOS executables and app signed with a Developer ID and notarized
 - `install.ps1` for Windows: installs `frankenmanager.exe` in `%LOCALAPPDATA%\Programs\FrankenManager` without Administrator rights, adds it to the user `PATH`, and checks the archive against `SHA256SUMS.txt`
 - `install.sh` for macOS and Linux: installs in `/usr/local/lib/frankenmanager` with a `/usr/local/bin/frankenmanager` link and the `/usr/local/bin/fkm` alias, picks the arm64 build on Apple Silicon even from a Rosetta shell, and checks the archive against `SHA256SUMS.txt`

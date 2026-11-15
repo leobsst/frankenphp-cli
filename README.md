@@ -1373,3 +1373,5 @@ rm -rf ~/.frankenmanager
 ## License
 
 Distributed under the MIT License. See [LICENSE](LICENSE) for details.
+
+FrankenManager is built with third-party open source Go modules (CoreDNS, Cobra, SQLite...). Each release archive holds, next to the executable, a `THIRD_PARTY_NOTICES.txt` with their licenses and notices.

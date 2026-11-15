@@ -64,6 +64,12 @@ func fakeBuild(_ context.Context, pkg, out string, t Target, version string) err
 	return os.WriteFile(out, []byte(pkg+" "+t.String()+" "+version), 0o755)
 }
 
+// fakeNotices returns the notices of the listed packages instead of
+// reading the module cache.
+func fakeNotices(_ context.Context, t Target, pkgs ...string) ([]byte, []byte, error) {
+	return []byte("license"), []byte(t.String() + " " + strings.Join(pkgs, ",")), nil
+}
+
 func entries(t *testing.T, archive string) []*tar.Header {
 	t.Helper()
 	f, err := os.Open(archive)
@@ -93,7 +99,7 @@ func TestStageAndPack(t *testing.T) {
 	dir := t.TempDir()
 	mtime := time.Unix(1_800_000_000, 0).UTC()
 	for _, target := range []Target{{GOOS: "darwin", GOARCH: "arm64"}, {GOOS: "windows", GOARCH: "amd64"}, {GOOS: "linux", GOARCH: "arm", GOARM: "7"}} {
-		bundle, err := Stage(context.Background(), fakeBuild, target, "1.2.3", dir)
+		bundle, err := Stage(context.Background(), fakeBuild, fakeNotices, target, "1.2.3", dir)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -112,7 +118,8 @@ func TestStageAndPack(t *testing.T) {
 				t.Errorf("executable mode %o", h.Mode)
 			}
 		}
-		want := []string{"frankenmanager/", "frankenmanager/" + target.Exe()}
+		want := []string{"frankenmanager/", "frankenmanager/LICENSE", "frankenmanager/THIRD_PARTY_NOTICES.txt", "frankenmanager/" + target.Exe()}
+		slices.Sort(want)
 		if target.GOOS == "darwin" {
 			want = []string{
 				"frankenmanager/",
@@ -121,6 +128,8 @@ func TestStageAndPack(t *testing.T) {
 				"frankenmanager/FrankenManager.app/Contents/Info.plist",
 				"frankenmanager/FrankenManager.app/Contents/MacOS/",
 				"frankenmanager/FrankenManager.app/Contents/MacOS/frankenmanager-agent",
+				"frankenmanager/LICENSE",
+				"frankenmanager/THIRD_PARTY_NOTICES.txt",
 				"frankenmanager/frankenmanager",
 			}
 		}
@@ -136,6 +145,15 @@ func TestStageAndPack(t *testing.T) {
 		exe, _ := os.ReadFile(filepath.Join(extracted, target.Exe()))
 		if string(exe) != "cmd/frankenmanager "+target.String()+" 1.2.3" {
 			t.Errorf("%s exe = %q", target, exe)
+		}
+		// The notices cover the agent too on macOS
+		notices, _ := os.ReadFile(filepath.Join(extracted, NoticesFile))
+		wantNotices := target.String() + " cmd/frankenmanager"
+		if target.GOOS == "darwin" {
+			wantNotices += ",cmd/frankenmanager-agent"
+		}
+		if string(notices) != wantNotices {
+			t.Errorf("%s notices = %q", target, notices)
 		}
 		bare, _ := os.ReadFile(filepath.Join(dir, "assets", target.Bare()))
 		if string(bare) != string(exe) {

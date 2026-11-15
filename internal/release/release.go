@@ -147,9 +147,10 @@ func GoBuild(ctx context.Context, pkg, out string, t Target, version string) err
 }
 
 // Stage builds the bundle of t in <dir>/stage/<goos>-<goarch>/frankenmanager
-// and returns it. On macOS it holds FrankenManager.app, unsigned: CI signs
-// the stage before Pack.
-func Stage(ctx context.Context, build Builder, t Target, version, dir string) (string, error) {
+// and returns it, with the project's LICENSE and the THIRD_PARTY_NOTICES.txt
+// of the modules compiled into it. On macOS it holds FrankenManager.app,
+// unsigned: CI signs the stage before Pack.
+func Stage(ctx context.Context, build Builder, notices Notices, t Target, version, dir string) (string, error) {
 	bundle := filepath.Join(dir, "stage", t.dir(), updater.BundleName)
 	if err := os.RemoveAll(bundle); err != nil {
 		return "", err
@@ -158,6 +159,20 @@ func Stage(ctx context.Context, build Builder, t Target, version, dir string) (s
 		return "", err
 	}
 	if err := build(ctx, "cmd/frankenmanager", filepath.Join(bundle, t.Exe()), t, version); err != nil {
+		return "", err
+	}
+	pkgs := []string{"cmd/frankenmanager"}
+	if t.GOOS == "darwin" {
+		pkgs = append(pkgs, "cmd/frankenmanager-agent")
+	}
+	license, thirdParty, err := notices(ctx, t, pkgs...)
+	if err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(filepath.Join(bundle, "LICENSE"), license, 0o644); err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(filepath.Join(bundle, NoticesFile), thirdParty, 0o644); err != nil {
 		return "", err
 	}
 	if t.GOOS != "darwin" {

@@ -140,6 +140,9 @@ jobs:
           ln -s "$TEST_DIR/frankenmanager/frankenmanager" "$TEST_DIR/bin/frankenmanager"
           test "$("$TEST_DIR/bin/frankenmanager" --version)" = "FrankenManager version $VERSION"
           "$TEST_DIR/bin/frankenmanager" --help > /dev/null
+          # The license terms travel with the executable
+          test -s "$TEST_DIR/frankenmanager/LICENSE"
+          grep -q "github.com/coredns/coredns" "$TEST_DIR/frankenmanager/THIRD_PARTY_NOTICES.txt"
           test "$(dist/assets/frankenmanager-linux-x86_64 --version)" = "FrankenManager version $VERSION"
 
       # Artifacts drop the execute bit: the macOS stage travels as a tarball
@@ -418,7 +421,9 @@ jobs:
           | Windows | arm64 | `frankenmanager-windows-arm64.tar.gz` |
 
           Each archive contains a `frankenmanager/` directory: keep it whole
-          (on macOS it also holds `FrankenManager.app`) and put its
+          (on macOS it also holds `FrankenManager.app`, and everywhere the
+          `LICENSE` and the `THIRD_PARTY_NOTICES.txt` of the bundled Go
+          modules) and put its
           `frankenmanager` executable on your PATH, e.g. with a symlink. The
           bare `frankenmanager-<platform>` executables are the same program,
           kept so that older single-file installs can self-update.

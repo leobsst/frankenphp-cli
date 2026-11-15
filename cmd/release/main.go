@@ -5,7 +5,8 @@
 // all is stage then pack then checksums. CI runs them apart to sign and
 // notarize the macOS stage in between:
 //
-//	stage      build each bundle into <out>/stage/<goos>-<goarch>/frankenmanager
+//	stage      build each bundle into <out>/stage/<goos>-<goarch>/frankenmanager,
+//	           with the LICENSE and THIRD_PARTY_NOTICES.txt
 //	pack       archive the staged bundles into <out>/assets, with the bare executables
 //	checksums  write <out>/assets/SHA256SUMS.txt
 //
@@ -69,7 +70,7 @@ func run(args []string) error {
 	ctx := context.Background()
 	stage := func() error {
 		for _, t := range targets {
-			bundle, err := release.Stage(ctx, release.GoBuild, t, v, *out)
+			bundle, err := release.Stage(ctx, release.GoBuild, release.GoNotices, t, v, *out)
 			if err != nil {
 				return err
 			}
