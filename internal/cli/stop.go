@@ -2,17 +2,17 @@ package cli
 
 import (
 	"context"
-	"errors"
 
 	"github.com/spf13/cobra"
 
 	"github.com/leobsst/frankenphp-cli/internal/core/soketi"
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 )
 
 func newStopCmd(a *app) *cobra.Command {
 	return &cobra.Command{
 		Use:   "stop",
-		Short: "Stop the FrankenPHP development server.",
+		Short: i18n.T("Stop the FrankenPHP development server."),
 		Args:  noArgs,
 		RunE:  func(cmd *cobra.Command, _ []string) error { return a.stop(cmd.Context()) },
 	}
@@ -33,10 +33,10 @@ func (a *app) stop(ctx context.Context) (err error) {
 	if running, err := a.isRunning(ctx, d, s); err != nil {
 		return err
 	} else if !running {
-		return errors.New("The server is already stopped.") //nolint:staticcheck // user-facing message
+		return i18n.Errorf("The server is already stopped.")
 	}
 
-	a.log.Info("Stopping web server...")
+	a.log.Info(i18n.T("Stopping web server..."))
 	if w, err := a.deps.Watcher(dir); err == nil {
 		w.Stop(ctx)
 	}
@@ -70,6 +70,6 @@ func (a *app) stop(ctx context.Context) (err error) {
 	}
 
 	a.con.Println()
-	a.log.Success("Web server stopped!")
+	a.log.Success(i18n.T("Web server stopped!"))
 	return nil
 }

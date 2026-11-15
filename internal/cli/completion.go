@@ -6,13 +6,15 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 )
 
 func newCompletionCmd(a *app) *cobra.Command {
 	return &cobra.Command{
 		Use:   "completion SHELL",
-		Short: "Generate the shell completion script (bash, zsh, fish, powershell).",
-		Long: `Generate the shell completion script, for frankenmanager and its alias.
+		Short: i18n.T("Generate the shell completion script (bash, zsh, fish, powershell)."),
+		Long: i18n.T(`Generate the shell completion script, for frankenmanager and its alias.
 
 Bash (needs bash-completion):
     echo 'source <(frankenmanager completion bash)' >> ~/.bashrc
@@ -27,7 +29,7 @@ Fish:
 PowerShell:
     frankenmanager completion powershell >> $PROFILE
 
-Run it again after changing the alias (CLI_ALIAS).`,
+Run it again after changing the alias (CLI_ALIAS).`),
 		Args:      rangeArgs(1, "SHELL"),
 		ValidArgs: []string{"bash", "zsh", "fish", "powershell"},
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -77,7 +79,7 @@ func completionScript(root *cobra.Command, shell string, aliases []string) (stri
 			fmt.Fprintf(&b, "Register-ArgumentCompleter -CommandName '%s' -ScriptBlock ${__%sCompleterBlock}\n", a, name)
 		}
 	default:
-		return "", usageError{fmt.Errorf("Unknown shell '%s'. Use bash, zsh, fish, or powershell.", shell)} //nolint:staticcheck // user-facing message
+		return "", usageError{i18n.Errorf("Unknown shell '%s'. Use bash, zsh, fish, or powershell.", shell)}
 	}
 	return b.String(), err
 }

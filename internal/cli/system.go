@@ -18,6 +18,7 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/privilege"
 	"github.com/leobsst/frankenphp-cli/internal/core/resources"
 	"github.com/leobsst/frankenphp-cli/internal/core/ssl"
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 	"github.com/leobsst/frankenphp-cli/internal/platform"
 	"github.com/leobsst/frankenphp-cli/internal/ui"
 )
@@ -25,9 +26,9 @@ import (
 // yesNo is how the status tables show a boolean.
 func yesNo(b bool) string {
 	if b {
-		return "Yes"
+		return i18n.T("Yes")
 	}
-	return "No"
+	return i18n.T("No")
 }
 
 // --- setup -------------------------------------------------------------------
@@ -36,8 +37,8 @@ func newSetupCmd(a *app) *cobra.Command {
 	var remove, status, installMkcert bool
 	cmd := &cobra.Command{
 		Use:   "setup",
-		Short: "Configure FrankenManager for passwordless operation.",
-		Long: `Configure FrankenManager for passwordless operation.
+		Short: i18n.T("Configure FrankenManager for passwordless operation."),
+		Long: i18n.T(`Configure FrankenManager for passwordless operation.
 
 This command sets up the system to allow FrankenManager to:
 - Modify /etc/hosts without requiring a password each time
@@ -54,7 +55,7 @@ To check current status:
     frankenmanager setup --status
 
 To remove configuration:
-    sudo frankenmanager setup --remove`,
+    sudo frankenmanager setup --remove`),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			switch {
@@ -68,9 +69,9 @@ To remove configuration:
 		},
 	}
 	f := cmd.Flags()
-	f.BoolVarP(&remove, "remove", "r", false, "Remove privilege configuration")
-	f.BoolVarP(&status, "status", "s", false, "Show current configuration status")
-	f.BoolVarP(&installMkcert, "install-mkcert", "m", false, "Install mkcert for SSL certificates")
+	f.BoolVarP(&remove, "remove", "r", false, i18n.T("Remove privilege configuration"))
+	f.BoolVarP(&status, "status", "s", false, i18n.T("Show current configuration status"))
+	f.BoolVarP(&installMkcert, "install-mkcert", "m", false, i18n.T("Install mkcert for SSL certificates"))
 	return cmd
 }
 
@@ -85,41 +86,41 @@ func (a *app) setupStatus(ctx context.Context) error {
 	}
 	_, statErr := os.Stat(filepath.Join(dir, resources.InitializedMarker))
 
-	settings := []ui.Column{{Header: "Setting", Color: ui.Cyan}, {Header: "Value", Color: ui.Green}}
-	a.con.PrintTable(ui.Table{Title: "Data Directory", Columns: settings, Rows: [][]string{
-		{"Location", dir},
-		{"Mode", "Production"},
-		{"Initialized", yesNo(statErr == nil)},
+	settings := []ui.Column{{Header: i18n.T("Setting"), Color: ui.Cyan}, {Header: i18n.T("Value"), Color: ui.Green}}
+	a.con.PrintTable(ui.Table{Title: i18n.T("Data Directory"), Columns: settings, Rows: [][]string{
+		{i18n.T("Location"), dir},
+		{i18n.T("Mode"), i18n.T("Production")},
+		{i18n.T("Initialized"), yesNo(statErr == nil)},
 	}})
 	a.con.Println()
 
 	rows := [][]string{
-		{"Platform", status.Platform},
-		{"Running as Admin/Root", yesNo(status.IsAdmin)},
-		{"Helper Script Installed", yesNo(status.HelperInstalled)},
+		{i18n.T("Platform"), status.Platform},
+		{i18n.T("Running as Admin/Root"), yesNo(status.IsAdmin)},
+		{i18n.T("Helper Script Installed"), yesNo(status.HelperInstalled)},
 	}
 	if status.Platform != "windows" {
-		rows = append(rows, []string{"Sudoers Configured", yesNo(status.SudoersConfigured)})
+		rows = append(rows, []string{i18n.T("Sudoers Configured"), yesNo(status.SudoersConfigured)})
 	}
-	rows = append(rows, []string{"Passwordless Available", yesNo(status.PasswordlessAvailable)})
+	rows = append(rows, []string{i18n.T("Passwordless Available"), yesNo(status.PasswordlessAvailable)})
 	if p.BindPortNeeded() {
 		exe, err := platform.Executable()
-		rows = append(rows, []string{"Port 53 Allowed (LAN DNS)", yesNo(err == nil && p.CanBindPort(ctx, exe))})
+		rows = append(rows, []string{i18n.T("Port 53 Allowed (LAN DNS)"), yesNo(err == nil && p.CanBindPort(ctx, exe))})
 	}
-	a.con.PrintTable(ui.Table{Title: "Privilege Configuration Status", Columns: settings, Rows: rows})
+	a.con.PrintTable(ui.Table{Title: i18n.T("Privilege Configuration Status"), Columns: settings, Rows: rows})
 	a.con.Println()
 
-	mkcertStatus := "Not installed"
+	mkcertStatus := i18n.T("Not installed")
 	if m.IsInstalled() {
-		mkcertStatus = "Installed"
+		mkcertStatus = i18n.T("Installed")
 	}
-	a.con.PrintTable(ui.Table{Title: "Dependencies Status", Columns: []ui.Column{
-		{Header: "Dependency", Color: ui.Cyan}, {Header: "Status", Color: ui.Green},
+	a.con.PrintTable(ui.Table{Title: i18n.T("Dependencies Status"), Columns: []ui.Column{
+		{Header: i18n.T("Dependency"), Color: ui.Cyan}, {Header: i18n.T("Status"), Color: ui.Green},
 	}, Rows: [][]string{{"mkcert", mkcertStatus}}})
 
 	if !status.Configured || !m.IsInstalled() {
 		a.log.Info("")
-		a.log.Info("To complete setup, run:")
+		a.log.Info(i18n.T("To complete setup, run:"))
 		a.log.Info("  sudo frankenmanager setup")
 	}
 	return nil
@@ -130,14 +131,14 @@ func (a *app) setupStatus(ctx context.Context) error {
 func (a *app) setup(ctx context.Context, installMkcert bool) error {
 	p := a.deps.Privilege(a.log)
 	m := a.deps.Mkcert(a.log)
-	a.log.Info("Setting up FrankenManager...")
+	a.log.Info(i18n.T("Setting up FrankenManager..."))
 	a.log.Info("")
 
 	install := !p.Configured()
 	if !install && !p.UpToDate() {
 		// A helper installed by an earlier release cannot remove entries on
 		// Linux
-		a.log.Info("Updating the hosts helper script...")
+		a.log.Info(i18n.T("Updating the hosts helper script..."))
 		install = true
 	}
 	if install {
@@ -146,34 +147,34 @@ func (a *app) setup(ctx context.Context, installMkcert bool) error {
 			return exitError(1)
 		}
 	} else {
-		a.log.Info("Privilege escalation is already configured.")
+		a.log.Info(i18n.T("Privilege escalation is already configured."))
 	}
 	a.grantBindPort(ctx, p)
 	a.log.Info("")
 
 	switch {
 	case m.IsInstalled():
-		a.log.Info("mkcert is already installed.")
+		a.log.Info(i18n.T("mkcert is already installed."))
 		m.SetupCA(ctx)
 	case installMkcert:
-		a.log.Info("Installing mkcert...")
+		a.log.Info(i18n.T("Installing mkcert..."))
 		if m.Install(ctx) {
 			m.SetupCA(ctx)
 		} else {
-			a.log.Warning("mkcert installation failed. You can install it manually:")
+			a.log.Warning(i18n.T("mkcert installation failed. You can install it manually:"))
 			a.log.Info(m.Instructions())
 		}
 	default:
-		a.log.Info("mkcert is not installed.")
-		a.log.Info("To install mkcert automatically, run:")
+		a.log.Info(i18n.T("mkcert is not installed."))
+		a.log.Info(i18n.T("To install mkcert automatically, run:"))
 		a.log.Info("  sudo frankenmanager setup --install-mkcert")
 		a.log.Info("")
-		a.log.Info("Or install manually:")
+		a.log.Info(i18n.T("Or install manually:"))
 		a.log.Info(m.Instructions())
 	}
 	a.ensureAlias()
 	a.log.Info("")
-	a.log.Success("Setup complete!")
+	a.log.Success(i18n.T("Setup complete!"))
 	return nil
 }
 
@@ -188,22 +189,22 @@ func (a *app) grantBindPort(ctx context.Context, p *privilege.Manager) {
 		err = p.GrantBindPort(ctx, exe)
 	}
 	if err != nil {
-		a.log.Warning("The LAN DNS server will not be able to use port 53: " + err.Error())
+		a.log.Warning(i18n.Tf("The LAN DNS server will not be able to use port 53: %s", err.Error()))
 		return
 	}
-	a.log.Success("The LAN DNS server may use port 53.")
+	a.log.Success(i18n.T("The LAN DNS server may use port 53."))
 }
 
 // setupRemove removes the privilege configuration.
 func (a *app) setupRemove(ctx context.Context) error {
 	p := a.deps.Privilege(a.log)
-	a.log.Info("Removing privilege escalation configuration...")
+	a.log.Info(i18n.T("Removing privilege escalation configuration..."))
 	a.log.Info("")
 	if exe, err := platform.Executable(); err == nil && p.RevokeBindPort(ctx, exe) {
-		a.log.Success("Port 53 permission removed")
+		a.log.Success(i18n.T("Port 53 permission removed"))
 	}
 	if !p.Configured() {
-		a.log.Info("Privilege escalation is not configured. Nothing to remove.")
+		a.log.Info(i18n.T("Privilege escalation is not configured. Nothing to remove."))
 		return nil
 	}
 	if err := p.Remove(); err != nil {
@@ -219,8 +220,8 @@ func newTrustCACmd(a *app) *cobra.Command {
 	var port int
 	cmd := &cobra.Command{
 		Use:   "trust-ca ACTION",
-		Short: "Serve the local mkcert root CA over the LAN so other devices can trust it.",
-		Long: `Serve the local mkcert root CA over the LAN so other devices can trust it.
+		Short: i18n.T("Serve the local mkcert root CA over the LAN so other devices can trust it."),
+		Long: i18n.T(`Serve the local mkcert root CA over the LAN so other devices can trust it.
 
 Off by default. Turn it on temporarily when you need another device on
 your network to trust your local .test domains, then turn it off again.
@@ -232,7 +233,7 @@ Examples:
     frankenmanager trust-ca on              # Start sharing on the default port
     frankenmanager trust-ca on --port 9443   # Start sharing on a custom port
     frankenmanager trust-ca status           # Check whether sharing is active
-    frankenmanager trust-ca off              # Stop sharing`,
+    frankenmanager trust-ca off              # Stop sharing`),
 		Args: rangeArgs(1, "ACTION"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			switch args[0] {
@@ -243,11 +244,11 @@ Examples:
 			case "status":
 				return a.trustCAStatus()
 			}
-			a.con.Println(a.con.Color(ui.Red, fmt.Sprintf("Unknown action '%s'. Use on, off, or status.", args[0])))
+			a.con.Println(a.con.Color(ui.Red, i18n.Tf("Unknown action '%s'. Use on, off, or status.", args[0])))
 			return exitError(1)
 		},
 	}
-	cmd.Flags().IntVarP(&port, "port", "p", caserver.DefaultPort, "Port to serve the root CA on (default 9080)")
+	cmd.Flags().IntVarP(&port, "port", "p", caserver.DefaultPort, i18n.T("Port to serve the root CA on (default 9080)"))
 	return cmd
 }
 
@@ -256,14 +257,14 @@ Examples:
 func (a *app) rootCAPath(ctx context.Context) (string, error) {
 	mkcert := a.deps.Command.LookPath("mkcert")
 	if mkcert == "" {
-		return "", &ssl.Error{Msg: "mkcert not found. Run `sudo frankenmanager setup --install-mkcert` first."}
+		return "", &ssl.Error{Msg: i18n.T("mkcert not found. Run `sudo frankenmanager setup --install-mkcert` first.")}
 	}
 	res, err := a.deps.Command.Run(ctx, command.Cmd{Name: mkcert, Args: []string{"-CAROOT"}})
 	if err != nil {
-		return "", &ssl.Error{Msg: fmt.Sprintf("Could not determine mkcert's CA root: %v", err)}
+		return "", &ssl.Error{Msg: i18n.Tf("Could not determine mkcert's CA root: %v", err)}
 	}
 	if !res.OK() {
-		return "", &ssl.Error{Msg: "Could not determine mkcert's CA root: " + strings.TrimSpace(string(res.Stderr))}
+		return "", &ssl.Error{Msg: i18n.Tf("Could not determine mkcert's CA root: %v", strings.TrimSpace(string(res.Stderr)))}
 	}
 	return filepath.Join(strings.TrimSpace(string(res.Stdout)), "rootCA.pem"), nil
 }
@@ -309,21 +310,21 @@ func (a *app) trustCAOn(ctx context.Context, port int) error {
 		return err
 	}
 	url := fmt.Sprintf("http://%s:%d/", a.deps.LANIP(), port)
-	a.log.Success("Root CA is now shared at " + url)
+	a.log.Success(i18n.Tf("Root CA is now shared at %s", url))
 	qr, err := qrASCII(url)
 	if err != nil {
 		return err
 	}
 	a.con.Println(qr)
-	a.log.Info("Scan the QR code (or open that URL in a browser) on the other device " +
-		"to download rootCA.pem.")
-	a.log.Info(`iOS: install the profile even though it shows "Not Verified" (normal for any ` +
+	a.log.Info(i18n.T("Scan the QR code (or open that URL in a browser) on the other device " +
+		"to download rootCA.pem."))
+	a.log.Info(i18n.T(`iOS: install the profile even though it shows "Not Verified" (normal for any ` +
 		"manually-installed CA) - then you MUST also go to Settings > General > About > " +
 		`Certificate Trust Settings and enable full trust for "FrankenManager Local ` +
-		`Development CA". Without that last toggle, HTTPS warnings keep appearing.`)
-	a.log.Info("Android: trust is granted automatically as soon as the certificate is installed.")
-	a.log.Warning("Anyone on your network can reach this port while sharing is on. " +
-		"Run `frankenmanager trust-ca off` once other devices have installed it.")
+		`Development CA". Without that last toggle, HTTPS warnings keep appearing.`))
+	a.log.Info(i18n.T("Android: trust is granted automatically as soon as the certificate is installed."))
+	a.log.Warning(i18n.T("Anyone on your network can reach this port while sharing is on. " +
+		"Run `frankenmanager trust-ca off` once other devices have installed it."))
 	return nil
 }
 
@@ -333,9 +334,9 @@ func (a *app) trustCAOff() error {
 		return err
 	}
 	if !a.deps.StopCA(dir) {
-		return errors.New("Root CA sharing is not currently running.") //nolint:staticcheck // user-facing message
+		return i18n.Errorf("Root CA sharing is not currently running.")
 	}
-	a.log.Success("Root CA sharing stopped.")
+	a.log.Success(i18n.T("Root CA sharing stopped."))
 	return nil
 }
 
@@ -346,10 +347,10 @@ func (a *app) trustCAStatus() error {
 	}
 	_, port, ok := a.deps.CAState(dir)
 	if !ok {
-		a.log.Info("Root CA sharing is currently OFF.")
+		a.log.Info(i18n.T("Root CA sharing is currently OFF."))
 		return nil
 	}
-	a.log.Info(fmt.Sprintf("Root CA sharing is ON at http://%s:%d/", a.deps.LANIP(), port))
+	a.log.Info(i18n.Tf("Root CA sharing is ON at http://%s:%d/", a.deps.LANIP(), port))
 	return nil
 }
 
@@ -359,8 +360,8 @@ func newResetCmd(a *app) *cobra.Command {
 	var db, caddyfiles bool
 	cmd := &cobra.Command{
 		Use:   "reset",
-		Short: "Reset FrankenManager configuration and/or custom Caddyfiles.",
-		Long: `Reset FrankenManager configuration and/or custom Caddyfiles.
+		Short: i18n.T("Reset FrankenManager configuration and/or custom Caddyfiles."),
+		Long: i18n.T(`Reset FrankenManager configuration and/or custom Caddyfiles.
 
 This command allows you to reset specific components of FrankenManager.
 The server must be stopped before running this command.
@@ -370,16 +371,16 @@ NOTE: This does NOT affect your MariaDB database data.
 Examples:
     frankenmanager reset --db                 # Reset domain list configuration
     frankenmanager reset --caddyfiles         # Reset only custom Caddyfiles
-    frankenmanager reset --db --caddyfiles    # Reset both`,
+    frankenmanager reset --db --caddyfiles    # Reset both`),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error { return a.reset(cmd.Context(), db, caddyfiles) },
 	}
 	f := cmd.Flags()
-	f.BoolVar(&db, "db", false, "Reset FrankenManager configuration (domain list) (alias: --database)")
-	f.BoolVar(&db, "database", false, "Reset FrankenManager configuration (domain list)")
+	f.BoolVar(&db, "db", false, i18n.T("Reset FrankenManager configuration (domain list) (alias: --database)"))
+	f.BoolVar(&db, "database", false, i18n.T("Reset FrankenManager configuration (domain list)"))
 	_ = f.MarkHidden("database")
-	f.BoolVar(&caddyfiles, "caddyfiles", false, "Reset custom Caddyfiles (alias: --caddy)")
-	f.BoolVar(&caddyfiles, "caddy", false, "Reset custom Caddyfiles")
+	f.BoolVar(&caddyfiles, "caddyfiles", false, i18n.T("Reset custom Caddyfiles (alias: --caddy)"))
+	f.BoolVar(&caddyfiles, "caddy", false, i18n.T("Reset custom Caddyfiles"))
 	_ = f.MarkHidden("caddy")
 	return cmd
 }
@@ -391,7 +392,7 @@ var errAborted = errors.New("aborted")
 func (a *app) confirm(question string) (bool, error) {
 	in := bufio.NewReader(a.deps.Stdin)
 	for {
-		fmt.Fprintf(a.out, "%s [y/N]: ", question)
+		fmt.Fprint(a.out, i18n.Tf("%s [y/N]: ", question))
 		line, err := in.ReadString('\n')
 		if err != nil && (line == "" || !errors.Is(err, io.EOF)) {
 			return false, errAborted
@@ -402,7 +403,7 @@ func (a *app) confirm(question string) (bool, error) {
 		case "", "n", "no":
 			return false, nil
 		}
-		fmt.Fprintln(a.out, "Error: invalid input")
+		fmt.Fprintln(a.out, i18n.T("Error: invalid input"))
 	}
 }
 
@@ -410,7 +411,7 @@ func (a *app) confirm(question string) (bool, error) {
 // Neither the database servers' data nor the settings table are touched.
 func (a *app) reset(ctx context.Context, db, caddyfiles bool) (err error) {
 	if !db && !caddyfiles {
-		a.log.Error("You must specify at least one option: --db or --caddyfiles")
+		a.log.Error(i18n.T("You must specify at least one option: --db or --caddyfiles"))
 		return exitError(1)
 	}
 	dir, err := a.projectDir()
@@ -430,50 +431,50 @@ func (a *app) reset(ctx context.Context, db, caddyfiles bool) (err error) {
 	if running, err := a.isRunning(ctx, d, s); err != nil {
 		return err
 	} else if running {
-		return errors.New("The server is currently running. " + //nolint:staticcheck // user-facing message
+		return i18n.Errorf("The server is currently running. " +
 			"Please stop the server first with 'frankenmanager stop'.")
 	}
 
 	c := a.con
 	sites := filepath.Join(e.ResolveDir("CADDY_DIR", "./caddy", dir), "sites")
-	c.Println("\n", c.Bold(c.Color(ui.Yellow, "⚠️  Warning: You are about to reset:")))
+	c.Println("\n", c.Bold(c.Color(ui.Yellow, i18n.T("⚠️  Warning: You are about to reset:"))))
 	if db {
-		c.Println("  • FrankenManager configuration (domain list)")
+		c.Println(i18n.T("  • FrankenManager configuration (domain list)"))
 	}
 	if caddyfiles {
-		c.Println("  • custom Caddyfiles")
+		c.Println(i18n.T("  • custom Caddyfiles"))
 	}
 	if db {
-		c.Println("\n", c.Dim("Configuration reset will clear all registered domains from db.sqlite"))
-		c.Println(c.Dim("Note: This does NOT affect your MariaDB database data"))
+		c.Println("\n", c.Dim(i18n.T("Configuration reset will clear all registered domains from db.sqlite")))
+		c.Println(c.Dim(i18n.T("Note: This does NOT affect your MariaDB database data")))
 	}
 	if caddyfiles {
-		c.Println("\n", c.Dim("Caddyfiles reset will delete all files in: "+filepath.Join(sites, "php-*")))
+		c.Println("\n", c.Dim(i18n.Tf("Caddyfiles reset will delete all files in: %s", filepath.Join(sites, "php-*"))))
 	}
-	c.Println("\n", c.Bold(c.Color(ui.Red, "This action cannot be undone!")), "\n")
+	c.Println("\n", c.Bold(c.Color(ui.Red, i18n.T("This action cannot be undone!"))), "\n")
 
-	ok, err := a.confirm("Do you want to proceed?")
+	ok, err := a.confirm(i18n.T("Do you want to proceed?"))
 	if errors.Is(err, errAborted) {
 		// A newline, then Aborted!, both on stderr
 		fmt.Fprintln(a.errOut)
-		fmt.Fprintln(a.errOut, "Aborted!")
+		fmt.Fprintln(a.errOut, i18n.T("Aborted!"))
 		return exitError(1)
 	}
 	if !ok {
-		a.log.Info("Reset cancelled.")
+		a.log.Info(i18n.T("Reset cancelled."))
 		return nil
 	}
 
 	err = func() error {
 		if db {
-			a.log.Info("Resetting FrankenManager configuration...")
+			a.log.Info(i18n.T("Resetting FrankenManager configuration..."))
 			if err := s.Reset(); err != nil {
 				return err
 			}
-			a.log.Success("Configuration reset successfully!")
+			a.log.Success(i18n.T("Configuration reset successfully!"))
 		}
 		if caddyfiles {
-			a.log.Info("Resetting custom Caddyfiles...")
+			a.log.Info(i18n.T("Resetting custom Caddyfiles..."))
 			deleted := 0
 			files, err := filepath.Glob(filepath.Join(sites, "php-*", "*_Caddyfile"))
 			if err != nil {
@@ -486,18 +487,18 @@ func (a *app) reset(ctx context.Context, db, caddyfiles bool) (err error) {
 				deleted++
 			}
 			if deleted > 0 {
-				a.log.Success(fmt.Sprintf("Deleted %d Caddyfile(s)", deleted))
+				a.log.Success(i18n.Tf("Deleted %d Caddyfile(s)", deleted))
 			} else {
-				a.log.Info("No custom Caddyfiles found to delete")
+				a.log.Info(i18n.T("No custom Caddyfiles found to delete"))
 			}
 		}
 		return nil
 	}()
 	if err != nil {
-		a.log.Error(fmt.Sprintf("An error occurred during reset: %v", err))
+		a.log.Error(i18n.Tf("An error occurred during reset: %v", err))
 		return exitError(1)
 	}
 	c.Println()
-	a.log.Success("Reset completed successfully!")
+	a.log.Success(i18n.T("Reset completed successfully!"))
 	return nil
 }

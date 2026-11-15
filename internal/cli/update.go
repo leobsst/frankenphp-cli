@@ -7,6 +7,7 @@ import (
 
 	"github.com/leobsst/frankenphp-cli/internal/core/dns"
 	"github.com/leobsst/frankenphp-cli/internal/core/updater"
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 	"github.com/leobsst/frankenphp-cli/internal/platform"
 )
 
@@ -14,8 +15,8 @@ func newUpdateCmd(a *app) *cobra.Command {
 	var force, check bool
 	cmd := &cobra.Command{
 		Use:   "update",
-		Short: "Update FrankenManager to the latest version.",
-		Long: `Update FrankenManager to the latest version.
+		Short: i18n.T("Update FrankenManager to the latest version."),
+		Long: i18n.T(`Update FrankenManager to the latest version.
 
 This command downloads and installs the latest release from GitHub.
 A running server is stopped before the install and started again on the
@@ -26,7 +27,7 @@ installing it usually requires admin privileges: run with sudo.
 Examples:
     frankenmanager update --check  # Check for updates without installing
     sudo frankenmanager update     # Update to latest version
-    sudo frankenmanager update --force  # Force reinstall latest version`,
+    sudo frankenmanager update --force  # Force reinstall latest version`),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			dir, err := platform.DataDir()
@@ -43,23 +44,23 @@ Examples:
 				a.ensureAlias()
 				return nil
 			}
-			a.log.Info("Current version: " + u.Version)
+			a.log.Info(i18n.Tf("Current version: %s", u.Version))
 			latest, err := u.Check(cmd.Context())
 			if err != nil {
 				return err
 			}
 			if latest == nil {
-				a.log.Success("You are on the latest version!")
+				a.log.Success(i18n.T("You are on the latest version!"))
 				return nil
 			}
-			a.log.Info("New version available: " + latest.Version)
-			a.log.Info("Release: " + latest.Name)
+			a.log.Info(i18n.Tf("New version available: %s", latest.Version))
+			a.log.Info(i18n.Tf("Release: %s", latest.Name))
 			return nil
 		},
 	}
 	f := cmd.Flags()
-	f.BoolVarP(&force, "force", "f", false, "Force update even if on latest version")
-	f.BoolVarP(&check, "check", "c", false, "Only check for updates, don't install")
+	f.BoolVarP(&force, "force", "f", false, i18n.T("Force update even if on latest version"))
+	f.BoolVarP(&check, "check", "c", false, i18n.T("Only check for updates, don't install"))
 	return cmd
 }
 

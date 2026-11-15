@@ -172,21 +172,23 @@ func (a *app) loadEnv(dir string) (*env.Env, error) {
 func (a *app) reportMigration(m env.Migration) {
 	switch {
 	case m.Migrated:
-		msg := "Configuration migrated from .env to db.sqlite"
 		if m.Backup != "" {
-			msg += " (backup: " + m.Backup + ")"
+			a.log.Info(i18n.Tf("Configuration migrated from .env to db.sqlite (backup: %s). "+
+				"Use 'frankenmanager configuration' to view or change it.", m.Backup))
+		} else {
+			a.log.Info(i18n.T("Configuration migrated from .env to db.sqlite. " +
+				"Use 'frankenmanager configuration' to view or change it."))
 		}
-		a.log.Info(msg + ". Use 'frankenmanager configuration' to view or change it.")
 		if len(m.Unknown) > 0 {
-			a.log.Warning("Not migrated, unknown keys: " + strings.Join(m.Unknown, ", "))
+			a.log.Warning(i18n.Tf("Not migrated, unknown keys: %s", strings.Join(m.Unknown, ", ")))
 		}
 		if len(m.Invalid) > 0 {
-			a.log.Warning("Not migrated, invalid values (default kept): " + strings.Join(m.Invalid, ", ") +
-				". Use 'frankenmanager configuration set <name> <value>'.")
+			a.log.Warning(i18n.Tf("Not migrated, invalid values (default kept): %s. "+
+				"Use 'frankenmanager configuration set <name> <value>'.", strings.Join(m.Invalid, ", ")))
 		}
 	case m.Ignored:
-		a.log.Warning("The .env file is no longer read: the configuration lives in db.sqlite. " +
-			"Use 'frankenmanager configuration set <name> <value>', then remove .env.")
+		a.log.Warning(i18n.T("The .env file is no longer read: the configuration lives in db.sqlite. " +
+			"Use 'frankenmanager configuration set <name> <value>', then remove .env."))
 	}
 }
 
@@ -253,9 +255,9 @@ func noArgs(_ *cobra.Command, args []string) error {
 	case 0:
 		return nil
 	case 1:
-		return usageError{fmt.Errorf("Got unexpected extra argument (%s)", args[0])} //nolint:staticcheck // user-facing message
+		return usageError{i18n.Errorf("Got unexpected extra argument (%s)", args[0])}
 	default:
-		return usageError{fmt.Errorf("Got unexpected extra arguments (%s)", strings.Join(args, " "))} //nolint:staticcheck // user-facing message
+		return usageError{i18n.Errorf("Got unexpected extra arguments (%s)", strings.Join(args, " "))}
 	}
 }
 
