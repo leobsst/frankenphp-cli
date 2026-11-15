@@ -3,8 +3,10 @@
 // Off by default: DNS_SERVER=true turns it on. Other devices then use this
 // machine as their DNS server and reach every registered domain without
 // editing their hosts file; other queries are forwarded to DNS_UPSTREAM.
-// The server is a CoreDNS container (see compose): it reloads its records
-// file on its own, so domain changes only need Sync.
+// The server is CoreDNS embedded in the background process (see embeddns
+// and dnswatcher), running on the host so that it sees the real address of
+// each device: it reloads its records file on its own, and its Corefile
+// when it changes, so domain and setting changes only need Sync.
 package dns
 
 import (
@@ -50,9 +52,11 @@ type Config interface {
 // Enabled reports whether DNS_SERVER is exactly "true".
 func Enabled(c Config) bool { return c.Get("DNS_SERVER") == "true" }
 
-// Dir is the directory of the CoreDNS configuration, mounted in the
-// container.
+// Dir is the directory of the CoreDNS configuration.
 func Dir(dataDir string) string { return filepath.Join(dataDir, "dns") }
+
+// CorefilePath is the Corefile the embedded server loads.
+func CorefilePath(dataDir string) string { return filepath.Join(Dir(dataDir), "Corefile") }
 
 // LANIP returns the host's current LAN IP, replaced in tests.
 var LANIP = platform.LANIP
@@ -77,26 +81,35 @@ func ResolveIP(c Config) (string, error) {
 	return parseIP("DNS_IP", configured)
 }
 
-// ListenAddress returns the "ip:port" the server is published on, "" when
-// disabled. Every interface by default, DNS_LISTEN_IP to pin one (e.g. next
-// to systemd-resolved, already bound to port 53).
+// listen returns the IP and port the server listens on: every interface by
+// default, DNS_LISTEN_IP to pin one (e.g. next to systemd-resolved, already
+// bound to port 53).
+func listen(c Config) (ip, port string, err error) {
+	ip = DefaultListenIP
+	if configured := c.Get("DNS_LISTEN_IP"); configured != "" {
+		if ip, err = parseIP("DNS_LISTEN_IP", configured); err != nil {
+			return "", "", err
+		}
+	}
+	port = c.Get("DNS_PORT")
+	if port == "" {
+		port = DefaultPort
+	}
+	return ip, port, nil
+}
+
+// ListenAddress returns the "ip:port" the server listens on, "" when
+// disabled.
 func ListenAddress(c Config) (string, error) {
 	if !Enabled(c) {
 		return "", nil
 	}
-	ip := DefaultListenIP
-	if configured := c.Get("DNS_LISTEN_IP"); configured != "" {
-		var err error
-		if ip, err = parseIP("DNS_LISTEN_IP", configured); err != nil {
-			return "", err
-		}
+	ip, port, err := listen(c)
+	if err != nil {
+		return "", err
 	}
 	if strings.Contains(ip, ":") {
 		ip = "[" + ip + "]"
-	}
-	port := c.Get("DNS_PORT")
-	if port == "" {
-		port = DefaultPort
 	}
 	return ip + ":" + port, nil
 }
@@ -218,10 +231,26 @@ func DescribeServerAddresses(addrs []Address, recordsIP string) []string {
 		"the devices keep resolving if one interface goes down.")
 }
 
-// Corefile returns the CoreDNS configuration.
-func Corefile(upstream string) string {
-	return fmt.Sprintf(`.:53 {
-    hosts /etc/coredns/hosts {
+// Server is what the Corefile describes.
+type Server struct {
+	Records  string // path of the records file
+	ListenIP string // DefaultListenIP for every interface
+	Port     string
+	Upstream string // space-separated resolvers
+}
+
+// Corefile returns the CoreDNS configuration. The "clients" plugin (see
+// embeddns) reports the address of every query; "bind" pins the listen IP.
+// The records path is quoted, with slashes: Windows paths may hold spaces
+// and backslashes.
+func Corefile(s Server) string {
+	bind := ""
+	if s.ListenIP != "" && s.ListenIP != DefaultListenIP {
+		bind = "    bind " + s.ListenIP + "\n"
+	}
+	return fmt.Sprintf(`.:%s {
+%s    clients
+    hosts "%s" {
         ttl %d
         reload 2s
         fallthrough
@@ -230,7 +259,7 @@ func Corefile(upstream string) string {
     cache %d
     errors
 }
-`, RecordsTTL, upstream, RecordsTTL)
+`, s.Port, bind, filepath.ToSlash(s.Records), RecordsTTL, s.Upstream, RecordsTTL)
 }
 
 // Records returns the hosts-format records pointing every domain at ip,
@@ -296,12 +325,22 @@ func Sync(dataDir string, c Config, r Registry) error {
 	if upstream == "" {
 		upstream = DefaultUpstream
 	}
-	dir := Dir(dataDir)
+	listenIP, port, err := listen(c)
+	if err != nil {
+		return err
+	}
+	dir, err := filepath.Abs(Dir(dataDir))
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	if err := writeAtomic(filepath.Join(dir, "Corefile"), Corefile(upstream)); err != nil {
+	records := filepath.Join(dir, "hosts")
+	// The records first: a new Corefile is loaded at once
+	if err := writeAtomic(records, Records(ip, domains)); err != nil {
 		return err
 	}
-	return writeAtomic(filepath.Join(dir, "hosts"), Records(ip, domains))
+	return writeAtomic(filepath.Join(dir, "Corefile"),
+		Corefile(Server{Records: records, ListenIP: listenIP, Port: port, Upstream: upstream}))
 }

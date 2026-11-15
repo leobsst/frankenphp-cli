@@ -32,13 +32,15 @@ func fakeNetwork(t *testing.T, lanIP string, addrs []Address) {
 	t.Cleanup(func() { LANIP, Interfaces = oldIP, oldIfaces })
 }
 
-// The testdata files are the reference outputs of earlier releases: the
-// generated DNS files must stay identical to them.
+// The records and describe testdata files are the reference outputs of
+// earlier releases: they must stay identical to them. The Corefile is the
+// embedded server's.
 func TestGeneratedFilesMatchReference(t *testing.T) {
-	if got := Corefile("1.1.1.1 9.9.9.9"); got != string(golden(t, "Corefile")) {
+	got := Corefile(Server{Records: "/data/dns/hosts", ListenIP: DefaultListenIP, Port: "53", Upstream: "1.1.1.1 9.9.9.9"})
+	if got != string(golden(t, "Corefile")) {
 		t.Errorf("Corefile:\n%s", got)
 	}
-	got := Records("192.168.1.20", []string{"b.test", "a.test", "ws.frankenmanager.test", "a.test"})
+	got = Records("192.168.1.20", []string{"b.test", "a.test", "ws.frankenmanager.test", "a.test"})
 	if got != string(golden(t, "records")) {
 		t.Errorf("records:\n%s", got)
 	}
@@ -140,7 +142,8 @@ func TestSync(t *testing.T) {
 	}
 	core, _ := os.ReadFile(filepath.Join(Dir(dir), "Corefile"))
 	hosts, _ := os.ReadFile(filepath.Join(Dir(dir), "hosts"))
-	if string(core) != Corefile("8.8.8.8") {
+	records, _ := filepath.Abs(filepath.Join(Dir(dir), "hosts"))
+	if string(core) != Corefile(Server{Records: records, ListenIP: DefaultListenIP, Port: "53", Upstream: "8.8.8.8"}) {
 		t.Errorf("Corefile:\n%s", core)
 	}
 	want := Records("192.168.1.20", []string{"a.test", "b.test", "c.test", "api.test", "ws.frankenmanager.test"})

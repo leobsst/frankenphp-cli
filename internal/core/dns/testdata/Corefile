@@ -1,5 +1,6 @@
 .:53 {
-    hosts /etc/coredns/hosts {
+    clients
+    hosts "/data/dns/hosts" {
         ttl 30
         reload 2s
         fallthrough
