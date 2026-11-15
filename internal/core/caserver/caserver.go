@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 	"github.com/leobsst/frankenphp-cli/internal/platform"
 )
 
@@ -69,11 +70,11 @@ func RunningState(dataDir string) (pid, port int, ok bool) {
 // certificate.
 func StartSharing(dataDir, exe, certFile string, port int) (int, error) {
 	if _, _, ok := RunningState(dataDir); ok {
-		return 0, &Error{"Root CA sharing is already running. Run `frankenmanager trust-ca off` first."}
+		return 0, &Error{i18n.T("Root CA sharing is already running. Run `frankenmanager trust-ca off` first.")}
 	}
 	cert, err := os.ReadFile(certFile)
 	if err != nil {
-		return 0, &Error{fmt.Sprintf("Root CA not found at %s. "+
+		return 0, &Error{i18n.Tf("Root CA not found at %s. "+
 			"Run `sudo frankenmanager setup --install-mkcert` first.", certFile)}
 	}
 
@@ -90,7 +91,7 @@ func StartSharing(dataDir, exe, certFile string, port int) (int, error) {
 	err = cmd.Start()
 	_ = logFile.Close()
 	if err != nil {
-		return 0, &Error{fmt.Sprintf("Root CA server failed to start: %v", err)}
+		return 0, &Error{i18n.Tf("Root CA server failed to start: %v", err)}
 	}
 
 	// closed once the process exits; cmd.ProcessState then holds its code
@@ -124,7 +125,7 @@ func waitUntilServing(cmd *exec.Cmd, exited <-chan struct{}, port int, cert []by
 	for time.Now().Before(deadline) {
 		select {
 		case <-exited:
-			return &Error{"Root CA server failed to start: " + lastLine(log, cmd)}
+			return &Error{i18n.Tf("Root CA server failed to start: %v", lastLine(log, cmd))}
 		default:
 		}
 		resp, err := client.Get(url)
@@ -142,11 +143,11 @@ func waitUntilServing(cmd *exec.Cmd, exited <-chan struct{}, port int, cert []by
 			return nil
 		}
 		kill()
-		return &Error{fmt.Sprintf("Port %d is already in use by another process (it responded, "+
+		return &Error{i18n.Tf("Port %d is already in use by another process (it responded, "+
 			"but not with the expected root CA certificate). Pick a different port with --port.", port)}
 	}
 	kill()
-	return &Error{fmt.Sprintf("Root CA server did not start listening on port %d within %.0fs. "+
+	return &Error{i18n.Tf("Root CA server did not start listening on port %d within %.0fs. "+
 		"It may be blocked by a firewall.", port, StartupTimeout.Seconds())}
 }
 
@@ -155,7 +156,7 @@ func lastLine(log string, cmd *exec.Cmd) string {
 	data, _ := os.ReadFile(log)
 	text := strings.TrimSpace(strings.ToValidUTF8(string(data), "�"))
 	if text == "" {
-		return fmt.Sprintf("exited with code %d", cmd.ProcessState.ExitCode())
+		return i18n.Tf("exited with code %d", cmd.ProcessState.ExitCode())
 	}
 	lines := strings.Split(text, "\n")
 	return lines[len(lines)-1]

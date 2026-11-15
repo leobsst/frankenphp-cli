@@ -2,7 +2,6 @@ package cli
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -12,6 +11,7 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/dns"
 	"github.com/leobsst/frankenphp-cli/internal/core/dnsclients"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 	"github.com/leobsst/frankenphp-cli/internal/ui"
 )
 
@@ -19,8 +19,8 @@ func newDNSClientsCmd(a *app) *cobra.Command {
 	var all, asJSON bool
 	cmd := &cobra.Command{
 		Use:   "dns-clients",
-		Short: "List the devices using the LAN DNS server.",
-		Long: `List the devices using the LAN DNS server (DNS_SERVER=true).
+		Short: i18n.T("List the devices using the LAN DNS server."),
+		Long: i18n.T(`List the devices using the LAN DNS server (DNS_SERVER=true).
 
 A device is connected when it queried the server in the last 5 minutes.
 Its name comes from your router (DHCP host name) and its MAC address from
@@ -29,13 +29,13 @@ this machine's ARP table, when they know them.
 Examples:
     frankenmanager dns-clients          # Connected devices
     frankenmanager dns-clients --all    # Also the idle ones (last 30 days)
-    frankenmanager dns-clients --json   # Machine-readable list`,
+    frankenmanager dns-clients --json   # Machine-readable list`),
 		Args: noArgs,
 		RunE: func(*cobra.Command, []string) error { return a.dnsClients(all, asJSON, time.Now()) },
 	}
 	f := cmd.Flags()
-	f.BoolVarP(&all, "all", "a", false, "Also list the idle devices")
-	f.BoolVar(&asJSON, "json", false, "Print the devices as JSON")
+	f.BoolVarP(&all, "all", "a", false, i18n.T("Also list the idle devices"))
+	f.BoolVar(&asJSON, "json", false, i18n.T("Print the devices as JSON"))
 	return cmd
 }
 
@@ -58,7 +58,7 @@ func (a *app) dnsClients(all, asJSON bool, now time.Time) (err error) {
 		return err
 	}
 	if !dns.Enabled(e) {
-		return errors.New("The LAN DNS server is disabled: run 'frankenmanager service enable dns'.") //nolint:staticcheck // user-facing message
+		return i18n.NewError("The LAN DNS server is disabled: run 'frankenmanager service enable dns'.")
 	}
 	s, err := a.openStore(dir)
 	if err != nil {
@@ -92,11 +92,11 @@ func (a *app) dnsClients(all, asJSON bool, now time.Time) (err error) {
 	}
 
 	if a.dnsProcessState(dir) != "running" {
-		a.log.Warning("The LAN DNS server is not running: run 'frankenmanager restart --dns'.")
+		a.log.Warning(i18n.T("The LAN DNS server is not running: run 'frankenmanager restart --dns'."))
 	}
 	c := a.con
 	if len(stored) == 0 {
-		c.Println("\nNo device has queried the LAN DNS server yet.")
+		c.Println(i18n.T("\nNo device has queried the LAN DNS server yet."))
 		recordsIP, err := dns.ResolveIP(e)
 		if err != nil {
 			return err
@@ -112,40 +112,52 @@ func (a *app) dnsClients(all, asJSON bool, now time.Time) (err error) {
 		return nil
 	}
 	if len(clients) == 0 {
-		c.Println(fmt.Sprintf("\nNo device connected in the last %d minutes (%d known: --all).\n",
+		c.Println(i18n.Tf("\nNo device connected in the last %d minutes (%d known: --all).\n",
 			int(dnsclients.ActiveWindow.Minutes()), len(stored)))
 		return nil
 	}
 
-	t := ui.Table{Title: "LAN DNS clients", Columns: []ui.Column{
-		{Header: "Status"}, {Header: "IP", Color: ui.Cyan}, {Header: "Name"}, {Header: "MAC", Faint: true},
-		{Header: "Last seen"}, {Header: "Queries"},
+	t := ui.Table{Title: i18n.T("LAN DNS clients"), Columns: []ui.Column{
+		{Header: i18n.T("Status")}, {Header: "IP", Color: ui.Cyan}, {Header: i18n.T("Name")}, {Header: "MAC", Faint: true},
+		{Header: i18n.T("Last seen")}, {Header: i18n.T("Queries")},
 	}}
 	randomized := false
 	for _, cl := range clients {
-		status := c.Color(ui.Green, cl.Status)
+		status := c.Color(ui.Green, i18n.T("connected"))
 		if cl.Status != dnsclients.Connected {
-			status = c.Dim(cl.Status)
+			status = c.Dim(i18n.T("idle"))
 		}
 		mac := orDash(cl.MAC)
 		if cl.RandomizedMAC {
 			mac += "*"
 			randomized = true
 		}
-		t.Rows = append(t.Rows, []string{status, cl.IP, orDash(cl.Name), mac, ago(now.Sub(cl.LastSeen)),
+		t.Rows = append(t.Rows, []string{status, cl.IP, orDash(clientName(cl.Name)), mac, ago(now.Sub(cl.LastSeen)),
 			strconv.FormatInt(cl.Queries, 10)})
 	}
 	c.Println()
 	c.PrintTable(t)
-	footer := fmt.Sprintf("%d device(s) connected", connected)
-	if !all && len(stored) > connected {
-		footer += " (idle ones: --all)"
-	}
-	if randomized {
-		footer += ". * private MAC address, changes per network"
+	var footer string
+	switch idle := !all && len(stored) > connected; {
+	case idle && randomized:
+		footer = i18n.Tf("%d device(s) connected (idle ones: --all). * private MAC address, changes per network", connected)
+	case idle:
+		footer = i18n.Tf("%d device(s) connected (idle ones: --all)", connected)
+	case randomized:
+		footer = i18n.Tf("%d device(s) connected. * private MAC address, changes per network", connected)
+	default:
+		footer = i18n.Tf("%d device(s) connected", connected)
 	}
 	c.Println("\n", c.Dim(footer), "\n")
 	return nil
+}
+
+// clientName is the name of a device as shown, the host's own translated.
+func clientName(name string) string {
+	if name == dnsclients.ThisMachine {
+		return i18n.T("this machine")
+	}
+	return name
 }
 
 func orDash(s string) string {
@@ -160,13 +172,13 @@ func orDash(s string) string {
 func ago(d time.Duration) string {
 	switch {
 	case d < 5*time.Second:
-		return "now"
+		return i18n.T("now")
 	case d < time.Minute:
-		return fmt.Sprintf("%ds ago", int(d.Seconds()))
+		return i18n.Tf("%ds ago", int(d.Seconds()))
 	case d < time.Hour:
-		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+		return i18n.Tf("%dm ago", int(d.Minutes()))
 	case d < 24*time.Hour:
-		return fmt.Sprintf("%dh ago", int(d.Hours()))
+		return i18n.Tf("%dh ago", int(d.Hours()))
 	}
-	return fmt.Sprintf("%dd ago", int(d.Hours()/24))
+	return i18n.Tf("%dd ago", int(d.Hours()/24))
 }

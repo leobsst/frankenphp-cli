@@ -19,6 +19,7 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/phpversions"
 	"github.com/leobsst/frankenphp-cli/internal/core/soketi"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 )
 
 const (
@@ -126,7 +127,7 @@ func (g *Generator) GenerateForVersion(domains []string, phpVersion string) erro
 		if exists(path) {
 			continue
 		}
-		g.Log.Info(fmt.Sprintf("Creating %s%s (PHP %s)...", simple, suffix, phpVersion))
+		g.Log.Info(i18n.Tf("Creating %s%s (PHP %s)...", simple, suffix, phpVersion))
 		content, err := g.buildWorkerSite(domain, simple)
 		if err != nil {
 			return err
@@ -136,7 +137,7 @@ func (g *Generator) GenerateForVersion(domains []string, phpVersion string) erro
 		}
 	}
 
-	g.Log.Success("Caddyfile configurations generated")
+	g.Log.Success(i18n.T("Caddyfile configurations generated"))
 	return nil
 }
 
@@ -152,7 +153,7 @@ func (g *Generator) buildWorkerSite(domain, simple string) (string, error) {
 		content, _ = toHTTP(content)
 		return content, nil
 	case errors.Is(err, fs.ErrPermission):
-		g.Log.Warning(fmt.Sprintf("Cannot read template at %s (permission denied), using built-in fallback",
+		g.Log.Warning(i18n.Tf("Cannot read template at %s (permission denied), using built-in fallback",
 			g.TemplatePath))
 	case !errors.Is(err, fs.ErrNotExist):
 		return "", err
@@ -208,10 +209,10 @@ func (g *Generator) MoveToVersion(domain, fromVersion, toVersion string) error {
 		if err := replace(src, dst); err != nil {
 			return err
 		}
-		g.Log.Info(fmt.Sprintf("Moved %s from PHP %s to PHP %s", name, fromVersion, toVersion))
+		g.Log.Info(i18n.Tf("Moved %s from PHP %s to PHP %s", name, fromVersion, toVersion))
 		return nil
 	}
-	g.Log.Warning(fmt.Sprintf("Caddyfile for %s not found", domain))
+	g.Log.Warning(i18n.Tf("Caddyfile for %s not found", domain))
 	return nil
 }
 
@@ -235,13 +236,13 @@ func (g *Generator) Archive(domains []string) error {
 			}
 		}
 		if src == "" {
-			g.Log.Warning(fmt.Sprintf("Caddyfile for %s not found, skipping archive", domain))
+			g.Log.Warning(i18n.Tf("Caddyfile for %s not found, skipping archive", domain))
 			continue
 		}
 		if err := replace(src, filepath.Join(g.ArchiveDir(), name)); err != nil {
 			return err
 		}
-		g.Log.Info("Archived " + name)
+		g.Log.Info(i18n.Tf("Archived %s", name))
 	}
 	return nil
 }
@@ -286,7 +287,7 @@ func (g *Generator) RestoreToVersion(domains []string, phpVersion string) ([]str
 		simple := SimpleDomain(domain)
 		src := filepath.Join(g.ArchiveDir(), simple+suffix)
 		if !exists(src) {
-			g.Log.Warning(fmt.Sprintf("Archived Caddyfile for '%s' not found, skipping", domain))
+			g.Log.Warning(i18n.Tf("Archived Caddyfile for '%s' not found, skipping", domain))
 			continue
 		}
 		full := extractDomain(src)
@@ -296,7 +297,7 @@ func (g *Generator) RestoreToVersion(domains []string, phpVersion string) ([]str
 		if err := replace(src, filepath.Join(versionDir, simple+suffix)); err != nil {
 			return restored, err
 		}
-		g.Log.Info(fmt.Sprintf("Restored %s%s (PHP %s)", simple, suffix, phpVersion))
+		g.Log.Info(i18n.Tf("Restored %s%s (PHP %s)", simple, suffix, phpVersion))
 		restored = append(restored, full)
 	}
 	return restored, nil

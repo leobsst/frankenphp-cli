@@ -9,7 +9,6 @@ package embeddns
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -20,6 +19,8 @@ import (
 
 	"github.com/coredns/caddy"
 	"github.com/coredns/coredns/core/dnsserver"
+
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 
 	// The plugins of the Corefile
 	_ "github.com/coredns/coredns/plugin/bind"
@@ -67,7 +68,7 @@ func setup() {
 }
 
 // ErrRunning is returned when a server already runs in this process.
-var ErrRunning = errors.New("the LAN DNS server already runs in this process")
+var ErrRunning = i18n.NewError("the LAN DNS server already runs in this process")
 
 // Run serves o.Corefile until ctx ends, then stops the server. A changed
 // Corefile is loaded without dropping the server; an invalid one is logged
@@ -96,7 +97,7 @@ func Run(ctx context.Context, o Options) error {
 	}
 	inst, err := caddy.Start(input(o.Corefile, content))
 	if err != nil {
-		return fmt.Errorf("start the LAN DNS server: %w", err)
+		return i18n.Errorf("start the LAN DNS server: %w", err)
 	}
 
 	ticker := time.NewTicker(ReloadInterval)
@@ -114,7 +115,7 @@ func Run(ctx context.Context, o Options) error {
 		content = next
 		restarted, err := inst.Restart(input(o.Corefile, next))
 		if err != nil {
-			_, _ = fmt.Fprintf(o.Log, "LAN DNS server: invalid Corefile, keeping the previous one: %v\n", err)
+			_, _ = fmt.Fprint(o.Log, i18n.Tf("LAN DNS server: invalid Corefile, keeping the previous one: %v\n", err))
 			continue
 		}
 		inst = restarted

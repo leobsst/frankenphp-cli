@@ -14,6 +14,7 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/dnswatcher"
 	"github.com/leobsst/frankenphp-cli/internal/core/resources"
 	"github.com/leobsst/frankenphp-cli/internal/core/updater"
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 	"github.com/leobsst/frankenphp-cli/internal/platform"
 )
 
@@ -39,13 +40,13 @@ func newInternalCmds(a *app) []*cobra.Command {
 	return []*cobra.Command{
 		{
 			Use:    caserver.Command + " CERT_FILE PORT",
-			Short:  "Internal: blocking single-file HTTP server, spawned by `trust-ca on`.",
+			Short:  i18n.T("Internal: blocking single-file HTTP server, spawned by `trust-ca on`."),
 			Hidden: true,
 			Args:   rangeArgs(2, "CERT_FILE", "PORT"),
 			RunE: func(cmd *cobra.Command, args []string) error {
 				port, err := strconv.Atoi(args[1])
 				if err != nil {
-					return usageError{fmt.Errorf("Invalid value for 'PORT': '%s' is not a valid integer.", args[1])} //nolint:staticcheck // user-facing message
+					return usageError{i18n.Errorf("Invalid value for 'PORT': '%s' is not a valid integer.", args[1])}
 				}
 				ctx, stop := untilTerminated(cmd.Context())
 				defer stop()
@@ -57,7 +58,7 @@ func newInternalCmds(a *app) []*cobra.Command {
 		},
 		{
 			Use:    dnswatcher.Command,
-			Short:  "Internal: keep the LAN DNS records on the current LAN IP, spawned by `start`.",
+			Short:  i18n.T("Internal: keep the LAN DNS records on the current LAN IP, spawned by `start`."),
 			Hidden: true,
 			Args:   noArgs,
 			RunE: func(cmd *cobra.Command, _ []string) error {
@@ -75,7 +76,7 @@ func newInternalCmds(a *app) []*cobra.Command {
 		},
 		{
 			Use:    updater.SyncResourcesCommand,
-			Short:  "Internal: resync the static resources, run by `update` with the new binary.",
+			Short:  i18n.T("Internal: resync the static resources, run by `update` with the new binary."),
 			Hidden: true,
 			Args:   noArgs,
 			RunE: func(*cobra.Command, []string) error {
@@ -97,7 +98,7 @@ func newInternalCmds(a *app) []*cobra.Command {
 		newInstallAliasCmd(a),
 		{
 			Use:    updater.ServerRunningCommand,
-			Short:  "Internal: exit 0 when the server runs, 1 otherwise, run by `update` as the real user.",
+			Short:  i18n.T("Internal: exit 0 when the server runs, 1 otherwise, run by `update` as the real user."),
 			Hidden: true,
 			Args:   noArgs,
 			RunE: func(cmd *cobra.Command, _ []string) error {
@@ -113,7 +114,7 @@ func newInternalCmds(a *app) []*cobra.Command {
 		},
 		{
 			Use:    updater.RefreshCommand,
-			Short:  "Internal: refresh the cached GitHub release info, spawned at startup.",
+			Short:  i18n.T("Internal: refresh the cached GitHub release info, spawned at startup."),
 			Hidden: true,
 			Args:   noArgs,
 			RunE: func(cmd *cobra.Command, _ []string) error {
@@ -143,7 +144,7 @@ func newInstallAliasCmd(a *app) *cobra.Command {
 	var binDir string
 	cmd := &cobra.Command{
 		Use:    "_install-alias-internal",
-		Short:  "Internal: install the CLI alias next to the command, run by the install scripts.",
+		Short:  i18n.T("Internal: install the CLI alias next to the command, run by the install scripts."),
 		Hidden: true,
 		Args:   noArgs,
 		RunE: func(*cobra.Command, []string) error {
@@ -151,6 +152,6 @@ func newInstallAliasCmd(a *app) *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&binDir, "bin-dir", "", "Directory of the frankenmanager command")
+	cmd.Flags().StringVar(&binDir, "bin-dir", "", i18n.T("Directory of the frankenmanager command"))
 	return cmd
 }

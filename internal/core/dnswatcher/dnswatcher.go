@@ -36,6 +36,7 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/embeddns"
 	"github.com/leobsst/frankenphp-cli/internal/core/env"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 	"github.com/leobsst/frankenphp-cli/internal/platform"
 )
 
@@ -418,8 +419,8 @@ func CheckOnce(dataDir, lastIP string, stderr io.Writer) (string, error) {
 	if previous == "" {
 		previous = "None"
 	}
-	_, _ = fmt.Fprintf(stderr, "%s LAN IP changed: %s -> %s, DNS records updated\n",
-		time.Now().Format("2006-01-02T15:04:05"), previous, ip)
+	_, _ = fmt.Fprint(stderr, i18n.Tf("%s LAN IP changed: %s -> %s, DNS records updated\n",
+		time.Now().Format("2006-01-02T15:04:05"), previous, ip))
 	return ip, nil
 }
 
@@ -496,7 +497,7 @@ func syncFiles(dataDir string, s *store.Store) error {
 // serverError explains a refused port 53.
 func serverError(err error) error {
 	if errors.Is(err, os.ErrPermission) || strings.Contains(err.Error(), "permission denied") {
-		return fmt.Errorf("%w\nThe LAN DNS server may not use this port: run `sudo frankenmanager setup`, "+
+		return i18n.Errorf("%w\nThe LAN DNS server may not use this port: run `sudo frankenmanager setup`, "+
 			"or set DNS_PORT above 1023", err)
 	}
 	return err
@@ -515,20 +516,21 @@ type loop struct {
 	identifying sync.Mutex
 }
 
-func (l *loop) logf(format string, args ...any) {
-	_, _ = fmt.Fprintf(l.stderr, "%s "+format+"\n", append([]any{time.Now().Format("2006-01-02T15:04:05")}, args...)...)
+// logf writes msg, already translated, after the time.
+func (l *loop) logf(msg string) {
+	_, _ = fmt.Fprintf(l.stderr, "%s %s\n", time.Now().Format("2006-01-02T15:04:05"), msg)
 }
 
 func (l *loop) tick(ctx context.Context) {
 	ip, err := CheckOnce(l.dataDir, l.lastIP, l.stderr)
 	if err != nil {
-		l.logf("DNS watcher error: %v", err)
+		l.logf(i18n.Tf("DNS watcher error: %v", err))
 	}
 	l.lastIP = ip
 	l.flush(ctx)
 	if now := time.Now(); now.Sub(l.lastPrune) >= PruneInterval {
 		if err := dnsclients.Prune(l.store, now); err != nil {
-			l.logf("DNS clients prune error: %v", err)
+			l.logf(i18n.Tf("DNS clients prune error: %v", err))
 		}
 		l.lastPrune = now
 	}
@@ -539,7 +541,7 @@ func (l *loop) tick(ctx context.Context) {
 func (l *loop) flush(ctx context.Context) {
 	stale, err := l.tracker.Flush(l.store)
 	if err != nil {
-		l.logf("DNS clients write error: %v", err)
+		l.logf(i18n.Tf("DNS clients write error: %v", err))
 		return
 	}
 	if len(stale) == 0 || !l.identifying.TryLock() {
@@ -548,7 +550,7 @@ func (l *loop) flush(ctx context.Context) {
 	go func() {
 		defer l.identifying.Unlock()
 		if err := dnsclients.Identify(ctx, l.store, l.identity, stale, time.Now()); err != nil {
-			l.logf("DNS clients identity error: %v", err)
+			l.logf(i18n.Tf("DNS clients identity error: %v", err))
 		}
 	}()
 }

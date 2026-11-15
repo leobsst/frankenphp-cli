@@ -20,6 +20,7 @@ import (
 
 	"github.com/leobsst/frankenphp-cli/internal/core/soketi"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 	"github.com/leobsst/frankenphp-cli/internal/platform"
 )
 
@@ -65,7 +66,7 @@ var LANIP = platform.LANIP
 func parseIP(name, value string) (string, error) {
 	addr, err := netip.ParseAddr(value)
 	if err != nil {
-		return "", &Error{fmt.Sprintf("Invalid %s '%s': '%s' does not appear to be an IPv4 or IPv6 address",
+		return "", &Error{i18n.Tf("Invalid %s '%s': '%s' does not appear to be an IPv4 or IPv6 address",
 			name, value, value)}
 	}
 	return addr.String(), nil
@@ -210,16 +211,16 @@ func DescribeServerAddresses(addrs []Address, recordsIP string) []string {
 	case 0:
 		return nil
 	case 1:
-		return []string{"  Set " + addrs[0].IP + " as the DNS server of your other devices (or of your router)."}
+		return []string{i18n.Tf("  Set %s as the DNS server of your other devices (or of your router).", addrs[0].IP)}
 	}
-	lines := []string{"  Set one of these IPs as the DNS server of your other devices (or of your router):"}
+	lines := []string{i18n.T("  Set one of these IPs as the DNS server of your other devices (or of your router):")}
 	for _, a := range addrs {
 		var details []string
 		if a.Interface != "" {
 			details = append(details, a.Interface)
 		}
 		if a.IP == recordsIP {
-			details = append(details, "domains resolve to it")
+			details = append(details, i18n.T("domains resolve to it"))
 		}
 		suffix := ""
 		if len(details) > 0 {
@@ -227,8 +228,8 @@ func DescribeServerAddresses(addrs []Address, recordsIP string) []string {
 		}
 		lines = append(lines, "    - "+a.IP+suffix)
 	}
-	return append(lines, "  On the same network, set two of them as primary and secondary DNS servers: "+
-		"the devices keep resolving if one interface goes down.")
+	return append(lines, i18n.T("  On the same network, set two of them as primary and secondary DNS servers: "+
+		"the devices keep resolving if one interface goes down."))
 }
 
 // Server is what the Corefile describes.
