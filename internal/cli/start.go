@@ -30,10 +30,6 @@ func phpVersionUsage() string {
 		strings.Join(phpversions.Supported, ", "), strings.Join(phpversions.Deprecated, ", "))
 }
 
-// phpVersionHelp is the help of the --php options, in English (built
-// before the language is selected): use phpVersionUsage.
-var phpVersionHelp = phpVersionUsage()
-
 // maxArgs accepts up to n arguments, extra ones being a usage error.
 func maxArgs(n int) cobra.PositionalArgs {
 	return func(cmd *cobra.Command, args []string) error {

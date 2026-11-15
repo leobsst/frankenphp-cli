@@ -18,5 +18,6 @@
   "Usage: %s\nTry '%s --help' for help.\n\nError: %s\n": "Utilisation : %s\nEssayez « %s --help » pour l'aide.\n\nErreur : %s\n",
   "WARNING: %s": "AVERTISSEMENT : %s",
   "ERROR: %s": "ERREUR : %s",
-  "Language of the messages: auto follows the system language (LANG, LC_ALL...)": "Langue des messages : auto suit la langue du système (LANG, LC_ALL...)"
+  "Language of the messages: auto follows the system language (LANG, LC_ALL...)": "Langue des messages : auto suit la langue du système (LANG, LC_ALL...)",
+  "Skip checking for updates on startup": "Ne pas vérifier les mises à jour au démarrage"
 }

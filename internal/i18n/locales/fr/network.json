@@ -8,7 +8,7 @@
   "\nNo device has queried the LAN DNS server yet.": "\nAucun appareil n'a encore interrogé le serveur DNS du réseau local.",
   "\nNo device connected in the last %d minutes (%d known: --all).\n": "\nAucun appareil connecté dans les %d dernières minutes (%d connus : --all).\n",
   "LAN DNS clients": "Clients DNS du réseau local",
-  "Status": "Statut",
+  "Status": "État",
   "Name": "Nom",
   "Last seen": "Vu pour la dernière fois",
   "Queries": "Requêtes",

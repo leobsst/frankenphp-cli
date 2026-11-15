@@ -70,7 +70,7 @@ func NewRootCmd(out, errOut io.Writer, deps Deps) *cobra.Command {
 
 	// Hidden global option used by the processes the CLI spawns itself. It
 	// must precede the subcommand: `frankenmanager --no-update-check <cmd>`.
-	root.PersistentFlags().Bool("no-update-check", false, "Skip checking for updates on startup")
+	root.PersistentFlags().Bool("no-update-check", false, i18n.T("Skip checking for updates on startup"))
 	_ = root.PersistentFlags().MarkHidden("no-update-check")
 	// Before or after the subcommand: `frankenmanager start --verbose`
 	root.PersistentFlags().Bool("verbose", false, i18n.T("Show the logs of the Docker image builds"))

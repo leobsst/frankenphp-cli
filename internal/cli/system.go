@@ -388,7 +388,8 @@ Examples:
 // errAborted reports that the input ended at a prompt.
 var errAborted = errors.New("aborted")
 
-// confirm asks a yes/no question, no by default.
+// confirm asks a yes/no question, no by default. The English answers are
+// accepted in every language, the French ones (o, oui, non) too.
 func (a *app) confirm(question string) (bool, error) {
 	in := bufio.NewReader(a.deps.Stdin)
 	for {
@@ -398,9 +399,9 @@ func (a *app) confirm(question string) (bool, error) {
 			return false, errAborted
 		}
 		switch strings.ToLower(strings.TrimSpace(line)) {
-		case "y", "yes":
+		case "y", "yes", "o", "oui":
 			return true, nil
-		case "", "n", "no":
+		case "", "n", "no", "non":
 			return false, nil
 		}
 		fmt.Fprintln(a.out, i18n.T("Error: invalid input"))

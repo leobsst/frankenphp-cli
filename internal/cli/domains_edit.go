@@ -275,7 +275,7 @@ Examples:
 	f := cmd.Flags()
 	f.BoolVarP(&list, "list", "l", false, i18n.T("List all archived hosts"))
 	f.BoolVar(&forceSSL, "force-ssl", false, i18n.T("Force SSL certificate regeneration"))
-	f.StringVar(&php, "php", "", phpVersionHelp)
+	f.StringVar(&php, "php", "", phpVersionUsage())
 	return cmd
 }
 
@@ -455,7 +455,7 @@ Examples:
 			return a.switchPHP(cmd.Context(), args[0], php)
 		},
 	}
-	cmd.Flags().StringVar(&php, "php", "", phpVersionHelp)
+	cmd.Flags().StringVar(&php, "php", "", phpVersionUsage())
 	return cmd
 }
 

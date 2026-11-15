@@ -218,7 +218,7 @@ Examples:
 		},
 	}
 	cmd.Flags().BoolVar(&forceSSL, "force-ssl", false, i18n.T("Force SSL certificate regeneration"))
-	cmd.Flags().StringVar(&php, "php", "", phpVersionHelp)
+	cmd.Flags().StringVar(&php, "php", "", phpVersionUsage())
 	return cmd
 }
 
