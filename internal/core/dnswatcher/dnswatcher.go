@@ -1,19 +1,21 @@
-// Package dnswatcher keeps the LAN DNS records pointed at this host's
-// current LAN IP.
+// Package dnswatcher runs the LAN DNS server in the background: CoreDNS
+// embedded in a `_watch-dns-internal` process (see embeddns), which also
+// records the devices querying it (see dnsclients) and keeps the records
+// pointed at this host's current LAN IP when DNS_IP is unset.
 //
-// The DNS container cannot see the host's IP (on macOS and Windows, Docker
-// runs in a VM): a small `_watch-dns-internal` process polls the LAN IP
-// and rewrites the records when it changes. It only runs with
-// DNS_SERVER=true and DNS_IP unset.
+// It runs on the host rather than in a container so that it sees the real
+// address of each device. It runs whenever DNS_SERVER=true.
 //
 // It is handed to the OS service manager when there is one (LaunchAgent on
 // macOS, systemd user unit on Linux), otherwise it runs detached. The
-// label, unit name, plist, unit and PID file are those of earlier releases,
-// so that the current and earlier versions stop each other's watcher.
+// command, label, unit name, plist, unit and PID file are those of earlier
+// releases (where the process only followed the LAN IP), so that the
+// current and earlier versions stop each other's process.
 package dnswatcher
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -24,21 +26,27 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/leobsst/frankenphp-cli/internal/command"
 	"github.com/leobsst/frankenphp-cli/internal/core/dns"
+	"github.com/leobsst/frankenphp-cli/internal/core/dnsclients"
+	"github.com/leobsst/frankenphp-cli/internal/core/embeddns"
 	"github.com/leobsst/frankenphp-cli/internal/core/env"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
 	"github.com/leobsst/frankenphp-cli/internal/platform"
 )
 
 const (
-	// Command is the hidden command running the watcher.
+	// Command is the hidden command running the server.
 	Command = "_watch-dns-internal"
-	// PollInterval is how often the LAN IP is checked.
+	// PollInterval is how often the LAN IP is checked and the devices
+	// written to the database.
 	PollInterval = 5 * time.Second
+	// PruneInterval is how often the devices no longer seen are removed.
+	PruneInterval = 24 * time.Hour
 
 	LaunchdLabel = "dev.frankenmanager.dns-watcher"
 	SystemdUnit  = "frankenmanager-dns-watcher.service"
@@ -59,8 +67,13 @@ type Config interface {
 	Get(key string) string
 }
 
-// Needed reports whether the records follow the detected LAN IP.
-func Needed(c Config) bool { return dns.Enabled(c) && c.Get("DNS_IP") == "" }
+// Needed reports whether the background process runs: whenever the LAN DNS
+// server is on.
+func Needed(c Config) bool { return dns.Enabled(c) }
+
+// FollowsIP reports whether the records follow the detected LAN IP: DNS_IP
+// unset.
+func FollowsIP(c Config) bool { return dns.Enabled(c) && c.Get("DNS_IP") == "" }
 
 // Watcher starts and stops the watcher of a data directory.
 type Watcher struct {
@@ -116,7 +129,7 @@ func (w *Watcher) logPath() string { return filepath.Join(w.DataDir, logName) }
 // command is the watcher command line.
 func (w *Watcher) command() []string { return []string{w.Exe, "--no-update-check", Command} }
 
-// Update restarts the watcher when the settings need it, stops it
+// Update restarts the process when the LAN DNS server is on, stops it
 // otherwise, and reports whether it runs.
 func (w *Watcher) Update(ctx context.Context, c Config) (bool, error) {
 	if !Needed(c) {
@@ -390,7 +403,7 @@ func CheckOnce(dataDir, lastIP string, stderr io.Writer) (string, error) {
 	if err != nil {
 		return lastIP, err
 	}
-	if !Needed(e) {
+	if !FollowsIP(e) {
 		return lastIP, nil
 	}
 	s, err := store.Open(filepath.Join(dataDir, "db.sqlite"))
@@ -410,9 +423,12 @@ func CheckOnce(dataDir, lastIP string, stderr io.Writer) (string, error) {
 	return ip, nil
 }
 
-// Run is the watcher process: it writes its PID (launchd and systemd start
-// it without telling anyone), polls until SIGTERM, then removes the PID
-// file if still its own. Errors are logged and the watch goes on.
+// Run is the background process: it writes its PID (launchd and systemd
+// start it without telling anyone), writes the DNS files, serves them until
+// SIGTERM, then writes the pending devices and removes the PID file if
+// still its own. A server that cannot start ends Run with its error: the
+// service manager relaunches the process. Other errors are logged and the
+// process goes on.
 func Run(ctx context.Context, dataDir string, stderr io.Writer) error {
 	ctx, stop := signal.NotifyContext(ctx, syscall.SIGTERM)
 	defer stop()
@@ -428,17 +444,111 @@ func Run(ctx context.Context, dataDir string, stderr io.Writer) error {
 		}
 	}()
 
-	lastIP := ""
+	s, err := store.Open(filepath.Join(dataDir, "db.sqlite"))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = s.Close() }()
+	// Current files: the Corefile of an earlier release was a container's
+	if err := syncFiles(dataDir, s); err != nil {
+		return err
+	}
+
+	tracker := dnsclients.NewTracker()
+	serverCtx, stopServer := context.WithCancel(ctx)
+	served := make(chan error, 1)
+	go func() {
+		served <- embeddns.Run(serverCtx, embeddns.Options{
+			Corefile: dns.CorefilePath(dataDir), OnQuery: tracker.Seen, Log: stderr,
+		})
+	}()
+	l := &loop{dataDir: dataDir, store: s, tracker: tracker, stderr: stderr, identity: dnsclients.SystemIdentifier()}
+	defer l.flush(context.Background())
+
+	ticker := time.NewTicker(PollInterval)
+	defer ticker.Stop()
 	for {
-		ip, err := CheckOnce(dataDir, lastIP, stderr)
-		if err != nil {
-			_, _ = fmt.Fprintf(stderr, "DNS watcher error: %v\n", err)
-		}
-		lastIP = ip
 		select {
-		case <-ctx.Done():
+		case err := <-served:
+			stopServer()
+			if err != nil {
+				return serverError(err)
+			}
 			return nil
-		case <-time.After(PollInterval):
+		case <-ctx.Done():
+			stopServer()
+			return <-served
+		case <-ticker.C:
+			l.tick(ctx)
 		}
 	}
+}
+
+// syncFiles writes the Corefile and the records when the server is on.
+func syncFiles(dataDir string, s *store.Store) error {
+	e, _, err := env.Open(dataDir)
+	if err != nil {
+		return err
+	}
+	return dns.Sync(dataDir, e, s)
+}
+
+// serverError explains a refused port 53.
+func serverError(err error) error {
+	if errors.Is(err, os.ErrPermission) || strings.Contains(err.Error(), "permission denied") {
+		return fmt.Errorf("%w\nThe LAN DNS server may not use this port: run `sudo frankenmanager setup`, "+
+			"or set DNS_PORT above 1023", err)
+	}
+	return err
+}
+
+// loop is the periodic work of Run.
+type loop struct {
+	dataDir  string
+	store    *store.Store
+	tracker  *dnsclients.Tracker
+	stderr   io.Writer
+	identity dnsclients.Identifier
+
+	lastIP      string
+	lastPrune   time.Time
+	identifying sync.Mutex
+}
+
+func (l *loop) logf(format string, args ...any) {
+	_, _ = fmt.Fprintf(l.stderr, "%s "+format+"\n", append([]any{time.Now().Format("2006-01-02T15:04:05")}, args...)...)
+}
+
+func (l *loop) tick(ctx context.Context) {
+	ip, err := CheckOnce(l.dataDir, l.lastIP, l.stderr)
+	if err != nil {
+		l.logf("DNS watcher error: %v", err)
+	}
+	l.lastIP = ip
+	l.flush(ctx)
+	if now := time.Now(); now.Sub(l.lastPrune) >= PruneInterval {
+		if err := dnsclients.Prune(l.store, now); err != nil {
+			l.logf("DNS clients prune error: %v", err)
+		}
+		l.lastPrune = now
+	}
+}
+
+// flush writes the devices seen, then looks up the identity of the new
+// ones in the background, one lookup batch at a time.
+func (l *loop) flush(ctx context.Context) {
+	stale, err := l.tracker.Flush(l.store)
+	if err != nil {
+		l.logf("DNS clients write error: %v", err)
+		return
+	}
+	if len(stale) == 0 || !l.identifying.TryLock() {
+		return
+	}
+	go func() {
+		defer l.identifying.Unlock()
+		if err := dnsclients.Identify(ctx, l.store, l.identity, stale, time.Now()); err != nil {
+			l.logf("DNS clients identity error: %v", err)
+		}
+	}()
 }

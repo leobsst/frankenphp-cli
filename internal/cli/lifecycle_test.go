@@ -337,3 +337,45 @@ func TestStartVerboseShowsBuildLogs(t *testing.T) {
 		t.Errorf("logs without --verbose:\n%s", out)
 	}
 }
+
+// The LAN DNS server is the background process: restart --dns syncs the
+// records, removes the container of earlier releases and restarts the
+// process, without any compose call; service disable dns stops it.
+func TestDNSDrivesTheBackgroundProcess(t *testing.T) {
+	e := newEnv(t)
+	e.initEnv("DNS_SERVER=true\nDNS_IP=192.168.1.20\n")
+	if err := e.store().AddDomains([]string{"app.test"}, "8.4"); err != nil {
+		t.Fatal(err)
+	}
+	e.docker.ps = running
+
+	code, out, _ := e.run("restart", "--dns")
+	if code != 0 {
+		t.Fatalf("code %d, out:\n%s", code, out)
+	}
+	mustContain(t, out, "-- LAN DNS server: domains resolve to 192.168.1.20\n")
+	want := []string{"ps --all --no-trunc --format json", "rm -f franken_dns"}
+	if !slices.Equal(e.dockerLines(), want) {
+		t.Errorf("docker calls:\n%s", strings.Join(e.dockerLines(), "\n"))
+	}
+	if got := readFile(t, filepath.Join(e.dir, "dns", "hosts")); !strings.Contains(got, "192.168.1.20 app.test") {
+		t.Errorf("records:\n%s", got)
+	}
+	if got := readFile(t, filepath.Join(e.dir, ".dns_watcher.pid")); got != "424242" {
+		t.Errorf("process not started: pid file %q", got)
+	}
+
+	e.docker.calls = nil
+	code, out, _ = e.run("service", "disable", "dns")
+	if code != 0 {
+		t.Fatalf("code %d, out:\n%s", code, out)
+	}
+	for _, line := range e.dockerLines() {
+		if strings.HasPrefix(line, "stop") || strings.HasPrefix(line, "up") || strings.HasPrefix(line, "rm") {
+			t.Errorf("container call %q", line)
+		}
+	}
+	if !slices.Equal(e.killed, []int{424242}) {
+		t.Errorf("process not stopped: killed %v", e.killed)
+	}
+}

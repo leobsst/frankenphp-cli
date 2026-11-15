@@ -347,7 +347,11 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 		return fail(err)
 	}
 	d.ComposeDown(ctx)
-	if err := stack.ComposeUp(ctx, d, e, versions, listen, customPath); err != nil {
+	if listen != "" {
+		// The DNS container of an earlier release would hold port 53
+		removeLegacyDNS(ctx, d)
+	}
+	if err := stack.ComposeUp(ctx, d, e, versions, customPath); err != nil {
 		return fail(err)
 	}
 

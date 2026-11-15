@@ -27,29 +27,27 @@ func ProjectPath(e *env.Env, s *store.Store) (string, error) {
 
 // ComposeOptions returns what the compose file describes, from the
 // configuration.
-// dnsListen is where the LAN DNS server listens, "" when disabled.
-func ComposeOptions(e *env.Env, phpVersions []string, dnsListen string) compose.Options {
+func ComposeOptions(e *env.Env, phpVersions []string) compose.Options {
 	return compose.Options{
 		PHPVersions: phpVersions,
 		Production:  e.IsProduction(),
 		DBEngines:   e.DBEngines(),
-		DNSListen:   dnsListen,
 		Redis:       e.RedisEnabled(),
 		Websocket:   e.SoketiEnabled(),
 	}
 }
 
 // GenerateCompose rewrites the compose file from the configuration.
-func GenerateCompose(dataDir string, e *env.Env, phpVersions []string, dnsListen string) error {
-	_, err := compose.Write(dataDir, ComposeOptions(e, phpVersions, dnsListen))
+func GenerateCompose(dataDir string, e *env.Env, phpVersions []string) error {
+	_, err := compose.Write(dataDir, ComposeOptions(e, phpVersions))
 	return err
 }
 
 // ComposeUp regenerates the compose file and brings the whole stack up to
 // date, customPath being the projects root mounted in the PHP containers.
 func ComposeUp(ctx context.Context, d *docker.Manager, e *env.Env, phpVersions []string,
-	dnsListen, customPath string) error {
-	if err := GenerateCompose(d.Dir, e, phpVersions, dnsListen); err != nil {
+	customPath string) error {
+	if err := GenerateCompose(d.Dir, e, phpVersions); err != nil {
 		return err
 	}
 	vars, err := e.ComposeEnvVars(d.Dir, customPath, e.DBEngines())

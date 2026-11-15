@@ -26,13 +26,12 @@ var serviceNames = slices.Sorted(func(yield func(string) bool) {
 	}
 })
 
-// composeServices maps an optional service to its compose service.
-var composeServices = map[string]string{"dns": "dns", "redis": "cache", "soketi": "soketi"}
+// composeServices maps a containerized optional service to its compose
+// service. The LAN DNS server is the background process, not a container.
+var composeServices = map[string]string{"redis": "cache", "soketi": "soketi"}
 
-// serviceContainers maps an optional service to its container.
-var serviceContainers = map[string]string{
-	"dns": compose.DNSContainer, "redis": compose.RedisContainer, "soketi": soketi.ContainerName,
-}
+// serviceContainers maps a containerized optional service to its container.
+var serviceContainers = map[string]string{"redis": compose.RedisContainer, "soketi": soketi.ContainerName}
 
 // enabledLabel is how the messages show a service state.
 func enabledLabel(on bool) string {
@@ -133,14 +132,18 @@ func (a *app) serviceStatus(ctx context.Context, only string) error {
 	}
 	statuses := a.docker(dir).ContainerStatuses(ctx)
 	t := ui.Table{Title: "Optional services", Columns: []ui.Column{
-		{Header: "Service", Color: ui.Cyan}, {Header: "Enabled"}, {Header: "Container"}, {Header: "Setting", Faint: true},
+		{Header: "Service", Color: ui.Cyan}, {Header: "Enabled"}, {Header: "State"}, {Header: "Setting", Faint: true},
 	}}
 	for _, name := range serviceNames {
 		if only != "" && name != only {
 			continue
 		}
 		key := env.Services[name]
-		t.Rows = append(t.Rows, []string{name, yesNo(e.Get(key) == "true"), statuses.Get(serviceContainers[name]).State, key})
+		state := statuses.Get(serviceContainers[name]).State
+		if name == "dns" {
+			state = a.dnsProcessState(dir)
+		}
+		t.Rows = append(t.Rows, []string{name, yesNo(e.Get(key) == "true"), state, key})
 	}
 	a.con.PrintTable(t)
 	return nil
@@ -173,24 +176,23 @@ func (a *app) applyService(ctx context.Context, dir string, e *env.Env, name str
 			return err
 		}
 	}
-	active, err := s.ActivePHPVersions()
-	if err != nil {
-		return err
-	}
-	listen, err := dns.ListenAddress(e)
-	if err != nil {
-		return err
-	}
-	if err := stack.GenerateCompose(dir, e, active, listen); err != nil {
-		return err
-	}
-	customPath, err := stack.ProjectPath(e, s)
-	if err != nil {
-		return err
-	}
-	vars, err := e.ComposeEnvVars(dir, customPath, e.DBEngines())
-	if err != nil {
-		return err
+	// The compose file and its variables, for the containerized services
+	var vars map[string]string
+	if name != "dns" {
+		active, err := s.ActivePHPVersions()
+		if err != nil {
+			return err
+		}
+		if err := stack.GenerateCompose(dir, e, active); err != nil {
+			return err
+		}
+		customPath, err := stack.ProjectPath(e, s)
+		if err != nil {
+			return err
+		}
+		if vars, err = e.ComposeEnvVars(dir, customPath, e.DBEngines()); err != nil {
+			return err
+		}
 	}
 
 	switch name {
@@ -199,6 +201,7 @@ func (a *app) applyService(ctx context.Context, dir string, e *env.Env, name str
 			if err := dns.Sync(dir, e, s); err != nil {
 				return err
 			}
+			removeLegacyDNS(ctx, d)
 		}
 	case "soketi":
 		h := a.deps.Hosts(a.log)
@@ -227,12 +230,18 @@ func (a *app) applyService(ctx context.Context, dir string, e *env.Env, name str
 		}
 	}
 
-	if on {
+	switch {
+	case name == "dns" && on:
+		// The background process, started or stopped below
+		a.log.Info("Starting dns...")
+	case name == "dns":
+		a.log.Info("Stopping dns...")
+	case on:
 		a.log.Info(fmt.Sprintf("Starting %s...", name))
 		if err := d.ComposeUp(ctx, vars, composeServices[name]); err != nil {
 			return err
 		}
-	} else {
+	default:
 		a.log.Info(fmt.Sprintf("Stopping %s...", name))
 		d.StopContainer(ctx, serviceContainers[name])
 	}
@@ -256,6 +265,10 @@ func (a *app) applyService(ctx context.Context, dir string, e *env.Env, name str
 		if err != nil {
 			return err
 		}
+		listen, err := dns.ListenAddress(e)
+		if err != nil {
+			return err
+		}
 		a.log.Info(fmt.Sprintf("LAN DNS server listening on %s (domains resolve to %s)", listen, ip))
 	case on && name == "soketi":
 		a.log.Info(fmt.Sprintf("Soketi WebSocket server: wss://%s (apps: 127.0.0.1:%s)", soketi.Domain, soketi.Port(e)))
@@ -263,4 +276,13 @@ func (a *app) applyService(ctx context.Context, dir string, e *env.Env, name str
 		a.log.Info("Redis listening on 127.0.0.1:" + e.Get("REDIS_PORT"))
 	}
 	return nil
+}
+
+// dnsProcessState is the state of the LAN DNS server process: "running" or
+// "stopped".
+func (a *app) dnsProcessState(dir string) string {
+	if w, err := a.deps.Watcher(dir); err == nil && w.RunningPID() != 0 {
+		return "running"
+	}
+	return "stopped"
 }

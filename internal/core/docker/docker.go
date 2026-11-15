@@ -143,7 +143,6 @@ type Containers struct {
 	PHPVersions []string
 	DBEngines   []string // nil means ["mariadb"]
 	Production  bool
-	DNS         bool
 	Redis       bool
 	Websocket   bool
 }
@@ -179,9 +178,6 @@ func AllContainers(c Containers) []string {
 		if slices.Contains(engines, "postgresql") {
 			names = append(names, compose.PGAdminContainer)
 		}
-	}
-	if c.DNS {
-		names = append(names, compose.DNSContainer)
 	}
 	return names
 }
@@ -417,6 +413,12 @@ func (m *Manager) RestartAll(ctx context.Context, c Containers) {
 	for _, name := range AllContainers(c) {
 		m.RestartContainer(ctx, name)
 	}
+}
+
+// RemoveContainer force-removes a container, false when it failed
+// (missing).
+func (m *Manager) RemoveContainer(ctx context.Context, name string) bool {
+	return m.ok(ctx, "rm", "-f", name)
 }
 
 // StopContainer stops then removes a container, false when it failed.

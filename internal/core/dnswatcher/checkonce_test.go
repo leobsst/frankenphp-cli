@@ -2,11 +2,18 @@ package dnswatcher
 
 import (
 	"bytes"
+	"context"
+	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
+
+	mdns "github.com/miekg/dns"
 
 	"github.com/leobsst/frankenphp-cli/internal/core/dns"
 	"github.com/leobsst/frankenphp-cli/internal/core/env"
@@ -119,5 +126,55 @@ func TestStopSystemd(t *testing.T) {
 	}
 	if w.Stop(t.Context()) {
 		t.Error("second Stop found something")
+	}
+}
+
+// Run serves the registered domains on the configured address, records the
+// devices querying it, and writes them when it stops.
+func TestRunServesAndRecordsClients(t *testing.T) {
+	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := strconv.Itoa(pc.LocalAddr().(*net.UDPAddr).Port)
+	_ = pc.Close()
+
+	ip := "192.168.1.30"
+	// The upstream is unreachable: nothing leaves the machine
+	dir := checkDir(t, "DNS_SERVER=true\nDNS_LISTEN_IP=127.0.0.1\nDNS_PORT="+port+"\nDNS_UPSTREAM=127.0.0.1:9\n", &ip)
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() { done <- Run(ctx, dir, io.Discard) }()
+
+	m := new(mdns.Msg)
+	m.SetQuestion("app.test.", mdns.TypeA)
+	c := &mdns.Client{Timeout: 300 * time.Millisecond}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		r, _, err := c.Exchange(m, "127.0.0.1:"+port)
+		if err == nil && len(r.Answer) == 1 && r.Answer[0].(*mdns.A).A.String() == "192.168.1.30" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("no answer: %v %v", r, err)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	s, err := store.Open(filepath.Join(dir, "db.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = s.Close() }()
+	clients, err := s.DNSClients()
+	if err != nil || len(clients) != 1 || clients[0].IP != "127.0.0.1" || clients[0].Queries < 1 {
+		t.Errorf("clients = %+v, %v", clients, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, pidName)); err == nil {
+		t.Error("PID file left")
 	}
 }

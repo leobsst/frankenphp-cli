@@ -112,11 +112,11 @@ func TestAllContainers(t *testing.T) {
 	got := AllContainers(Containers{
 		PHPVersions: []string{"8.5", "8.3"},
 		DBEngines:   []string{"postgresql", "mysql"},
-		DNS:         true, Redis: true, Websocket: true,
+		Redis:       true, Websocket: true,
 	})
 	want := []string{
 		"frankenphp-8.3", "frankenphp-8.5", "franken-caddy-proxy", "franken_redis", "franken_soketi",
-		"franken_postgresql", "franken_mysql", "franken_phpmyadmin", "franken_pgadmin", "franken_dns",
+		"franken_postgresql", "franken_mysql", "franken_phpmyadmin", "franken_pgadmin",
 	}
 	if !slices.Equal(got, want) {
 		t.Errorf("got %v", got)

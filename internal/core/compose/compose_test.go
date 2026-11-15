@@ -7,17 +7,18 @@ import (
 )
 
 // The testdata files are the reference outputs of earlier releases for the
-// same arguments: Build must keep producing them byte for byte.
+// same arguments, without the DNS container: Build must keep producing them
+// byte for byte.
 func TestBuildMatchesReference(t *testing.T) {
 	all := []string{"postgresql", "mysql", "mariadb"}
 	cases := map[string]Options{
 		"dev_default":      {PHPVersions: []string{"8.3"}},
 		"prod_default":     {PHPVersions: []string{"8.3"}, Production: true},
-		"dev_all":          {PHPVersions: []string{"8.5", "8.2", "8.4"}, DBEngines: all, DNSListen: "0.0.0.0:53", Redis: true, Websocket: true},
-		"prod_all":         {PHPVersions: []string{"8.5", "8.2", "8.4"}, Production: true, DBEngines: all, DNSListen: "0.0.0.0:53", Redis: true, Websocket: true},
+		"dev_all":          {PHPVersions: []string{"8.5", "8.2", "8.4"}, DBEngines: all, Redis: true, Websocket: true},
+		"prod_all":         {PHPVersions: []string{"8.5", "8.2", "8.4"}, Production: true, DBEngines: all, Redis: true, Websocket: true},
 		"dev_postgresql":   {PHPVersions: []string{"8.4"}, DBEngines: []string{"postgresql"}, Redis: true},
 		"prod_postgresql":  {PHPVersions: []string{"8.4"}, Production: true, DBEngines: []string{"postgresql"}, Websocket: true},
-		"dev_mysql_no_php": {DBEngines: []string{"mysql"}, DNSListen: "192.168.1.10:5353", Websocket: true},
+		"dev_mysql_no_php": {DBEngines: []string{"mysql"}, Websocket: true},
 		"prod_no_db":       {PHPVersions: []string{"8.3"}, Production: true, DBEngines: []string{}},
 		"dev_no_db_redis":  {PHPVersions: []string{"8.3"}, DBEngines: []string{}, Redis: true},
 	}

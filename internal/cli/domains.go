@@ -115,15 +115,11 @@ func (a *app) startVersion(ctx context.Context, r *server, phpVersion string, ac
 		return err
 	}
 	a.log.Info(fmt.Sprintf("Starting PHP %s container...", phpVersion))
-	listen, err := dns.ListenAddress(r.e)
-	if err != nil {
-		return err
-	}
 	versions := active
 	if !slices.Contains(versions, phpVersion) {
 		versions = append(slices.Clone(active), phpVersion)
 	}
-	return stack.ComposeUp(ctx, r.d, r.e, versions, listen, customPath)
+	return stack.ComposeUp(ctx, r.d, r.e, versions, customPath)
 }
 
 // restartVersion restarts the container of a PHP version.

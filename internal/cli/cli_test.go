@@ -385,7 +385,6 @@ func TestStatusRunning(t *testing.T) {
 		"│ franken_redis             │ exited       │ N/A          │",
 		"│ franken_postgresql        │ running      │ starting     │",
 		"│ franken_pgadmin           │ not found    │ N/A          │",
-		"│ franken_dns               │ not found    │ N/A          │",
 	} {
 		if !strings.Contains(out, line) {
 			t.Errorf("missing %q in:\n%s", line, out)

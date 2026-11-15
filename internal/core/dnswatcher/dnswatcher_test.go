@@ -53,11 +53,15 @@ func TestNeeded(t *testing.T) {
 	for c, want := range map[*memConfig]bool{
 		{}:                     false,
 		{"DNS_SERVER": "true"}: true,
-		{"DNS_SERVER": "true", "DNS_IP": "1.2.3.4"}: false,
+		{"DNS_SERVER": "true", "DNS_IP": "1.2.3.4"}: true,
 		{"DNS_SERVER": "TRUE"}:                      false,
 	} {
 		if got := Needed(*c); got != want {
 			t.Errorf("Needed(%v) = %v", *c, got)
+		}
+		// The records follow the LAN IP only without DNS_IP
+		if got, follows := FollowsIP(*c), want && (*c)["DNS_IP"] == ""; got != follows {
+			t.Errorf("FollowsIP(%v) = %v", *c, got)
 		}
 	}
 }
@@ -247,13 +251,14 @@ func TestDetachedAndStop(t *testing.T) {
 	}
 }
 
+// The server runs whenever DNS_SERVER=true, DNS_IP set or not.
 func TestUpdateStopsWhenNotNeeded(t *testing.T) {
 	w, _, spawned := newWatcher(t, "windows", nil)
-	running, err := w.Update(context.Background(), memConfig{"DNS_SERVER": "true", "DNS_IP": "10.0.0.1"})
+	running, err := w.Update(context.Background(), memConfig{"DNS_SERVER": "false"})
 	if err != nil || running || *spawned != 0 {
 		t.Errorf("running=%v err=%v spawned=%d", running, err, *spawned)
 	}
-	running, err = w.Update(context.Background(), memConfig{"DNS_SERVER": "true"})
+	running, err = w.Update(context.Background(), memConfig{"DNS_SERVER": "true", "DNS_IP": "10.0.0.1"})
 	if err != nil || !running || *spawned != 1 {
 		t.Errorf("running=%v err=%v spawned=%d", running, err, *spawned)
 	}

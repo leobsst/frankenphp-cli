@@ -3,8 +3,9 @@
 // The YAML is built line by line so that the file stays byte-identical to
 // the one written by earlier releases: 2-space indentation, no name:, no
 // version:, no named volumes. Services come in this order: databases (with
-// pgAdmin after PostgreSQL), phpMyAdmin, Redis, Soketi, DNS, the reverse
-// proxy, then one FrankenPHP container per PHP version.
+// pgAdmin after PostgreSQL), phpMyAdmin, Redis, Soketi, the reverse proxy,
+// then one FrankenPHP container per PHP version. The LAN DNS server is not
+// a container (see embeddns).
 package compose
 
 import (
@@ -26,8 +27,9 @@ const (
 	RedisContainer        = "franken_redis"
 	PHPMyAdminContainer   = "franken_phpmyadmin"
 	PGAdminContainer      = "franken_pgadmin"
-	DNSContainer          = "franken_dns"
-	DNSImage              = "coredns/coredns:1.11.3"
+	// DNSContainer is the LAN DNS server container of earlier releases,
+	// removed on start so that it frees port 53.
+	DNSContainer = "franken_dns"
 
 	// PHPMyAdminConfigPath is the phpMyAdmin config override, relative to
 	// the data directory.
@@ -90,7 +92,6 @@ type Options struct {
 	PHPVersions []string // one FrankenPHP container each, in any order
 	Production  bool
 	DBEngines   []string // nil means ["mariadb"]
-	DNSListen   string   // "ip:port" the LAN DNS server listens on, "" for none
 	Redis       bool
 	Websocket   bool // Soketi
 }
@@ -131,9 +132,6 @@ func Build(o Options) string {
 	}
 	if o.Websocket {
 		lines = append(lines, soketi.Service(o.Production)...)
-	}
-	if o.DNSListen != "" {
-		lines = append(lines, dnsService(o.DNSListen)...)
 	}
 	lines = append(lines, caddyService(versions, o.Production)...)
 	for _, v := range versions {
@@ -340,24 +338,6 @@ func redisService(production bool) []string {
 	}
 	lines = append(lines, healthcheck(`["CMD", "redis-cli", "ping"]`, "10s")...)
 	return append(lines, "")
-}
-
-// dnsService publishes the LAN DNS server on listen, on its own default
-// network: it only needs to reach the upstream resolvers.
-func dnsService(listen string) []string {
-	return []string{
-		"  dns:",
-		"    container_name: " + DNSContainer,
-		"    image: " + DNSImage,
-		"    restart: always",
-		"    command: -conf /etc/coredns/Corefile",
-		"    volumes:",
-		"      - ./dns:/etc/coredns:ro",
-		"    ports:",
-		`      - "` + listen + `:53/udp"`,
-		`      - "` + listen + `:53/tcp"`,
-		"",
-	}
 }
 
 // serviceName is the compose service of a PHP version, e.g. franken-php-83.

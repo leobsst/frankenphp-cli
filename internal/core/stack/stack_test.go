@@ -65,11 +65,11 @@ func TestProjectPath(t *testing.T) {
 
 func TestComposeOptionsFromEnv(t *testing.T) {
 	e := newEnv("APP_ENV=production\nDB_ENGINES=postgresql\nREDIS_ENABLED=true\nSOKETI_ENABLED=true\n")
-	got := ComposeOptions(e, []string{"8.4"}, "0.0.0.0:53")
+	got := ComposeOptions(e, []string{"8.4"})
 	want := compose.Options{PHPVersions: []string{"8.4"}, Production: true, DBEngines: []string{"postgresql"},
-		DNSListen: "0.0.0.0:53", Redis: true, Websocket: true}
+		Redis: true, Websocket: true}
 	if !slices.Equal(got.DBEngines, want.DBEngines) || got.Production != want.Production ||
-		got.DNSListen != want.DNSListen || got.Redis != want.Redis || got.Websocket != want.Websocket ||
+		got.Redis != want.Redis || got.Websocket != want.Websocket ||
 		!slices.Equal(got.PHPVersions, want.PHPVersions) {
 		t.Errorf("got %+v", got)
 	}
@@ -81,7 +81,7 @@ func TestComposeUpWritesFileThenStarts(t *testing.T) {
 	r := &fakeRunner{}
 	d := &docker.Manager{Dir: dir, Runner: r, Log: &memLog{}}
 
-	if err := ComposeUp(context.Background(), d, e, []string{"8.3"}, "", "/Users/me/Sites"); err != nil {
+	if err := ComposeUp(context.Background(), d, e, []string{"8.3"}, "/Users/me/Sites"); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.ReadFile(filepath.Join(dir, compose.FileName))
@@ -103,7 +103,7 @@ func TestComposeUpMissingUID(t *testing.T) {
 	dir := t.TempDir()
 	r := &fakeRunner{}
 	d := &docker.Manager{Dir: dir, Runner: r, Log: &memLog{}}
-	if err := ComposeUp(context.Background(), d, newEnv(""), nil, "", ""); err == nil || len(r.args) != 0 {
+	if err := ComposeUp(context.Background(), d, newEnv(""), nil, ""); err == nil || len(r.args) != 0 {
 		t.Errorf("err=%v calls=%v", err, r.args)
 	}
 }

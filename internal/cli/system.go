@@ -15,6 +15,7 @@ import (
 
 	"github.com/leobsst/frankenphp-cli/internal/command"
 	"github.com/leobsst/frankenphp-cli/internal/core/caserver"
+	"github.com/leobsst/frankenphp-cli/internal/core/privilege"
 	"github.com/leobsst/frankenphp-cli/internal/core/resources"
 	"github.com/leobsst/frankenphp-cli/internal/core/ssl"
 	"github.com/leobsst/frankenphp-cli/internal/platform"
@@ -40,6 +41,7 @@ func newSetupCmd(a *app) *cobra.Command {
 
 This command sets up the system to allow FrankenManager to:
 - Modify /etc/hosts without requiring a password each time
+- On Linux, serve the LAN DNS server on port 53 without root (setcap)
 - Optionally install mkcert for SSL certificate generation
 
 Run with sudo for initial setup:
@@ -59,7 +61,7 @@ To remove configuration:
 			case status:
 				return a.setupStatus(cmd.Context())
 			case remove:
-				return a.setupRemove()
+				return a.setupRemove(cmd.Context())
 			default:
 				return a.setup(cmd.Context(), installMkcert)
 			}
@@ -100,6 +102,10 @@ func (a *app) setupStatus(ctx context.Context) error {
 		rows = append(rows, []string{"Sudoers Configured", yesNo(status.SudoersConfigured)})
 	}
 	rows = append(rows, []string{"Passwordless Available", yesNo(status.PasswordlessAvailable)})
+	if p.BindPortNeeded() {
+		exe, err := platform.Executable()
+		rows = append(rows, []string{"Port 53 Allowed (LAN DNS)", yesNo(err == nil && p.CanBindPort(ctx, exe))})
+	}
 	a.con.PrintTable(ui.Table{Title: "Privilege Configuration Status", Columns: settings, Rows: rows})
 	a.con.Println()
 
@@ -142,6 +148,7 @@ func (a *app) setup(ctx context.Context, installMkcert bool) error {
 	} else {
 		a.log.Info("Privilege escalation is already configured.")
 	}
+	a.grantBindPort(ctx, p)
 	a.log.Info("")
 
 	switch {
@@ -170,11 +177,31 @@ func (a *app) setup(ctx context.Context, installMkcert bool) error {
 	return nil
 }
 
+// grantBindPort lets the binary bind port 53 for the LAN DNS server
+// (Linux); a failure is only a warning, the rest of the setup still works.
+func (a *app) grantBindPort(ctx context.Context, p *privilege.Manager) {
+	if !p.BindPortNeeded() {
+		return
+	}
+	exe, err := platform.Executable()
+	if err == nil {
+		err = p.GrantBindPort(ctx, exe)
+	}
+	if err != nil {
+		a.log.Warning("The LAN DNS server will not be able to use port 53: " + err.Error())
+		return
+	}
+	a.log.Success("The LAN DNS server may use port 53.")
+}
+
 // setupRemove removes the privilege configuration.
-func (a *app) setupRemove() error {
+func (a *app) setupRemove(ctx context.Context) error {
 	p := a.deps.Privilege(a.log)
 	a.log.Info("Removing privilege escalation configuration...")
 	a.log.Info("")
+	if exe, err := platform.Executable(); err == nil && p.RevokeBindPort(ctx, exe) {
+		a.log.Success("Port 53 permission removed")
+	}
 	if !p.Configured() {
 		a.log.Info("Privilege escalation is not configured. Nothing to remove.")
 		return nil

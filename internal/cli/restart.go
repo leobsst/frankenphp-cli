@@ -26,7 +26,6 @@ var restartTargets = []string{"caddy", "database", "cache", "phpmyadmin", "dns",
 var restartContainers = map[string]string{
 	"cache":      compose.RedisContainer,
 	"phpmyadmin": compose.PHPMyAdminContainer,
-	"dns":        compose.DNSContainer,
 	"soketi":     soketi.ContainerName,
 }
 
@@ -72,7 +71,7 @@ Examples:
 	alias("database", "db", "Restart only the database container (alias: --db)")
 	f.BoolVar(selected["cache"], "cache", false, "Restart only the Redis cache container (REDIS_ENABLED=true)")
 	alias("phpmyadmin", "pma", "Restart only the phpMyAdmin container (alias: --pma)")
-	f.BoolVar(selected["dns"], "dns", false, "Restart only the LAN DNS server container")
+	f.BoolVar(selected["dns"], "dns", false, "Restart only the LAN DNS server (DNS_SERVER=true)")
 	alias("soketi", "ws", "Restart only the Soketi WebSocket server (SOKETI_ENABLED=true) (alias: --ws)")
 	f.BoolVar(&build, "build", false, "Rebuild the PHP images and recreate their containers")
 	return cmd
@@ -153,12 +152,8 @@ func (a *app) restart(ctx context.Context, forceSSL bool, targets []string, buil
 		if err := stack.BuildImages(ctx, d, e, a.log, customPath, active, true); err != nil {
 			return err
 		}
-		listen, err := dns.ListenAddress(e)
-		if err != nil {
-			return err
-		}
 		// Recreate the PHP containers on the new images
-		if err := stack.ComposeUp(ctx, d, e, active, listen, customPath); err != nil {
+		if err := stack.ComposeUp(ctx, d, e, active, customPath); err != nil {
 			return err
 		}
 	} else if build {
@@ -167,11 +162,12 @@ func (a *app) restart(ctx context.Context, forceSSL bool, targets []string, buil
 
 	if all || has("dns") {
 		if dnsOn {
-			if err := a.refreshDNS(ctx, dir, d, e, s, active); err != nil {
+			if err := a.refreshDNS(ctx, dir, d, e, s); err != nil {
 				return err
 			}
 		}
-		// Picks up DNS_SERVER / DNS_IP changes made since the last start
+		// Restarts the server process, picking up the DNS_* changes made
+		// since the last start; stops it when DNS_SERVER was turned off
 		w, err := a.deps.Watcher(dir)
 		if err != nil {
 			return err
@@ -184,7 +180,7 @@ func (a *app) restart(ctx context.Context, forceSSL bool, targets []string, buil
 	if all {
 		d.RestartAll(ctx, docker.Containers{
 			PHPVersions: active, DBEngines: engines, Production: e.IsProduction(),
-			DNS: dnsOn, Redis: redis, Websocket: websocket,
+			Redis: redis, Websocket: websocket,
 		})
 	} else {
 		for _, t := range targets {
@@ -207,6 +203,8 @@ func (a *app) restart(ctx context.Context, forceSSL bool, targets []string, buil
 				a.log.Warning("Soketi is disabled: run 'frankenmanager service enable soketi' to use it.")
 			case t == "dns" && !dnsOn:
 				a.log.Warning("The LAN DNS server is disabled: run 'frankenmanager service enable dns'.")
+			case t == "dns":
+				// The background process, restarted above
 			default:
 				d.RestartContainer(ctx, restartContainers[t])
 			}
@@ -232,36 +230,22 @@ func (a *app) restart(ctx context.Context, forceSSL bool, targets []string, buil
 	return nil
 }
 
-// refreshDNS rewrites the records with the current LAN IP, then recreates
-// the DNS container when its published address changed since the last
-// start (_refresh_dns).
-func (a *app) refreshDNS(ctx context.Context, dir string, d *docker.Manager, e *env.Env,
-	s *store.Store, active []string) error {
+// refreshDNS rewrites the records with the current LAN IP and removes the
+// DNS container of earlier releases, which would hold port 53.
+func (a *app) refreshDNS(ctx context.Context, dir string, d *docker.Manager, e *env.Env, s *store.Store) error {
 	if err := dns.Sync(dir, e, s); err != nil {
 		return err
 	}
-	listen, err := dns.ListenAddress(e)
-	if err != nil {
-		return err
-	}
-	if err := stack.GenerateCompose(dir, e, active, listen); err != nil {
-		return err
-	}
-	customPath, err := stack.ProjectPath(e, s)
-	if err != nil {
-		return err
-	}
-	vars, err := e.ComposeEnvVars(dir, customPath, e.DBEngines())
-	if err != nil {
-		return err
-	}
-	if err := d.ComposeUp(ctx, vars, "dns"); err != nil {
-		return err
-	}
+	removeLegacyDNS(ctx, d)
 	ip, err := dns.ResolveIP(e)
 	if err != nil {
 		return err
 	}
 	a.log.Info("LAN DNS server: domains resolve to " + ip)
 	return nil
+}
+
+// removeLegacyDNS removes the DNS container of earlier releases, if any.
+func removeLegacyDNS(ctx context.Context, d *docker.Manager) {
+	d.RemoveContainer(ctx, compose.DNSContainer)
 }

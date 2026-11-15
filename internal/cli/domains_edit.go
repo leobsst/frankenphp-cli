@@ -40,11 +40,7 @@ func (a *app) stopVersions(ctx context.Context, r *server, orphaned, remaining [
 	if len(orphaned) == 0 {
 		return nil
 	}
-	listen, err := dns.ListenAddress(r.e)
-	if err != nil {
-		return err
-	}
-	return stack.GenerateCompose(r.dir, r.e, remaining, listen)
+	return stack.GenerateCompose(r.dir, r.e, remaining)
 }
 
 // --- remove-host -------------------------------------------------------------
@@ -205,11 +201,7 @@ func (a *app) removeHost(ctx context.Context, names []string) (err error) {
 			}
 		}
 		if len(orphaned) > 0 {
-			listen, err := dns.ListenAddress(r.e)
-			if err != nil {
-				return err
-			}
-			if err := stack.GenerateCompose(r.dir, r.e, after, listen); err != nil {
+			if err := stack.GenerateCompose(r.dir, r.e, after); err != nil {
 				return err
 			}
 		}

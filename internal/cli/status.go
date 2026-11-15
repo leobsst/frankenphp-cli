@@ -2,11 +2,14 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
 	"github.com/leobsst/frankenphp-cli/internal/core/dns"
+	"github.com/leobsst/frankenphp-cli/internal/core/dnsclients"
 	"github.com/leobsst/frankenphp-cli/internal/core/dnswatcher"
 	"github.com/leobsst/frankenphp-cli/internal/core/docker"
 	"github.com/leobsst/frankenphp-cli/internal/core/phpversions"
@@ -76,12 +79,26 @@ func (a *app) status(ctx context.Context) (err error) {
 		for _, line := range dns.DescribeServerAddresses(addrs, recordsIP) {
 			c.Println(line)
 		}
-		if running && dnswatcher.Needed(e) {
-			state := c.Color(ui.Red, "no") + " (run `restart --dns`)"
-			if w, err := dnswatcher.New(dir); err == nil && w.RunningPID() != 0 {
-				state = c.Color(ui.Green, "yes")
+		if running {
+			if a.dnsProcessState(dir) != "running" {
+				c.Println("  Server: ", c.Color(ui.Red, "not running"), " (run `restart --dns`)")
+			} else {
+				c.Println("  Server: ", c.Color(ui.Green, "running"))
+				if dnswatcher.FollowsIP(e) {
+					c.Println("  Follows LAN IP changes: ", c.Color(ui.Green, "yes"))
+				}
+				clients, err := s.DNSClients()
+				if err != nil {
+					return err
+				}
+				connected := 0
+				for _, cl := range clients {
+					if dnsclients.Status(cl, time.Now()) == dnsclients.Connected {
+						connected++
+					}
+				}
+				c.Println(fmt.Sprintf("  Devices connected: %d (frankenmanager dns-clients)", connected))
 			}
-			c.Println("  Follows LAN IP changes: ", state)
 		}
 	}
 
@@ -120,7 +137,6 @@ func (a *app) status(ctx context.Context) (err error) {
 	for _, name := range docker.AllContainers(docker.Containers{
 		DBEngines:  e.DBEngines(),
 		Production: e.IsProduction(),
-		DNS:        listen != "",
 		Redis:      e.RedisEnabled(),
 		Websocket:  e.SoketiEnabled(),
 	}) {

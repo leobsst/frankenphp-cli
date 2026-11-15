@@ -82,17 +82,6 @@ services:
       retries: 5
       start_period: 10s
 
-  dns:
-    container_name: franken_dns
-    image: coredns/coredns:1.11.3
-    restart: always
-    command: -conf /etc/coredns/Corefile
-    volumes:
-      - ./dns:/etc/coredns:ro
-    ports:
-      - "0.0.0.0:53:53/udp"
-      - "0.0.0.0:53:53/tcp"
-
   caddy-proxy:
     container_name: franken-caddy-proxy
     image: caddy:2-alpine
