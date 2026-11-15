@@ -21,6 +21,7 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/stack"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
 	"github.com/leobsst/frankenphp-cli/internal/core/validate"
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 )
 
 // rangeArgs accepts len(names) positional arguments, the first required of
@@ -28,7 +29,7 @@ import (
 func rangeArgs(required int, names ...string) cobra.PositionalArgs {
 	return func(cmd *cobra.Command, args []string) error {
 		if len(args) < required {
-			return usageError{fmt.Errorf("Missing argument '%s'.", names[len(args)])} //nolint:staticcheck // user-facing message
+			return usageError{i18n.Errorf("Missing argument '%s'.", names[len(args)])}
 		}
 		if len(args) > len(names) {
 			return noArgs(cmd, args[len(names):])
@@ -39,7 +40,7 @@ func rangeArgs(required int, names ...string) cobra.PositionalArgs {
 
 // errNoProjectPath is raised when a new PHP container needs the projects
 // root and none is known.
-var errNoProjectPath = errors.New("No project path known: set DEFAULT_PROJECT_PATH (frankenmanager configuration set) " + //nolint:staticcheck // user-facing message
+var errNoProjectPath = i18n.NewError("No project path known: set DEFAULT_PROJECT_PATH (frankenmanager configuration set) " +
 	"or restart the server with --path.")
 
 // server is the context of a command run on a started server.
@@ -52,7 +53,7 @@ type server struct {
 }
 
 // openRunning prepares a command that needs the server started; notRunning
-// is the error otherwise. The caller closes r.s.
+// (translated) is the error otherwise. The caller closes r.s.
 func (a *app) openRunning(ctx context.Context, notRunning string) (*server, error) {
 	dir, err := a.projectDir()
 	if err != nil {
@@ -114,7 +115,7 @@ func (a *app) startVersion(ctx context.Context, r *server, phpVersion string, ac
 	if _, err := stack.BuildImage(ctx, r.d, r.e, a.log, customPath, phpVersion, false); err != nil {
 		return err
 	}
-	a.log.Info(fmt.Sprintf("Starting PHP %s container...", phpVersion))
+	a.log.Info(i18n.Tf("Starting PHP %s container...", phpVersion))
 	versions := active
 	if !slices.Contains(versions, phpVersion) {
 		versions = append(slices.Clone(active), phpVersion)
@@ -125,13 +126,13 @@ func (a *app) startVersion(ctx context.Context, r *server, phpVersion string, ac
 // restartVersion restarts the container of a PHP version.
 func (a *app) restartVersion(ctx context.Context, d *docker.Manager, phpVersion string) {
 	name := phpversions.ContainerName(phpVersion)
-	a.log.Info(fmt.Sprintf("Restarting %s...", name))
+	a.log.Info(i18n.Tf("Restarting %s...", name))
 	d.RestartContainer(ctx, name)
 }
 
 // restartProxy restarts the reverse proxy, to pick up new routes.
 func (a *app) restartProxy(ctx context.Context, d *docker.Manager) {
-	a.log.Info("Restarting reverse proxy...")
+	a.log.Info(i18n.T("Restarting reverse proxy..."))
 	d.RestartContainer(ctx, compose.ReverseProxyContainer)
 }
 
@@ -169,17 +170,18 @@ func (c *cleanup) add(ctx context.Context, domain string) error {
 }
 
 // fail logs err, removes the hosts entries added, runs undo, and returns
-// exit code 1 with the final message ("The host(s) were not added.").
+// exit code 1 with the final message, translated ("The host(s) were not
+// added.").
 func (c *cleanup) fail(ctx context.Context, err error, done string, undo func()) error {
-	c.a.log.Error(fmt.Sprintf("An error occurred: %v", err))
-	c.a.log.Error("Cleaning up...")
+	c.a.log.Error(i18n.Tf("An error occurred: %v", err))
+	c.a.log.Error(i18n.T("Cleaning up..."))
 	for _, domain := range c.added {
 		_, _ = c.h.RemoveEntry(ctx, "127.0.0.1", domain)
 	}
 	if undo != nil {
 		undo()
 	}
-	c.a.log.Error("Cleanup complete. " + done)
+	c.a.log.Error(i18n.Tf("Cleanup complete. %s", done))
 	return exitError(1)
 }
 
@@ -190,8 +192,8 @@ func newAddHostCmd(a *app) *cobra.Command {
 	var php string
 	cmd := &cobra.Command{
 		Use:   "add-host DOMAINS [TARGET]",
-		Short: "Add new host(s) to the running server.",
-		Long: `Add new host(s) to the running server.
+		Short: i18n.T("Add new host(s) to the running server."),
+		Long: i18n.T(`Add new host(s) to the running server.
 
 This command allows you to add new domains while the server is running,
 without having to stop and restart the entire environment.
@@ -205,7 +207,7 @@ Examples:
     frankenmanager add-host "app1.test app2.test" --php 8.4
     frankenmanager add-host "legacy.test" --php 8.2 --force-ssl
     frankenmanager add-host "domain.test" http://127.0.0.1:8006
-    frankenmanager add-host "domain.test" 127.0.0.1:8006`,
+    frankenmanager add-host "domain.test" 127.0.0.1:8006`),
 		Args: rangeArgs(1, "DOMAINS", "TARGET"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			target, proxy := "", len(args) == 2
@@ -215,14 +217,14 @@ Examples:
 			return a.addHost(cmd.Context(), strings.Fields(args[0]), forceSSL, php, target, proxy)
 		},
 	}
-	cmd.Flags().BoolVar(&forceSSL, "force-ssl", false, "Force SSL certificate regeneration")
+	cmd.Flags().BoolVar(&forceSSL, "force-ssl", false, i18n.T("Force SSL certificate regeneration"))
 	cmd.Flags().StringVar(&php, "php", "", phpVersionHelp)
 	return cmd
 }
 
 // addHost adds PHP domains, or proxy hosts forwarding to target.
 func (a *app) addHost(ctx context.Context, domains []string, forceSSL bool, php, target string, proxy bool) (err error) {
-	r, err := a.openRunning(ctx, "The server is not running. Use 'start' command instead.")
+	r, err := a.openRunning(ctx, i18n.T("The server is not running. Use 'start' command instead."))
 	if err != nil {
 		return err
 	}
@@ -254,15 +256,15 @@ func (a *app) addHost(ctx context.Context, domains []string, forceSSL bool, php,
 		}
 		switch {
 		case slices.Contains(taken, domain):
-			a.log.Info(fmt.Sprintf("Domain '%s' is already configured, skipping.", domain))
+			a.log.Info(i18n.Tf("Domain '%s' is already configured, skipping.", domain))
 		case slices.Contains(added, domain):
-			a.log.Info(fmt.Sprintf("Domain '%s' is duplicated in input, skipping.", domain))
+			a.log.Info(i18n.Tf("Domain '%s' is duplicated in input, skipping.", domain))
 		default:
 			added = append(added, domain)
 		}
 	}
 	if len(added) == 0 {
-		a.log.Info("No new domains to add.")
+		a.log.Info(i18n.T("No new domains to add."))
 		return nil
 	}
 
@@ -288,18 +290,18 @@ func (a *app) addHost(ctx context.Context, domains []string, forceSSL bool, php,
 	}
 
 	err = func() error {
-		a.log.Info(fmt.Sprintf("Adding %d new domain(s) with PHP %s...", len(added), php))
-		a.log.Info("Generating SSL certificates...")
+		a.log.Info(i18n.Tf("Adding %d new domain(s) with PHP %s...", len(added), php))
+		a.log.Info(i18n.T("Generating SSL certificates..."))
 		if err := certs.GenerateAll(ctx, added, forceSSL, r.e.IsProduction()); err != nil {
 			return err
 		}
-		a.log.Info("Adding hosts entries...")
+		a.log.Info(i18n.T("Adding hosts entries..."))
 		for _, domain := range added {
 			if err := c.add(ctx, domain); err != nil {
 				return err
 			}
 		}
-		a.log.Info("Generating Caddyfiles...")
+		a.log.Info(i18n.T("Generating Caddyfiles..."))
 		if err := r.generator(a.log).GenerateForVersion(added, php); err != nil {
 			return err
 		}
@@ -324,12 +326,12 @@ func (a *app) addHost(ctx context.Context, domains []string, forceSSL bool, php,
 	}()
 	if err != nil {
 		// The domains are removed from the database too
-		return c.fail(ctx, err, "The host(s) were not added.", func() { _ = r.s.RemoveDomains(added) })
+		return c.fail(ctx, err, i18n.T("The host(s) were not added."), func() { _ = r.s.RemoveDomains(added) })
 	}
 
 	a.con.Println()
-	a.log.Success("New host(s) added successfully!")
-	a.log.Info("Added domains:")
+	a.log.Success(i18n.T("New host(s) added successfully!"))
+	a.log.Info(i18n.T("Added domains:"))
 	for _, domain := range added {
 		a.log.Info(fmt.Sprintf("  - https://%s (PHP %s)", domain, php))
 	}
@@ -344,12 +346,12 @@ func (a *app) addProxyHosts(ctx context.Context, r *server, c *cleanup,
 		return err
 	}
 	err := func() error {
-		a.log.Info(fmt.Sprintf("Adding %d new proxy host(s) -> %s...", len(added), target))
-		a.log.Info("Generating SSL certificates...")
+		a.log.Info(i18n.Tf("Adding %d new proxy host(s) -> %s...", len(added), target))
+		a.log.Info(i18n.T("Generating SSL certificates..."))
 		if err := generate(ctx, added, forceSSL, r.e.IsProduction()); err != nil {
 			return err
 		}
-		a.log.Info("Adding hosts entries...")
+		a.log.Info(i18n.T("Adding hosts entries..."))
 		for _, domain := range added {
 			if err := c.add(ctx, domain); err != nil {
 				return err
@@ -368,12 +370,12 @@ func (a *app) addProxyHosts(ctx context.Context, r *server, c *cleanup,
 		return nil
 	}()
 	if err != nil {
-		return c.fail(ctx, err, "The proxy host(s) were not added.", func() { _ = r.s.RemoveProxies(added) })
+		return c.fail(ctx, err, i18n.T("The proxy host(s) were not added."), func() { _ = r.s.RemoveProxies(added) })
 	}
 
 	a.con.Println()
-	a.log.Success("New proxy host(s) added successfully!")
-	a.log.Info("Added domains:")
+	a.log.Success(i18n.T("New proxy host(s) added successfully!"))
+	a.log.Info(i18n.T("Added domains:"))
 	for _, domain := range added {
 		a.log.Info(fmt.Sprintf("  - https://%s -> %s", domain, target))
 	}
@@ -386,8 +388,8 @@ func newAddAliasCmd(a *app) *cobra.Command {
 	var forceSSL bool
 	cmd := &cobra.Command{
 		Use:   "add-alias TARGET ALIASES",
-		Short: "Add alternate host(s) that reverse-proxy to an already-configured domain or proxy host.",
-		Long: `Add alternate host(s) that reverse-proxy to an already-configured domain or proxy host.
+		Short: i18n.T("Add alternate host(s) that reverse-proxy to an already-configured domain or proxy host."),
+		Long: i18n.T(`Add alternate host(s) that reverse-proxy to an already-configured domain or proxy host.
 
 This is like 'add-host', but instead of creating a new site with its own
 Caddyfile and PHP container, each alternate host gets its own SSL
@@ -398,20 +400,20 @@ or the upstream of a proxy host.
 Examples:
     frankenmanager add-alias "myapp.test" "myapp-alt.test"
     frankenmanager add-alias "myapp.test" "alt1.test alt2.test" --force-ssl
-    frankenmanager add-alias "proxied.test" "proxied-alt.test"`,
+    frankenmanager add-alias "proxied.test" "proxied-alt.test"`),
 		Args: rangeArgs(2, "TARGET", "ALIASES"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return a.addAlias(cmd.Context(), args[0], strings.Fields(args[1]), forceSSL)
 		},
 	}
-	cmd.Flags().BoolVar(&forceSSL, "force-ssl", false, "Force SSL certificate regeneration")
+	cmd.Flags().BoolVar(&forceSSL, "force-ssl", false, i18n.T("Force SSL certificate regeneration"))
 	return cmd
 }
 
 // addAlias adds alternate hosts forwarding to an existing domain or proxy
 // host.
 func (a *app) addAlias(ctx context.Context, target string, aliases []string, forceSSL bool) (err error) {
-	r, err := a.openRunning(ctx, "The server is not running. Use 'start' command instead.")
+	r, err := a.openRunning(ctx, i18n.T("The server is not running. Use 'start' command instead."))
 	if err != nil {
 		return err
 	}
@@ -441,7 +443,7 @@ func (a *app) addAlias(ctx context.Context, target string, aliases []string, for
 	} else if ok {
 		serves = "proxy " + upstream
 	} else {
-		return &validate.Error{Msg: fmt.Sprintf("Domain '%s' is not configured. Add it first with 'add-host'.", target)}
+		return &validate.Error{Msg: i18n.Tf("Domain '%s' is not configured. Add it first with 'add-host'.", target)}
 	}
 	existing, err := r.s.Aliases()
 	if err != nil {
@@ -458,19 +460,19 @@ func (a *app) addAlias(ctx context.Context, target string, aliases []string, for
 		}
 		switch {
 		case domain == target:
-			a.log.Info(fmt.Sprintf("'%s' is the target domain itself, skipping.", domain))
+			a.log.Info(i18n.Tf("'%s' is the target domain itself, skipping.", domain))
 		case slices.Contains(domains, domain), isProxy(domain):
-			a.log.Info(fmt.Sprintf("Domain '%s' is already a registered host, skipping.", domain))
+			a.log.Info(i18n.Tf("Domain '%s' is already a registered host, skipping.", domain))
 		case isAlias(domain):
-			a.log.Info(fmt.Sprintf("'%s' is already configured as an alias, skipping.", domain))
+			a.log.Info(i18n.Tf("'%s' is already configured as an alias, skipping.", domain))
 		case slices.Contains(added, domain):
-			a.log.Info(fmt.Sprintf("'%s' is duplicated in input, skipping.", domain))
+			a.log.Info(i18n.Tf("'%s' is duplicated in input, skipping.", domain))
 		default:
 			added = append(added, domain)
 		}
 	}
 	if len(added) == 0 {
-		a.log.Info("No new alternate hosts to add.")
+		a.log.Info(i18n.T("No new alternate hosts to add."))
 		return nil
 	}
 
@@ -480,12 +482,12 @@ func (a *app) addAlias(ctx context.Context, target string, aliases []string, for
 	}
 	c := &cleanup{a: a, h: a.deps.Hosts(a.log)}
 	err = func() error {
-		a.log.Info(fmt.Sprintf("Adding %d alternate host(s) for '%s'...", len(added), target))
-		a.log.Info("Generating SSL certificates...")
+		a.log.Info(i18n.Tf("Adding %d alternate host(s) for '%s'...", len(added), target))
+		a.log.Info(i18n.T("Generating SSL certificates..."))
 		if err := certs.GenerateAll(ctx, added, forceSSL, r.e.IsProduction()); err != nil {
 			return err
 		}
-		a.log.Info("Adding hosts entries...")
+		a.log.Info(i18n.T("Adding hosts entries..."))
 		for _, domain := range added {
 			if err := c.add(ctx, domain); err != nil {
 				return err
@@ -504,12 +506,12 @@ func (a *app) addAlias(ctx context.Context, target string, aliases []string, for
 		return nil
 	}()
 	if err != nil {
-		return c.fail(ctx, err, "The alternate host(s) were not added.", func() { _ = r.s.RemoveAliases(added) })
+		return c.fail(ctx, err, i18n.T("The alternate host(s) were not added."), func() { _ = r.s.RemoveAliases(added) })
 	}
 
 	a.con.Println()
-	a.log.Success("Alternate host(s) added successfully!")
-	a.log.Info("Added aliases:")
+	a.log.Success(i18n.T("Alternate host(s) added successfully!"))
+	a.log.Info(i18n.T("Added aliases:"))
 	for _, domain := range added {
 		a.log.Info(fmt.Sprintf("  - https://%s -> %s (%s)", domain, target, serves))
 	}

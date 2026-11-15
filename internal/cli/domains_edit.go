@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -14,6 +13,7 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/phpversions"
 	"github.com/leobsst/frankenphp-cli/internal/core/resources"
 	"github.com/leobsst/frankenphp-cli/internal/core/stack"
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 	"github.com/leobsst/frankenphp-cli/internal/ui"
 )
 
@@ -34,7 +34,7 @@ func without(before, after []string) []string {
 func (a *app) stopVersions(ctx context.Context, r *server, orphaned, remaining []string) error {
 	for _, v := range orphaned {
 		name := phpversions.ContainerName(v)
-		a.log.Info(fmt.Sprintf("Stopping %s (no more domains)...", name))
+		a.log.Info(i18n.Tf("Stopping %s (no more domains)...", name))
 		r.d.StopContainer(ctx, name)
 	}
 	if len(orphaned) == 0 {
@@ -48,8 +48,8 @@ func (a *app) stopVersions(ctx context.Context, r *server, orphaned, remaining [
 func newRemoveHostCmd(a *app) *cobra.Command {
 	return &cobra.Command{
 		Use:   "remove-host DOMAINS",
-		Short: "Remove host(s) from the running server.",
-		Long: `Remove host(s) from the running server.
+		Short: i18n.T("Remove host(s) from the running server."),
+		Long: i18n.T(`Remove host(s) from the running server.
 
 This command allows you to remove domains while the server is running,
 without having to stop and restart the entire environment.
@@ -59,7 +59,7 @@ you need to restore them later.
 
 Examples:
     frankenmanager remove-host "oldapp.test"
-    frankenmanager remove-host "app1.test app2.test"`,
+    frankenmanager remove-host "app1.test app2.test"`),
 		Args: rangeArgs(1, "DOMAINS"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return a.removeHost(cmd.Context(), strings.Fields(args[0]))
@@ -70,7 +70,7 @@ Examples:
 // removeHost removes domains, aliases and proxy hosts, archiving the site
 // files of the domains.
 func (a *app) removeHost(ctx context.Context, names []string) (err error) {
-	r, err := a.openRunning(ctx, "The server is not running.")
+	r, err := a.openRunning(ctx, i18n.T("The server is not running."))
 	if err != nil {
 		return err
 	}
@@ -104,7 +104,7 @@ func (a *app) removeHost(ctx context.Context, names []string) (err error) {
 	var domains, aliases, proxies []string
 	pick := func(list *[]string, name string) {
 		if slices.Contains(*list, name) {
-			a.log.Info(fmt.Sprintf("Domain '%s' is duplicated in input, skipping.", name))
+			a.log.Info(i18n.Tf("Domain '%s' is duplicated in input, skipping.", name))
 		} else {
 			*list = append(*list, name)
 		}
@@ -118,18 +118,18 @@ func (a *app) removeHost(ctx context.Context, names []string) (err error) {
 		case isProxy[name]:
 			pick(&proxies, name)
 		default:
-			a.log.Warning(fmt.Sprintf("Domain '%s' is not configured, skipping.", name))
+			a.log.Warning(i18n.Tf("Domain '%s' is not configured, skipping.", name))
 		}
 	}
 	if len(domains)+len(aliases)+len(proxies) == 0 {
-		a.log.Info("No domains to remove.")
+		a.log.Info(i18n.T("No domains to remove."))
 		return nil
 	}
 
 	h := a.deps.Hosts(a.log)
 	removeEntry := func(name string) {
 		if _, err := h.RemoveEntry(ctx, "127.0.0.1", name); err != nil {
-			a.log.Warning(fmt.Sprintf("Failed to remove hosts entry for %s: %v", name, err))
+			a.log.Warning(i18n.Tf("Failed to remove hosts entry for %s: %v", name, err))
 		}
 	}
 	g := r.generator(a.log)
@@ -146,14 +146,14 @@ func (a *app) removeHost(ctx context.Context, names []string) (err error) {
 
 	var removedAliases []string
 	err = func() error {
-		a.log.Info(fmt.Sprintf("Removing %d domain(s), %d alternate host(s), and %d proxy host(s)...",
+		a.log.Info(i18n.Tf("Removing %d domain(s), %d alternate host(s), and %d proxy host(s)...",
 			len(domains), len(aliases), len(proxies)))
-		a.log.Info("Removing hosts entries...")
+		a.log.Info(i18n.T("Removing hosts entries..."))
 		for _, d := range domains {
 			removeEntry(d)
 		}
 		if len(domains) > 0 {
-			a.log.Info("Archiving Caddyfiles...")
+			a.log.Info(i18n.T("Archiving Caddyfiles..."))
 			if err := g.Archive(domains); err != nil {
 				return err
 			}
@@ -172,7 +172,7 @@ func (a *app) removeHost(ctx context.Context, names []string) (err error) {
 		}
 		removedAliases = append(slices.Clone(aliases), cascaded...)
 		if len(cascaded) > 0 {
-			a.log.Info("Also removing alternate host(s) pointing to removed host(s): " + strings.Join(cascaded, ", "))
+			a.log.Info(i18n.Tf("Also removing alternate host(s) pointing to removed host(s): %s", strings.Join(cascaded, ", ")))
 		}
 		for _, al := range removedAliases {
 			removeEntry(al)
@@ -191,7 +191,7 @@ func (a *app) removeHost(ctx context.Context, names []string) (err error) {
 		orphaned := without(before, after)
 		for _, v := range orphaned {
 			name := phpversions.ContainerName(v)
-			a.log.Info(fmt.Sprintf("Stopping %s (no more domains)...", name))
+			a.log.Info(i18n.Tf("Stopping %s (no more domains)...", name))
 			r.d.StopContainer(ctx, name)
 		}
 		slices.Sort(touched)
@@ -215,27 +215,27 @@ func (a *app) removeHost(ctx context.Context, names []string) (err error) {
 		return nil
 	}()
 	if err != nil {
-		a.log.Error(fmt.Sprintf("An error occurred: %v", err))
+		a.log.Error(i18n.Tf("An error occurred: %v", err))
 		return exitError(1)
 	}
 
 	a.con.Println()
-	a.log.Success("Host(s) removed successfully!")
+	a.log.Success(i18n.T("Host(s) removed successfully!"))
 	if len(domains) > 0 {
-		a.log.Info("Removed domains:")
+		a.log.Info(i18n.T("Removed domains:"))
 		for _, d := range domains {
 			a.log.Info(fmt.Sprintf("  - %s (PHP %s)", d, versionOf[d]))
 		}
-		a.log.Info("\nCaddyfiles archived to: " + g.ArchiveDir())
+		a.log.Info(i18n.Tf("\nCaddyfiles archived to: %s", g.ArchiveDir()))
 	}
 	if len(removedAliases) > 0 {
-		a.log.Info("Removed alternate hosts:")
+		a.log.Info(i18n.T("Removed alternate hosts:"))
 		for _, al := range removedAliases {
 			a.log.Info("  - " + al)
 		}
 	}
 	if len(proxies) > 0 {
-		a.log.Info("Removed proxy hosts:")
+		a.log.Info(i18n.T("Removed proxy hosts:"))
 		for _, p := range proxies {
 			a.log.Info("  - " + p)
 		}
@@ -250,8 +250,8 @@ func newRestoreHostCmd(a *app) *cobra.Command {
 	var php string
 	cmd := &cobra.Command{
 		Use:   "restore-host [DOMAINS]",
-		Short: "Restore archived host(s) to the running server.",
-		Long: `Restore archived host(s) to the running server.
+		Short: i18n.T("Restore archived host(s) to the running server."),
+		Long: i18n.T(`Restore archived host(s) to the running server.
 
 This command allows you to restore previously removed domains from the archive.
 Use --list to see all available archived hosts.
@@ -259,22 +259,22 @@ Use --list to see all available archived hosts.
 Examples:
     frankenmanager restore-host --list
     frankenmanager restore-host "myapp.test"
-    frankenmanager restore-host "app1.test" --php 8.5`,
+    frankenmanager restore-host "app1.test" --php 8.5`),
 		Args: maxArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if list {
 				return a.listArchived()
 			}
 			if len(args) == 0 || strings.TrimSpace(args[0]) == "" {
-				a.con.Println(a.con.Color(ui.Yellow, "Specify domains to restore or use --list to see archived hosts."))
+				a.con.Println(a.con.Color(ui.Yellow, i18n.T("Specify domains to restore or use --list to see archived hosts.")))
 				return exitError(1)
 			}
 			return a.restoreHost(cmd.Context(), strings.Fields(args[0]), forceSSL, php)
 		},
 	}
 	f := cmd.Flags()
-	f.BoolVarP(&list, "list", "l", false, "List all archived hosts")
-	f.BoolVar(&forceSSL, "force-ssl", false, "Force SSL certificate regeneration")
+	f.BoolVarP(&list, "list", "l", false, i18n.T("List all archived hosts"))
+	f.BoolVar(&forceSSL, "force-ssl", false, i18n.T("Force SSL certificate regeneration"))
 	f.StringVar(&php, "php", "", phpVersionHelp)
 	return cmd
 }
@@ -295,19 +295,19 @@ func (a *app) listArchived() error {
 		return err
 	}
 	if len(archived) == 0 {
-		a.log.Info("No archived hosts found.")
-		a.log.Info("Archive directory: " + g.ArchiveDir())
+		a.log.Info(i18n.T("No archived hosts found."))
+		a.log.Info(i18n.Tf("Archive directory: %s", g.ArchiveDir()))
 		return nil
 	}
-	t := ui.Table{Title: "Archived Hosts", Columns: []ui.Column{
-		{Header: "Domain", Color: ui.Cyan}, {Header: "Caddyfile", Faint: true},
+	t := ui.Table{Title: i18n.T("Archived Hosts"), Columns: []ui.Column{
+		{Header: i18n.T("Domain"), Color: ui.Cyan}, {Header: "Caddyfile", Faint: true},
 	}}
 	for _, item := range archived {
 		t.Rows = append(t.Rows, []string{item.FullDomain, item.SimpleDomain + "_Caddyfile"})
 	}
 	a.con.PrintTable(t)
-	a.log.Info("\nArchive directory: " + g.ArchiveDir())
-	a.log.Info(`Use 'frankenmanager restore-host "domain.test"' to restore a host.`)
+	a.log.Info("\n" + i18n.Tf("Archive directory: %s", g.ArchiveDir()))
+	a.log.Info(i18n.T(`Use 'frankenmanager restore-host "domain.test"' to restore a host.`))
 	return nil
 }
 
@@ -326,7 +326,7 @@ func (a *app) restoreHost(ctx context.Context, names []string, forceSSL bool, ph
 	if php, err = a.phpVersion(php, e); err != nil {
 		return err
 	}
-	r, err := a.openRunning(ctx, "The server is not running. Use 'start' command instead.")
+	r, err := a.openRunning(ctx, i18n.T("The server is not running. Use 'start' command instead."))
 	if err != nil {
 		return err
 	}
@@ -349,15 +349,15 @@ func (a *app) restoreHost(ctx context.Context, names []string, forceSSL bool, ph
 		active := slices.ContainsFunc(existing, func(d string) bool { return short(d) == short(name) })
 		switch {
 		case active:
-			a.log.Info(fmt.Sprintf("Domain '%s' is already active, skipping.", name))
+			a.log.Info(i18n.Tf("Domain '%s' is already active, skipping.", name))
 		case slices.Contains(restore, name):
-			a.log.Info(fmt.Sprintf("Domain '%s' is duplicated in input, skipping.", name))
+			a.log.Info(i18n.Tf("Domain '%s' is duplicated in input, skipping.", name))
 		default:
 			restore = append(restore, name)
 		}
 	}
 	if len(restore) == 0 {
-		a.log.Info("No domains to restore.")
+		a.log.Info(i18n.T("No domains to restore."))
 		return nil
 	}
 
@@ -375,8 +375,8 @@ func (a *app) restoreHost(ctx context.Context, names []string, forceSSL bool, ph
 	c := &cleanup{a: a, h: a.deps.Hosts(a.log)}
 	var restored []string
 	err = func() error {
-		a.log.Info(fmt.Sprintf("Restoring %d domain(s) with PHP %s...", len(restore), php))
-		a.log.Info("Restoring Caddyfiles...")
+		a.log.Info(i18n.Tf("Restoring %d domain(s) with PHP %s...", len(restore), php))
+		a.log.Info(i18n.T("Restoring Caddyfiles..."))
 		var err error
 		if restored, err = r.generator(a.log).RestoreToVersion(restore, php); err != nil {
 			return err
@@ -384,11 +384,11 @@ func (a *app) restoreHost(ctx context.Context, names []string, forceSSL bool, ph
 		if len(restored) == 0 {
 			return nil
 		}
-		a.log.Info("Generating SSL certificates...")
+		a.log.Info(i18n.T("Generating SSL certificates..."))
 		if err := certs.GenerateAll(ctx, restored, forceSSL, r.e.IsProduction()); err != nil {
 			return err
 		}
-		a.log.Info("Adding hosts entries...")
+		a.log.Info(i18n.T("Adding hosts entries..."))
 		for _, domain := range restored {
 			if err := c.add(ctx, domain); err != nil {
 				return err
@@ -416,19 +416,19 @@ func (a *app) restoreHost(ctx context.Context, names []string, forceSSL bool, ph
 	if err != nil {
 		// The domains leave the database and their site files go back
 		// to the archive, ready for another restore-host
-		return c.fail(ctx, err, "The host(s) were not restored.", func() {
+		return c.fail(ctx, err, i18n.T("The host(s) were not restored."), func() {
 			_ = r.s.RemoveDomains(restored)
 			_ = r.generator(quietLogger{}).Archive(restored)
 		})
 	}
 	if len(restored) == 0 {
-		a.log.Info("No Caddyfiles were restored.")
+		a.log.Info(i18n.T("No Caddyfiles were restored."))
 		return nil
 	}
 
 	a.con.Println()
-	a.log.Success("Host(s) restored successfully!")
-	a.log.Info("Restored domains:")
+	a.log.Success(i18n.T("Host(s) restored successfully!"))
+	a.log.Info(i18n.T("Restored domains:"))
 	for _, domain := range restored {
 		a.log.Info(fmt.Sprintf("  - https://%s (PHP %s)", domain, php))
 	}
@@ -441,16 +441,16 @@ func newSwitchPHPCmd(a *app) *cobra.Command {
 	var php string
 	cmd := &cobra.Command{
 		Use:   "switch-php DOMAIN --php VERSION",
-		Short: "Switch the PHP version for a domain without restarting unrelated containers.",
-		Long: `Switch the PHP version for a domain without restarting unrelated containers.
+		Short: i18n.T("Switch the PHP version for a domain without restarting unrelated containers."),
+		Long: i18n.T(`Switch the PHP version for a domain without restarting unrelated containers.
 
 Examples:
     frankenmanager switch-php "myapp.test" --php 8.5
-    frankenmanager switch-php "legacy.test" --php 8.2`,
+    frankenmanager switch-php "legacy.test" --php 8.2`),
 		Args: rangeArgs(1, "DOMAIN"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !cmd.Flags().Changed("php") {
-				return usageError{errors.New("Missing option '--php'.")} //nolint:staticcheck // user-facing message
+				return usageError{i18n.Errorf("Missing option '%s'.", "--php")}
 			}
 			return a.switchPHP(cmd.Context(), args[0], php)
 		},
@@ -467,7 +467,7 @@ func (a *app) switchPHP(ctx context.Context, domain, php string) (err error) {
 	if w := phpversions.DeprecationWarning(php); w != "" {
 		a.log.Warning(w)
 	}
-	r, err := a.openRunning(ctx, "The server is not running.")
+	r, err := a.openRunning(ctx, i18n.T("The server is not running."))
 	if err != nil {
 		return err
 	}
@@ -479,13 +479,13 @@ func (a *app) switchPHP(ctx context.Context, domain, php string) (err error) {
 	}
 	if !found {
 		// An unknown domain is an error: exit code 1
-		return fmt.Errorf("Domain '%s' is not configured.", domain) //nolint:staticcheck // user-facing message
+		return i18n.Errorf("Domain '%s' is not configured.", domain)
 	}
 	if current == php {
-		a.log.Info(fmt.Sprintf("Domain '%s' is already using PHP %s.", domain, php))
+		a.log.Info(i18n.Tf("Domain '%s' is already using PHP %s.", domain, php))
 		return nil
 	}
-	a.log.Info(fmt.Sprintf("Switching '%s' from PHP %s to PHP %s...", domain, current, php))
+	a.log.Info(i18n.Tf("Switching '%s' from PHP %s to PHP %s...", domain, current, php))
 	if err := resources.New(r.dir, a.log).EnsurePHPVersionConfig(php); err != nil {
 		return err
 	}
@@ -527,14 +527,14 @@ func (a *app) switchPHP(ctx context.Context, domain, php string) (err error) {
 		return nil
 	}()
 	if err != nil {
-		a.log.Error(fmt.Sprintf("An error occurred: %v", err))
+		a.log.Error(i18n.Tf("An error occurred: %v", err))
 		_ = g.MoveToVersion(domain, php, current)
 		_, _ = r.s.UpdateDomainPHPVersion(domain, current)
-		a.log.Error("Rolled back version change.")
+		a.log.Error(i18n.T("Rolled back version change."))
 		return exitError(1)
 	}
 
 	a.con.Println()
-	a.log.Success(fmt.Sprintf("Switched '%s' to PHP %s!", domain, php))
+	a.log.Success(i18n.Tf("Switched '%s' to PHP %s!", domain, php))
 	return nil
 }

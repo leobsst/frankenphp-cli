@@ -21,6 +21,7 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/stack"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
 	"github.com/leobsst/frankenphp-cli/internal/core/validate"
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 )
 
 // Fallback user when the host has no Unix IDs (Windows) and the configuration sets
@@ -30,14 +31,14 @@ const defaultUID, defaultGID = "1000", "1000"
 func newExecCmd(a *app) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "exec DOMAIN|VERSION COMMAND...",
-		Short: "Run a command with a PHP version (or a domain's), from the current directory.",
-		Long: `Run a command with a PHP version (or a domain's), from the current directory.
+		Short: i18n.T("Run a command with a PHP version (or a domain's), from the current directory."),
+		Long: i18n.Tf(`Run a command with a PHP version (or a domain's), from the current directory.
 
 The command runs as the current user in a one-off container of the
 version's PHP image, with the current directory mounted at the same path.
 A quoted command is run through a shell, so pipes and && work.
 
-DOMAIN|VERSION: PHP version to use (` + strings.Join(phpversions.Supported, ", ") + `),
+DOMAIN|VERSION: PHP version to use (%s),
 or domain (or alternate host) whose PHP version to use.
 
 Examples:
@@ -46,7 +47,7 @@ Examples:
     frankenmanager exec myapp.test php -v
     frankenmanager exec myapp.test composer install
     frankenmanager exec myapp.test "php artisan migrate --force"
-    frankenmanager exec legacy.test "php artisan config:clear && php artisan cache:clear"`,
+    frankenmanager exec legacy.test "php artisan config:clear && php artisan cache:clear"`, strings.Join(phpversions.Supported, ", ")),
 		// Everything after DOMAIN belongs to the command, -v and --help
 		// included
 		DisableFlagParsing: true,
@@ -59,10 +60,10 @@ Examples:
 				args = args[1:]
 			}
 			if len(args) == 0 {
-				return usageError{errors.New("Missing argument 'DOMAIN|VERSION'.")} //nolint:staticcheck // user-facing message
+				return usageError{i18n.Errorf("Missing argument '%s'.", "DOMAIN|VERSION")}
 			}
 			if len(args) == 1 {
-				return usageError{errors.New("Missing argument 'COMMAND...'.")} //nolint:staticcheck // user-facing message
+				return usageError{i18n.Errorf("Missing argument '%s'.", "COMMAND...")}
 			}
 			return a.exec(cmd.Context(), args[0], args[1:])
 		},
@@ -89,9 +90,9 @@ func resolvePHPVersion(s *store.Store, domain string) (string, error) {
 	if _, ok, err := s.ProxyTarget(domain); err != nil {
 		return "", err
 	} else if ok {
-		return "", &validate.Error{Msg: fmt.Sprintf("'%s' is a proxy host: it has no PHP version.", domain)}
+		return "", &validate.Error{Msg: i18n.Tf("'%s' is a proxy host: it has no PHP version.", domain)}
 	}
-	return "", &validate.Error{Msg: fmt.Sprintf("Domain '%s' is not configured.", domain)}
+	return "", &validate.Error{Msg: i18n.Tf("Domain '%s' is not configured.", domain)}
 }
 
 // containerPath is where a host directory is mounted in the container:
@@ -204,7 +205,7 @@ func runArgs(image, user, workdir string, mounts []string, inis []iniMount, comm
 // The server does not need to run.
 func (a *app) exec(ctx context.Context, target string, command []string) (err error) {
 	if !slices.ContainsFunc(command, func(part string) bool { return strings.TrimSpace(part) != "" }) {
-		return &validate.Error{Msg: "No command given."}
+		return &validate.Error{Msg: i18n.T("No command given.")}
 	}
 	dir, err := a.projectDir()
 	if err != nil {
@@ -226,7 +227,7 @@ func (a *app) exec(ctx context.Context, target string, command []string) (err er
 	}
 	image := phpversions.ImageName(php)
 	if !a.docker(dir).ImageExists(ctx, image) {
-		return fmt.Errorf("Image '%s' not found: start the server (or add a host) "+ //nolint:staticcheck // user-facing message
+		return i18n.Errorf("Image '%s' not found: start the server (or add a host) "+
 			"with PHP %s to build it.", image, php)
 	}
 
@@ -286,7 +287,7 @@ func runInteractive(ctx context.Context, name string, args []string) (int, error
 		return 130, nil // killed by a signal
 	}
 	if err != nil {
-		return 0, fmt.Errorf("Failed to run %s: %w", name, err) //nolint:staticcheck // shown as "ERROR: ..."
+		return 0, i18n.Errorf("Failed to run %s: %w", name, err)
 	}
 	return 0, nil
 }
