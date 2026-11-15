@@ -1,8 +1,12 @@
 package cli
 
 import (
+	"context"
+
 	"github.com/spf13/cobra"
 
+	"github.com/leobsst/frankenphp-cli/internal/core/dns"
+	"github.com/leobsst/frankenphp-cli/internal/core/updater"
 	"github.com/leobsst/frankenphp-cli/internal/platform"
 )
 
@@ -14,6 +18,8 @@ func newUpdateCmd(a *app) *cobra.Command {
 		Long: `Update FrankenManager to the latest version.
 
 This command downloads and installs the latest release from GitHub.
+A running server is stopped before the install and started again on the
+new version right after; a stopped one stays stopped.
 Since the binary lives in a system directory (e.g. /usr/local/lib),
 installing it usually requires admin privileges: run with sudo.
 
@@ -29,6 +35,7 @@ Examples:
 			}
 			u := a.deps.Updater(dir, a.log)
 			if !check {
+				a.grantBindPortOnUpdate(cmd.Context(), u, dir)
 				if !u.Update(cmd.Context(), force) {
 					return exitError(1)
 				}
@@ -54,4 +61,23 @@ Examples:
 	f.BoolVarP(&force, "force", "f", false, "Force update even if on latest version")
 	f.BoolVarP(&check, "check", "c", false, "Only check for updates, don't install")
 	return cmd
+}
+
+// grantBindPortOnUpdate has the update give the new binary the port 53
+// permission (Linux) when the current one has it or the LAN DNS server is
+// on: replacing the file drops it.
+func (a *app) grantBindPortOnUpdate(ctx context.Context, u *updater.Updater, dir string) {
+	p := a.deps.Privilege(a.log)
+	if !p.BindPortNeeded() {
+		return
+	}
+	needed := u.Exe != "" && p.CanBindPort(ctx, u.Exe)
+	if !needed {
+		if e, err := a.loadEnv(dir); err == nil {
+			needed = dns.Enabled(e)
+		}
+	}
+	if needed {
+		u.GrantBindPort = p.GrantBindPort
+	}
 }

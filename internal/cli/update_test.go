@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/leobsst/frankenphp-cli/internal/core/privilege"
 	"github.com/leobsst/frankenphp-cli/internal/core/updater"
 )
 
@@ -25,6 +26,10 @@ func (f fakeGitHub) RoundTrip(*http.Request) (*http.Response, error) {
 }
 
 func (e *testEnv) fakeUpdater(version string, gh fakeGitHub) {
+	// macOS: no port 53 permission to grant
+	e.privilege = func(log privilege.Logger) *privilege.Manager {
+		return &privilege.Manager{GOOS: "darwin", Run: e.cmd, Log: log, IsAdmin: func() bool { return false }}
+	}
 	e.updater = func(dataDir string, log updater.Logger) *updater.Updater {
 		return &updater.Updater{
 			Version: version, GOOS: "darwin", GOARCH: "arm64",

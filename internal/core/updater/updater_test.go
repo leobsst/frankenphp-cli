@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -507,5 +508,116 @@ func TestSyncResourcesExitCodes(t *testing.T) {
 	u.syncResources(context.Background(), u.Exe+"-missing")
 	if !slices.Equal(log.Lines, []string{"warning: Static files will be updated on the next command."}) {
 		t.Errorf("missing: %v", log.Lines)
+	}
+}
+
+// serverHooks records the server calls of an update, in order.
+func serverHooks(u *Updater, running bool, calls *[]string, startErr error) {
+	u.ServerRunning = func(_ context.Context, exe string) bool {
+		*calls = append(*calls, "running? "+filepath.Base(filepath.Dir(exe)))
+		return running
+	}
+	u.StopServer = func(_ context.Context, exe string) error {
+		*calls = append(*calls, "stop")
+		return nil
+	}
+	u.StartServer = func(_ context.Context, exe string) error {
+		*calls = append(*calls, "start")
+		return startErr
+	}
+	u.GrantBindPort = func(context.Context, string) error {
+		*calls = append(*calls, "grant")
+		return nil
+	}
+}
+
+func newRelease(t *testing.T, u *Updater, f *fakeHTTP) {
+	t.Helper()
+	writeFiles(t, filepath.Dir(u.Exe), map[string]string{BundleName: "old exe"})
+	f.responses[apiURL] = respond(200, releaseJSON("v1.3.0"))
+	f.responses[downloadURL] = respond(200, archive(t,
+		entry{name: "frankenmanager/", dir: true},
+		entry{name: "frankenmanager/frankenmanager", body: "new exe", mode: 0o755},
+	))
+	u.RunSync = func(context.Context, string) (int, error) { return SyncResourcesNothingToDo, nil }
+}
+
+func TestUpdateStopsAndRestartsARunningServer(t *testing.T) {
+	u, f, log := newUpdater(t)
+	newRelease(t, u, f)
+	var calls []string
+	serverHooks(u, true, &calls, nil)
+	u.StartServer = func(_ context.Context, exe string) error {
+		// On the new binary
+		data, _ := os.ReadFile(exe)
+		calls = append(calls, "start "+string(data))
+		return nil
+	}
+	if !u.Update(context.Background(), false) {
+		t.Fatalf("update failed: %v", log.Lines)
+	}
+	if want := []string{"running? " + BundleName, "stop", "grant", "start new exe"}; !slices.Equal(calls, want) {
+		t.Errorf("calls = %v", calls)
+	}
+	if last := log.Lines[len(log.Lines)-1]; last != "success: Server restarted." {
+		t.Errorf("log = %v", log.Lines)
+	}
+}
+
+func TestUpdateLeavesAStoppedServerStopped(t *testing.T) {
+	u, f, log := newUpdater(t)
+	newRelease(t, u, f)
+	var calls []string
+	serverHooks(u, false, &calls, nil)
+	if !u.Update(context.Background(), false) {
+		t.Fatalf("update failed: %v", log.Lines)
+	}
+	if want := []string{"running? " + BundleName, "grant"}; !slices.Equal(calls, want) {
+		t.Errorf("calls = %v", calls)
+	}
+}
+
+func TestUpdateUpToDateTouchesNothing(t *testing.T) {
+	u, f, _ := newUpdater(t)
+	f.responses[apiURL] = respond(200, releaseJSON("v1.2.3"))
+	var calls []string
+	serverHooks(u, true, &calls, nil)
+	if !u.Update(context.Background(), false) || len(calls) != 0 {
+		t.Errorf("calls = %v", calls)
+	}
+}
+
+// A failed install starts the server again on the version still there.
+func TestUpdateFailureRestartsTheOldVersion(t *testing.T) {
+	u, f, log := newUpdater(t)
+	f.responses[apiURL] = respond(200, releaseJSON("v1.3.0"))
+	f.responses[downloadURL] = respond(404, nil)
+	var calls []string
+	serverHooks(u, true, &calls, nil)
+	if u.Update(context.Background(), false) {
+		t.Fatal("update succeeded")
+	}
+	if want := []string{"running? " + BundleName, "stop", "start"}; !slices.Equal(calls, want) {
+		t.Errorf("calls = %v, log = %v", calls, log.Lines)
+	}
+}
+
+// A failed restart or permission grant is only a warning.
+func TestUpdateWarnsOnRestartAndGrantFailures(t *testing.T) {
+	u, f, log := newUpdater(t)
+	newRelease(t, u, f)
+	var calls []string
+	serverHooks(u, true, &calls, errors.New("exit status 1"))
+	u.GrantBindPort = func(context.Context, string) error { return errors.New("setcap not found") }
+	if !u.Update(context.Background(), false) {
+		t.Fatalf("update failed: %v", log.Lines)
+	}
+	for _, want := range []string{
+		"warning: Run `sudo frankenmanager setup` so the LAN DNS server can use port 53: setcap not found",
+		"warning: Could not restart the server (exit status 1): run `frankenmanager start`.",
+	} {
+		if !slices.Contains(log.Lines, want) {
+			t.Errorf("missing %q in %v", want, log.Lines)
+		}
 	}
 }

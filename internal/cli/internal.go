@@ -96,6 +96,22 @@ func newInternalCmds(a *app) []*cobra.Command {
 		},
 		newInstallAliasCmd(a),
 		{
+			Use:    updater.ServerRunningCommand,
+			Short:  "Internal: exit 0 when the server runs, 1 otherwise, run by `update` as the real user.",
+			Hidden: true,
+			Args:   noArgs,
+			RunE: func(cmd *cobra.Command, _ []string) error {
+				dir, err := a.projectDir()
+				if err != nil {
+					return exitError(1)
+				}
+				if running, err := a.serverRunning(cmd.Context(), dir); err != nil || !running {
+					return exitError(1)
+				}
+				return nil
+			},
+		},
+		{
 			Use:    updater.RefreshCommand,
 			Short:  "Internal: refresh the cached GitHub release info, spawned at startup.",
 			Hidden: true,

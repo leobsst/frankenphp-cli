@@ -106,3 +106,19 @@ func TestRefreshUpdateCache(t *testing.T) {
 		t.Errorf("failure: code %d, out %q, err %q", code, out, errOut)
 	}
 }
+
+// `update` runs it as the real user: exit 0 when the server runs, silent.
+func TestServerRunningCommand(t *testing.T) {
+	e := newEnv(t)
+	e.initEnv("")
+	if err := e.store().AddDomains([]string{"app.test"}, "8.4"); err != nil {
+		t.Fatal(err)
+	}
+	if code, out, _ := e.run("--no-update-check", "_server-running-internal"); code != 1 || out != "" {
+		t.Errorf("stopped: code %d, out %q", code, out)
+	}
+	e.docker.ps = running
+	if code, out, _ := e.run("--no-update-check", "_server-running-internal"); code != 0 || out != "" {
+		t.Errorf("running: code %d, out %q", code, out)
+	}
+}

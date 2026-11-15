@@ -64,6 +64,10 @@ const (
 	SyncResourcesCommand     = "_sync-resources-internal"
 	SyncResourcesTimeout     = 60 * time.Second
 	SyncResourcesNothingToDo = 3
+	// ServerRunningCommand is the hidden command telling whether the
+	// server runs (exit 0) or not (exit 1), run as the real user by
+	// Update to stop and restart it around the install.
+	ServerRunningCommand = "_server-running-internal"
 
 	apiTimeout      = 10 * time.Second
 	downloadTimeout = 10 * time.Minute
@@ -105,6 +109,15 @@ type Updater struct {
 	Spawn func(exe string, args ...string) error
 	// RunSync runs exe's SyncResourcesCommand and returns its exit code.
 	RunSync func(ctx context.Context, exe string) (int, error)
+	// ServerRunning, StopServer and StartServer check, stop and start the
+	// server with exe, as the real user: the server is stopped before the
+	// install and started again after, only when it ran. Nil skips them.
+	ServerRunning func(ctx context.Context, exe string) bool
+	StopServer    func(ctx context.Context, exe string) error
+	StartServer   func(ctx context.Context, exe string) error
+	// GrantBindPort lets the new binary bind port 53 (Linux, setcap); nil
+	// when not needed.
+	GrantBindPort func(ctx context.Context, exe string) error
 }
 
 // New returns an Updater for the running binary.
@@ -123,6 +136,9 @@ func New(dataDir string, log Logger) *Updater {
 		Now:           time.Now,
 		Spawn:         spawn,
 		RunSync:       runSync,
+		ServerRunning: serverRunning,
+		StopServer:    func(ctx context.Context, exe string) error { return runServer(ctx, exe, "stop") },
+		StartServer:   func(ctx context.Context, exe string) error { return runServer(ctx, exe, "start") },
 	}
 }
 
@@ -383,6 +399,20 @@ func (u *Updater) Update(ctx context.Context, force bool) bool {
 		return false
 	}
 	dir := filepath.Dir(u.Exe)
+	// Before stopping anything: an update without the rights would only
+	// stop the server
+	if err := writable(dir); err != nil {
+		u.Log.Error("Permission denied. Try running with sudo/administrator privileges.")
+		return false
+	}
+	wasRunning := u.ServerRunning != nil && u.ServerRunning(ctx, u.Exe)
+	if wasRunning {
+		u.Log.Info("Stopping the server for the update...")
+		if err := u.StopServer(ctx, u.Exe); err != nil {
+			u.Log.Error(fmt.Sprintf("Could not stop the server, update cancelled: %v", err))
+			return false
+		}
+	}
 	if err := u.install(ctx, latest.DownloadURL, dir); err != nil {
 		if !errors.Is(err, errDownload) {
 			if errors.Is(err, fs.ErrPermission) {
@@ -391,13 +421,49 @@ func (u *Updater) Update(ctx context.Context, force bool) bool {
 				u.Log.Error(fmt.Sprintf("Update failed: %v", err))
 			}
 		}
+		if wasRunning {
+			// Back on the version still installed
+			u.startServer(ctx, u.Exe)
+		}
 		return false
 	}
 
 	u.Log.Success(fmt.Sprintf("Successfully updated to version %s!", latest.Version))
-	u.syncResources(ctx, filepath.Join(dir, u.exeName()))
+	exe := filepath.Join(dir, u.exeName())
+	u.syncResources(ctx, exe)
+	if u.GrantBindPort != nil {
+		if err := u.GrantBindPort(ctx, exe); err != nil {
+			u.Log.Warning("Run `sudo frankenmanager setup` so the LAN DNS server can use port 53: " + err.Error())
+		}
+	}
+	if wasRunning {
+		u.startServer(ctx, exe)
+		return true
+	}
 	u.Log.Info("Please restart FrankenManager to use the new version.")
 	return true
+}
+
+// startServer starts the server with exe after an update, a failure being
+// only a warning: the update itself is done or reverted.
+func (u *Updater) startServer(ctx context.Context, exe string) {
+	u.Log.Info("Restarting the server...")
+	if err := u.StartServer(ctx, exe); err != nil {
+		u.Log.Warning(fmt.Sprintf("Could not restart the server (%v): run `frankenmanager start`.", err))
+		return
+	}
+	u.Log.Success("Server restarted.")
+}
+
+// writable reports whether files can be created in dir.
+func writable(dir string) error {
+	f, err := os.CreateTemp(dir, ".frankenmanager-write-check-*")
+	if err != nil {
+		return err
+	}
+	name := f.Name()
+	_ = f.Close()
+	return os.Remove(name)
 }
 
 func (u *Updater) exeName() string {
@@ -628,6 +694,23 @@ func syncCommand(ctx context.Context, exe string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, exe, "--no-update-check", SyncResourcesCommand)
 	platform.AsRealUser(cmd)
 	return cmd
+}
+
+// serverRunning runs exe's ServerRunningCommand as the real user: exit 0
+// when the server runs.
+func serverRunning(ctx context.Context, exe string) bool {
+	cmd := exec.CommandContext(ctx, exe, "--no-update-check", ServerRunningCommand)
+	platform.AsRealUser(cmd)
+	return cmd.Run() == nil
+}
+
+// runServer runs `exe stop` or `exe start` as the real user, its output on
+// the terminal.
+func runServer(ctx context.Context, exe, command string) error {
+	cmd := exec.CommandContext(ctx, exe, "--no-update-check", command)
+	platform.AsRealUser(cmd)
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	return cmd.Run()
 }
 
 // runSync runs syncCommand and returns its exit code.
