@@ -17,7 +17,7 @@ TARGETS := darwin/amd64 darwin/arm64 \
 
 export CGO_ENABLED := 0
 
-.PHONY: build build-all test lint hooks clean
+.PHONY: build build-all test lint i18n hooks clean
 
 ## build: native binary in $(OUT)/frankenmanager
 build:
@@ -39,6 +39,10 @@ test:
 ## lint: golangci-lint (configuration in .golangci.yml)
 lint:
 	$(GOLANGCI_LINT) run
+
+## i18n: every translatable message translated, no stale translation
+i18n:
+	go run ./cmd/i18ncheck
 
 ## hooks: enable the pre-commit hook of .githooks (lint before each commit)
 hooks:

@@ -23,6 +23,7 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/ssl"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
 	"github.com/leobsst/frankenphp-cli/internal/core/updater"
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 	"github.com/leobsst/frankenphp-cli/internal/platform"
 	"github.com/leobsst/frankenphp-cli/internal/ui"
 )
@@ -66,6 +67,9 @@ type Deps struct {
 	ServeCA  func(ctx context.Context, certFile string, port int) error
 	WatchDNS func(ctx context.Context, dataDir string, stderr io.Writer) error
 	Refresh  func(ctx context.Context, dataDir string, log updater.Logger) error
+	// Language returns the system language (a locale name, "fr_FR.UTF-8"),
+	// for the CLI_LANGUAGE "auto" setting.
+	Language func() string
 }
 
 func (d Deps) withDefaults() Deps {
@@ -122,6 +126,9 @@ func (d Deps) withDefaults() Deps {
 	}
 	if d.Alias == nil {
 		d.Alias = alias.Locate
+	}
+	if d.Language == nil {
+		d.Language = i18n.System
 	}
 	if d.Notify == nil {
 		d.Notify = func(dataDir string, log updater.Logger) { updater.New(dataDir, log).Notify() }

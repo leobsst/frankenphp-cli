@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Pre-commit hook: lint the Go code changed since HEAD with the golangci-lint
-# version of the CI (.golangci.yml). Enable it once with `make hooks`.
+# version of the CI (.golangci.yml), then check the translations. Enable it once with `make hooks`.
 set -euo pipefail
 
 GOLANGCI_LINT_VERSION=v2.15.0
 
-# Nothing to lint without staged Go files
-if [ -z "$(git diff --cached --name-only --diff-filter=ACMR -- '*.go' go.mod go.sum)" ]; then
+# Nothing to lint without staged Go files or catalogs
+if [ -z "$(git diff --cached --name-only --diff-filter=ACMR -- '*.go' go.mod go.sum 'internal/i18n/locales/**')" ]; then
   exit 0
 fi
 
@@ -15,5 +15,12 @@ if ! go run "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_L
     run --new-from-rev=HEAD ./...; then
   echo ""
   echo "Commit aborted: fix the issues above (formatting: gofmt -w <file>), or commit with --no-verify."
+  exit 1
+fi
+
+echo "Translations..."
+if ! go run ./cmd/i18ncheck; then
+  echo ""
+  echo "Commit aborted: translate the messages above in internal/i18n/locales, or commit with --no-verify."
   exit 1
 fi

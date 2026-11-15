@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/leobsst/frankenphp-cli/internal/core/phpversions"
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 )
 
 // Apply tells what a new value needs to take effect on a running server.
@@ -128,6 +129,9 @@ var Services = map[string]string{
 	"soketi": "SOKETI_ENABLED",
 }
 
+// LanguageKey is the key of the language of the CLI messages.
+const LanguageKey = "CLI_LANGUAGE"
+
 // AliasKey is the key of the CLI alias.
 const AliasKey = "CLI_ALIAS"
 
@@ -229,6 +233,8 @@ func buildDefinitions() []Definition {
 			Validate: validateID, Apply: ApplyRebuild},
 		{Key: AliasKey, Description: "Short alias of the frankenmanager command (empty: no alias)",
 			Default: static(DefaultAlias), Validate: ValidateAlias, Apply: ApplyAlias},
+		{Key: LanguageKey, Description: i18n.N("Language of the messages: auto follows the system language (LANG, LC_ALL...)"),
+			Default: static(i18n.Auto), Values: append([]string{i18n.Auto}, i18n.Languages()...), Apply: ApplyNow},
 		{Key: "DEFAULT_PROJECT_PATH", Description: "Projects root used when start has no --path",
 			Apply: ApplyNow},
 		{Key: "DEFAULT_PHP_VERSION", Description: "PHP version of new domains when --php is not given",

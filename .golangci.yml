@@ -8,6 +8,13 @@ linters:
     - misspell
     - unconvert
   settings:
+    govet:
+      settings:
+        printf:
+          # The translated printf wrapper, checked like fmt.Sprintf (i18n.Errorf
+          # accepts %w, which this check would refuse)
+          funcs:
+            - github.com/leobsst/frankenphp-cli/internal/i18n.Tf
     errcheck:
       # Terminal output: nothing useful to do if a write to stdout fails
       exclude-functions:

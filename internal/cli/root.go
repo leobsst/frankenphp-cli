@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 	"github.com/leobsst/frankenphp-cli/internal/ui"
 	"github.com/leobsst/frankenphp-cli/internal/version"
 )
@@ -33,10 +34,9 @@ func NewRootCmd(out, errOut io.Writer, deps Deps) *cobra.Command {
 	a := &app{deps: deps.withDefaults(), out: out, errOut: errOut, log: ui.NewLogger(out), con: ui.NewConsole(out)}
 	root := &cobra.Command{
 		Use:   "frankenmanager",
-		Short: "FrankenPHP Docker development environment manager",
-		Long: `FrankenPHP Docker development environment manager.
-
-Also available under its short alias, fkm by default (CLI_ALIAS setting).`,
+		Short: i18n.T("FrankenPHP Docker development environment manager"),
+		Long: i18n.T("FrankenPHP Docker development environment manager.\n\n" +
+			"Also available under its short alias, fkm by default (CLI_ALIAS setting)."),
 		Version: version.Version,
 		// Errors are printed by Execute, in its own format
 		SilenceErrors: true,
@@ -45,7 +45,7 @@ Also available under its short alias, fkm by default (CLI_ALIAS setting).`,
 		// with a usage error, rather than letting cobra run the root.
 		Args: func(_ *cobra.Command, args []string) error {
 			if len(args) > 0 {
-				return usageError{fmt.Errorf("No such command '%s'.", args[0])} //nolint:staticcheck // user-facing message
+				return usageError{i18n.Errorf("No such command '%s'.", args[0])}
 			}
 			return nil
 		},
@@ -57,7 +57,7 @@ Also available under its short alias, fkm by default (CLI_ALIAS setting).`,
 			}
 		},
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return usageError{errors.New("Missing command.")} //nolint:staticcheck // user-facing message
+			return usageError{i18n.NewError("Missing command.")}
 		},
 	}
 	// Our own completion command, which also completes the alias
@@ -66,14 +66,14 @@ Also available under its short alias, fkm by default (CLI_ALIAS setting).`,
 	root.SetErr(errOut)
 	// Same output as earlier releases, for --version and -v
 	root.SetVersionTemplate("FrankenManager version {{.Version}}\n")
-	root.Flags().BoolP("version", "v", false, "Show version and exit")
+	root.Flags().BoolP("version", "v", false, i18n.T("Show version and exit"))
 
 	// Hidden global option used by the processes the CLI spawns itself. It
 	// must precede the subcommand: `frankenmanager --no-update-check <cmd>`.
 	root.PersistentFlags().Bool("no-update-check", false, "Skip checking for updates on startup")
 	_ = root.PersistentFlags().MarkHidden("no-update-check")
 	// Before or after the subcommand: `frankenmanager start --verbose`
-	root.PersistentFlags().Bool("verbose", false, "Show the logs of the Docker image builds")
+	root.PersistentFlags().Bool("verbose", false, i18n.T("Show the logs of the Docker image builds"))
 
 	root.AddCommand(newStartCmd(a), newStopCmd(a), newRestartCmd(a),
 		newAddHostCmd(a), newAddAliasCmd(a), newRemoveHostCmd(a), newRestoreHostCmd(a), newSwitchPHPCmd(a),
@@ -85,6 +85,7 @@ Also available under its short alias, fkm by default (CLI_ALIAS setting).`,
 	root.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
 		return usageError{err}
 	})
+	translateHelp(root)
 	return root
 }
 
@@ -96,6 +97,7 @@ func Execute(args []string, out, errOut io.Writer) int {
 // ExecuteWith runs the CLI with args (without the program name) and returns the
 // process exit code. Logs and errors go to out, and usage errors to errOut.
 func ExecuteWith(args []string, out, errOut io.Writer, deps Deps) int {
+	selectLanguage(deps.withDefaults().Language)
 	root := NewRootCmd(out, errOut, deps)
 	root.SetArgs(args)
 
@@ -115,8 +117,8 @@ func ExecuteWith(args []string, out, errOut io.Writer, deps Deps) int {
 		if findErr != nil || cmd == nil {
 			cmd = root
 		}
-		fmt.Fprintf(errOut, "Usage: %s\nTry '%s --help' for help.\n\nError: %s\n",
-			cmd.UseLine(), cmd.CommandPath(), usage.err)
+		fmt.Fprint(errOut, i18n.Tf("Usage: %s\nTry '%s --help' for help.\n\nError: %s\n",
+			cmd.UseLine(), cmd.CommandPath(), usage.err))
 		return ExitUsage
 	}
 

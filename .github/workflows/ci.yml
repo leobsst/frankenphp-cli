@@ -40,6 +40,9 @@ jobs:
         with:
           version: v2.15.0
 
+      - name: Check the translations
+        run: go run ./cmd/i18ncheck
+
   go-test:
     name: Test (Go, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}

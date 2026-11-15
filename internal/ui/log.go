@@ -7,6 +7,8 @@ import (
 	"io"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 )
 
 // Logger writes the CLI log lines, in the format of earlier releases, all
@@ -41,7 +43,7 @@ func (l *Logger) Info(msg string) { fmt.Fprintln(l.w, l.blue.Render("--")+" "+ms
 func (l *Logger) Success(msg string) { fmt.Fprintln(l.w, l.green.Render("--")+" "+msg) }
 
 // Warning logs a warning.
-func (l *Logger) Warning(msg string) { fmt.Fprintln(l.w, l.yellow.Render("WARNING: "+msg)) }
+func (l *Logger) Warning(msg string) { fmt.Fprintln(l.w, l.yellow.Render(i18n.Tf("WARNING: %s", msg))) }
 
 // Error logs an error.
-func (l *Logger) Error(msg string) { fmt.Fprintln(l.w, l.red.Render("ERROR: "+msg)) }
+func (l *Logger) Error(msg string) { fmt.Fprintln(l.w, l.red.Render(i18n.Tf("ERROR: %s", msg))) }

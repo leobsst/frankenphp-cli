@@ -1,0 +1,22 @@
+{
+  "Help about any command": "Aide sur n'importe quelle commande",
+  "Help provides help for any command in the application.\nSimply type %s help [path to command] for full details.": "Affiche l'aide de n'importe quelle commande de l'application.\nTapez %s help [chemin de la commande] pour le détail.",
+  "help for %s": "aide de %s",
+  "Usage:": "Utilisation :",
+  "Aliases:": "Alias :",
+  "Examples:": "Exemples :",
+  "Available Commands:": "Commandes disponibles :",
+  "Flags:": "Options :",
+  "Global Flags:": "Options globales :",
+  "Use \"%s [command] --help\" for more information about a command.": "Utilisez « %s [commande] --help » pour plus d'informations sur une commande.",
+  "FrankenPHP Docker development environment manager": "Gestionnaire d'environnement de développement FrankenPHP sous Docker",
+  "FrankenPHP Docker development environment manager.\n\nAlso available under its short alias, fkm by default (CLI_ALIAS setting).": "Gestionnaire d'environnement de développement FrankenPHP sous Docker.\n\nÉgalement disponible sous son alias court, fkm par défaut (réglage CLI_ALIAS).",
+  "No such command '%s'.": "Commande « %s » inconnue.",
+  "Missing command.": "Commande manquante.",
+  "Show version and exit": "Afficher la version et quitter",
+  "Show the logs of the Docker image builds": "Afficher les journaux de construction des images Docker",
+  "Usage: %s\nTry '%s --help' for help.\n\nError: %s\n": "Utilisation : %s\nEssayez « %s --help » pour l'aide.\n\nErreur : %s\n",
+  "WARNING: %s": "AVERTISSEMENT : %s",
+  "ERROR: %s": "ERREUR : %s",
+  "Language of the messages: auto follows the system language (LANG, LC_ALL...)": "Langue des messages : auto suit la langue du système (LANG, LC_ALL...)"
+}
