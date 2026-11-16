@@ -3,6 +3,7 @@ package dnsclients
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -134,6 +135,53 @@ func TestIdentifyUnknownAndSelf(t *testing.T) {
 	}
 	if name, _ := fallback.Identify(context.Background(), "192.168.1.50"); name != "nas.local" {
 		t.Errorf("fallback name %q", name)
+	}
+	// mDNS answers when the router does not, before the system resolver
+	mdns := fallback
+	mdns.LookupMDNS = func(_ context.Context, ip string) ([]string, error) {
+		if ip == "192.168.1.50" {
+			return []string{"MacBook-de-Leo.local."}, nil
+		}
+		return nil, errors.New("timeout")
+	}
+	if name, _ := mdns.Identify(context.Background(), "192.168.1.50"); name != "MacBook-de-Leo.local" {
+		t.Errorf("mDNS name %q", name)
+	}
+	// NetBIOS answers when mDNS does not, before the system resolver
+	netbios := fallback
+	netbios.LookupMDNS = func(context.Context, string) ([]string, error) { return nil, errors.New("timeout") }
+	netbios.LookupNetBIOS = func(context.Context, string) (string, error) { return "DESKTOP-LEO", nil }
+	if name, _ := netbios.Identify(context.Background(), "192.168.1.50"); name != "DESKTOP-LEO" {
+		t.Errorf("NetBIOS name %q", name)
+	}
+}
+
+// nbstatEntry is one name of a node status response.
+func nbstatEntry(name string, suffix byte, group bool) []byte {
+	e := []byte(fmt.Sprintf("%-15s", name))
+	flags := byte(0x04)
+	if group {
+		flags |= 0x80
+	}
+	return append(e, suffix, flags, 0x00)
+}
+
+func TestParseNBSTAT(t *testing.T) {
+	resp := []byte{0x46, 0x4d, 0x84, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00}
+	resp = append(resp, nbstatRequest[12:12+34]...) // answer name
+	resp = append(resp, 0x00, 0x21, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00)
+	resp = append(resp, 3)
+	resp = append(resp, nbstatEntry("WORKGROUP", 0x00, true)...)
+	resp = append(resp, nbstatEntry("DESKTOP-LEO", 0x20, false)...)
+	resp = append(resp, nbstatEntry("DESKTOP-LEO", 0x00, false)...)
+	if name, err := parseNBSTAT(resp); err != nil || name != "DESKTOP-LEO" {
+		t.Errorf("parseNBSTAT = %q, %v", name, err)
+	}
+	if _, err := parseNBSTAT(resp[:40]); err == nil {
+		t.Error("truncated response accepted")
+	}
+	if _, err := parseNBSTAT(nbstatRequest); err == nil {
+		t.Error("request accepted as a response")
 	}
 }
 
