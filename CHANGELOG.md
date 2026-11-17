@@ -22,8 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Merge registered domains with newly provided domains
   - Support for `--force-ssl` flag to regenerate certificates
 - `stop` - Stop all running containers
-- `restart` - Restart all or specific containers (caddy, database, cache, phpmyadmin, soketi) and the LAN DNS server (dns)
-  - Support for individual service restart with `--caddy`, `--db`, `--cache`, `--pma`, `--dns`, `--soketi` flags
+- `restart` - Restart all or specific containers (caddy, database, cache, phpmyadmin, soketi, s3) and the LAN DNS server (dns)
+  - Support for individual service restart with `--caddy`, `--db`, `--cache`, `--pma`, `--dns`, `--soketi`, `--s3` flags
   - `--force-ssl` option for certificate regeneration during restart
 - `status` - Display current server and container status with real-time Docker state
 - `add-host` - Add new domains dynamically without full server restart
@@ -109,11 +109,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Served over TLS by the reverse proxy at `wss://ws.frankenmanager.test` (certificate, hosts entry and LAN DNS record handled automatically)
   - Default app configured through `SOKETI_DEFAULT_APP_ID`, `SOKETI_DEFAULT_APP_KEY` and `SOKETI_DEFAULT_APP_SECRET` (generated on start when empty)
   - Reachable by the PHP apps at `127.0.0.1:SOKETI_PORT` (default `6001`), restartable with `restart --soketi`
+- **Garage** (franken_s3) - Optional S3 server (`service enable s3`)
+  - Served over TLS by the reverse proxy at `https://s3.frankenmanager.test` (path style) and `https://<bucket>.s3.frankenmanager.test` (virtual-host style), one mkcert certificate covering both; hosts entries and LAN DNS records of every bucket handled automatically
+  - Objects stored in `<data directory>/s3` by default, configurable with `S3_DIR`
+  - Global access key (`S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`, generated on start when empty) allowed on every bucket
+  - `s3 bucket list|create|delete|empty|public|private` and `s3 key list|create|show|delete` (keys limited to one bucket, read-write or read-only), `s3 info` for the endpoints and the Laravel `.env` settings
+  - Public buckets: every object readable without credentials at its S3 URL (Garage has no per-object visibility, the apps' ACLs are ignored, with a warning)
+  - Reachable by the PHP apps at `127.0.0.1:S3_PORT` (default `3900`), restartable with `restart --s3`
 - **phpMyAdmin** (franken_phpmyadmin) - Web-based database management UI
 - **CoreDNS** (built in) - Optional LAN DNS server (`service enable dns`), so other devices on the network reach the `.test` domains without editing their hosts file
   - Embedded in FrankenManager and run by its background process rather than a container, so that it sees the real address of each device (behind Docker's VM on macOS and Windows, a container only sees the VM); the `franken_dns` container of earlier releases is removed on `start`, `restart --dns` and `service enable dns`
   - Records every device querying it (see `dns-clients`)
-  - Resolves every registered domain, alternate host, proxy host and the Soketi host to this machine's LAN IP (or `DNS_IP`); every other query is forwarded to `DNS_UPSTREAM`
+  - Resolves every registered domain, alternate host, proxy host, the Soketi host and the S3 hosts to this machine's LAN IP (or `DNS_IP`); every other query is forwarded to `DNS_UPSTREAM`
   - Listens on every network interface by default (`0.0.0.0:53`), `DNS_LISTEN_IP` and `DNS_PORT` to pin it
   - Records kept in sync on every domain change (add, remove, restore, alias, proxy host) without restarting the server, with a short TTL (30 s); `DNS_*` setting changes are picked up on their own
   - Follows LAN IP changes (e.g. Wi-Fi to Ethernet) while the server runs, unless `DNS_IP` is set

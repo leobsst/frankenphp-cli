@@ -30,6 +30,7 @@
 - Configuration stored in SQLite, changed with `frankenmanager configuration set` (with shell completion), applied live when possible
 - Optional Redis cache server, turned on and off live (`service enable redis`)
 - Optional Soketi WebSocket server (`service enable soketi`), served over TLS at `wss://ws.frankenmanager.test`
+- Optional S3 server ([Garage](https://garagehq.deuxfleurs.fr), `service enable s3`), served over TLS at `https://s3.frankenmanager.test` (path style) and `https://<bucket>.s3.frankenmanager.test` (virtual-host style), with buckets, per-bucket access keys and public buckets managed from the CLI
 - Short `fkm` alias of the command (configurable, `frankenmanager` always works)
 - Messages in English or French, following the system language or forced with `CLI_LANGUAGE`
 - phpMyAdmin / pgAdmin for database management, served at `https://localhost`
@@ -153,7 +154,10 @@ frankenmanager setup --status
 | `frankenmanager update` | Update FrankenManager to latest version |
 | `frankenmanager restart --dns` | Restart the LAN DNS server (when `DNS_SERVER=true`) |
 | `frankenmanager configuration [list\|get\|set\|reset]` | Show or change the configuration (see [Settings](#settings)) |
-| `frankenmanager service enable\|disable\|status [dns\|redis\|soketi]` | Turn an optional service on or off, live |
+| `frankenmanager service enable\|disable\|status [dns\|redis\|s3\|soketi]` | Turn an optional service on or off, live |
+| `frankenmanager s3 info` | Show the S3 endpoints, the global credentials and the `.env` settings |
+| `frankenmanager s3 bucket list\|create\|delete\|empty\|public\|private` | Manage the S3 buckets (see [S3 server (Garage)](#s3-server-garage)) |
+| `frankenmanager s3 key list\|create\|show\|delete` | Manage the per-bucket S3 access keys |
 | `frankenmanager completion bash\|zsh\|fish\|powershell` | Generate the shell completion script |
 | `frankenmanager trust-ca on \| off \| status [--port <port>]` | Share the local mkcert root CA over the LAN so other devices can trust your `.test` domains (off by default) |
 | `frankenmanager --help` | Show help for all commands |
@@ -399,6 +403,9 @@ frankenmanager restart --dns
 # Restart only the Soketi WebSocket server (when SOKETI_ENABLED=true)
 frankenmanager restart --soketi
 
+# Restart only the S3 server (when S3_ENABLED=true)
+frankenmanager restart --s3
+
 # Restart multiple specific containers
 frankenmanager restart --cache --pma
 
@@ -419,6 +426,7 @@ frankenmanager restart --build
 | `--phpmyadmin` | `--pma` | franken_phpmyadmin | phpMyAdmin database UI |
 | `--dns` | - | (background process) | LAN DNS server (when `DNS_SERVER=true`) |
 | `--soketi` | `--ws` | franken_soketi | Soketi WebSocket server (when `SOKETI_ENABLED=true`) |
+| `--s3` | - | franken_s3 | Garage S3 server (when `S3_ENABLED=true`) |
 
 **Notes:**
 - When restarting `--caddy`, SSL certificates are regenerated (use `--force-ssl` to force full regeneration)
@@ -664,6 +672,70 @@ VITE_PUSHER_APP_CLUSTER="${PUSHER_APP_CLUSTER}"
 ```
 
 Changing a credential (`configuration set SOKETI_DEFAULT_APP_KEY ...`) takes effect on the next `stop`/`start`. `service disable soketi` removes the container, the reverse proxy route and the `ws.frankenmanager.test` host at once.
+
+### S3 server (Garage)
+
+Apps that store files on S3 (e.g. Laravel's `s3` disk) can use an optional [Garage](https://garagehq.deuxfleurs.fr) server, a lightweight S3-compatible object store. Turn it on:
+
+```bash
+frankenmanager service enable s3
+frankenmanager s3 info          # Endpoints, global credentials and .env settings
+```
+
+When the server runs, Garage starts at once (otherwise on the next `start`): the `franken_s3` container runs and:
+
+- the S3 API is served over TLS at `https://s3.frankenmanager.test` (path style, `https://s3.frankenmanager.test/<bucket>/<key>`) and at `https://<bucket>.s3.frankenmanager.test` (virtual-host style), with one mkcert certificate covering both. The hosts entries (and the LAN DNS records, when `DNS_SERVER=true`) of `s3.frankenmanager.test` and of every bucket are added for you;
+- PHP apps reach the API at `http://127.0.0.1:3900` (`S3_PORT`), with no TLS;
+- the objects are stored in `<data directory>/s3` (`S3_DIR`, relative to the data directory or absolute).
+
+**Credentials.** A global access key (`S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`, generated on the first start) is allowed on every bucket and may create new ones. For an app that must only see its own bucket, create a key limited to it:
+
+```bash
+frankenmanager s3 key create media                 # read and write, named media/app
+frankenmanager s3 key create media --name cdn --read-only
+frankenmanager s3 key list [media]                 # every key, or the keys allowed on a bucket
+frankenmanager s3 key show <access-key-id>         # its secret again
+frankenmanager s3 key delete <access-key-id>
+```
+
+**Buckets.**
+
+```bash
+frankenmanager s3 bucket create media [--public]
+frankenmanager s3 bucket list                      # public or not, objects, size, keys
+frankenmanager s3 bucket empty media [--yes]       # delete every object (asks first)
+frankenmanager s3 bucket delete media [--force]    # --force empties it first
+```
+
+Deleting a bucket also deletes the keys created for it with `s3 key create`. A bucket name has 3 to 63 lowercase letters, digits and hyphens (no dot, so that its virtual-host style host matches the certificate).
+
+**Public buckets.** Garage has no ACL nor bucket policy, so visibility is per bucket, not per object:
+
+```bash
+frankenmanager s3 bucket public media     # anyone can read every object, without credentials
+frankenmanager s3 bucket private media    # credentials required again (the default)
+```
+
+> ⚠️ Every object of a public bucket can be read and downloaded by anyone reaching this machine. The visibility set by the apps on each object (ACL `public-read` / `private`, Laravel's `visibility`) is accepted but ignored. Keep private files in a private bucket.
+
+Anonymous reads keep the S3 URL of the object: the reverse proxy sends the `GET`/`HEAD` requests without credentials (no `Authorization` header, no presigned query) to Garage's website endpoint, which serves the public buckets and answers 404 for the private ones. Signed and presigned requests always go to the S3 API.
+
+**Laravel** (`.env`, see `frankenmanager s3 info` for the actual values):
+
+```env
+FILESYSTEM_DISK=s3
+AWS_ACCESS_KEY_ID=<S3_ACCESS_KEY_ID or a bucket key>
+AWS_SECRET_ACCESS_KEY=<its secret>
+AWS_DEFAULT_REGION=us-east-1
+AWS_BUCKET=media
+# Server side: PHP -> Garage
+AWS_ENDPOINT=http://127.0.0.1:3900
+# Browser side: Storage::url()
+AWS_URL=https://s3.frankenmanager.test/media
+AWS_USE_PATH_STYLE_ENDPOINT=true
+```
+
+`service disable s3` stops the container and removes the reverse proxy route and the hosts entries at once; the objects stay in `S3_DIR`. Changing a port, the region or a credential takes effect on the next `stop`/`start`.
 
 ### LAN DNS server
 
@@ -931,6 +1003,8 @@ You can override this location with the `FRANKENMANAGER_DATA_DIR` environment va
 │   └── log/                # Access and error logs
 ├── dns/                    # LAN DNS server config and records (when DNS_SERVER=true)
 ├── phpmyadmin/             # Generated phpMyAdmin config (multi-server auto-login)
+├── garage/                 # Generated Garage config (when S3_ENABLED=true)
+├── s3/                     # S3 metadata and objects (S3_DIR, when S3_ENABLED=true)
 ├── php/
 │   ├── php.ini             # PHP configuration
 │   └── php-prod.ini        # Production overrides
@@ -1005,7 +1079,7 @@ Names are case-insensitive and values are checked (`true`/`false`, ports, PHP ve
 
 | Applies | Settings | What happens |
 |---------|----------|--------------|
-| live | `REDIS_ENABLED`, `DNS_SERVER`, `SOKETI_ENABLED` | The service starts or stops at once (same as `service enable\|disable`) |
+| live | `REDIS_ENABLED`, `DNS_SERVER`, `SOKETI_ENABLED`, `S3_ENABLED` | The service starts or stops at once (same as `service enable\|disable`) |
 | immediate | `CLI_ALIAS` | The alias is replaced at once |
 | next command | `CLI_LANGUAGE`, `DEFAULT_PHP_VERSION`, `DEFAULT_PROJECT_PATH` | Read by the next command |
 | `restart --dns` | `DNS_IP`, `DNS_LISTEN_IP`, `DNS_PORT`, `DNS_UPSTREAM` | Refreshes the LAN DNS server |
@@ -1052,6 +1126,16 @@ frankenmanager completion powershell >> $PROFILE
 | `SOKETI_DEFAULT_APP_ID` | (auto-generated) | Soketi default app ID |
 | `SOKETI_DEFAULT_APP_KEY` | (auto-generated) | Soketi default app key |
 | `SOKETI_DEFAULT_APP_SECRET` | (auto-generated) | Soketi default app secret |
+| `S3_ENABLED` | `false` | Run the Garage S3 server (see [S3 server (Garage)](#s3-server-garage)) |
+| `S3_DIR` | `./s3` | S3 objects directory (relative to the data directory, or absolute) |
+| `S3_PORT` | `3900` | S3 API port the PHP apps reach (browsers use `https://s3.frankenmanager.test`) |
+| `S3_WEB_PORT` | `3902` | Port of Garage's website endpoint (public buckets) |
+| `S3_ADMIN_PORT` | `3903` | Port of Garage's admin API, always on `127.0.0.1` |
+| `S3_REGION` | `us-east-1` | S3 region |
+| `S3_ACCESS_KEY_ID` | (auto-generated) | Global access key ID (`GK` + 24 hex digits), allowed on every bucket |
+| `S3_SECRET_ACCESS_KEY` | (auto-generated) | Global secret access key (64 hex digits) |
+| `S3_ADMIN_TOKEN` | (auto-generated) | Garage admin API token |
+| `S3_RPC_SECRET` | (auto-generated) | Garage internal RPC secret (64 hex digits) |
 | `WEB_HTTP_PORT` | `80` | Web server HTTP port |
 | `WEB_HTTPS_PORT` | `443` | Web server HTTPS port |
 | `DNS_SERVER` | `false` | Run the LAN DNS server (see [LAN DNS server](#lan-dns-server)) |
@@ -1182,6 +1266,7 @@ frankenphp-cli/
 │   │   ├── phpversions/        PHP versions and port assignments
 │   │   ├── privilege/          Passwordless hosts helper (sudoers)
 │   │   ├── resources/          Data directory and embedded resources
+│   │   ├── s3/                 Garage S3 server (config, admin API, objects)
 │   │   ├── soketi/             Soketi WebSocket server
 │   │   ├── ssl/                Site certificates
 │   │   ├── stack/              Compose helpers shared by the commands
@@ -1216,6 +1301,7 @@ frankenphp-cli/
 | PostgreSQL (optional) | `franken_postgresql` | 5432 | Database, when `DB_ENGINES` includes `postgresql` |
 | Redis (optional) | `franken_redis` | 6379 | Cache, when `REDIS_ENABLED=true` |
 | Soketi (optional) | `franken_soketi` | 6001 | WebSocket server, when `SOKETI_ENABLED=true`, served at `wss://ws.frankenmanager.test` |
+| Garage (optional) | `franken_s3` | 3900, 3902, 3903 | S3 server (API, public buckets, admin API), when `S3_ENABLED=true`, served at `https://s3.frankenmanager.test` |
 | phpMyAdmin | `franken_phpmyadmin` | 8080 | Database UI for MariaDB and MySQL (dev only), also served at `https://localhost` (see [Databases](#databases)) |
 | pgAdmin (optional) | `franken_pgadmin` | 8081 | Database UI for PostgreSQL (dev only), served at `https://localhost` when PostgreSQL is the only engine |
 
