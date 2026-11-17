@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -102,7 +105,8 @@ func (a *app) removeS3Hosts(ctx context.Context, h *hosts.Manager, s *store.Stor
 
 // logS3Endpoints shows where the S3 server answers.
 func (a *app) logS3Endpoints(e *env.Env) {
-	a.log.Info(i18n.Tf("S3 server: https://%s (apps: %s, region %s)", s3.Domain, s3.Endpoint(e), s3.Region(e)))
+	a.log.Info(i18n.Tf("S3 server: https://%s (apps: %s, region %s)", s3.Domain,
+		s3.AppEndpoint(e, e.IsProduction()), s3.Region(e)))
 	a.log.Info(i18n.T("  Credentials and .env settings: frankenmanager s3 info"))
 }
 
@@ -169,18 +173,20 @@ func newS3Cmd(a *app) *cobra.Command {
 
 Turn it on with 'frankenmanager service enable s3'. It is served at
 https://s3.frankenmanager.test (path style) and at
-https://<bucket>.s3.frankenmanager.test (virtual-host style); PHP apps
-reach it at http://127.0.0.1:S3_PORT.
+https://<bucket>.s3.frankenmanager.test (virtual-host style), to the
+browsers and to the PHP apps alike.
 
 Examples:
     frankenmanager s3 info                          # Endpoints, credentials, .env settings
     frankenmanager s3 bucket create media           # Create a bucket
     frankenmanager s3 bucket public media           # Let anyone read its objects
-    frankenmanager s3 key create media --read-only  # An access key for this bucket only`),
+    frankenmanager s3 key create media --read-only  # An access key for this bucket only
+    frankenmanager s3 aws s3 ls s3://media          # Run the AWS CLI
+    frankenmanager s3 garage stats                  # Run Garage's CLI`),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
 	}
-	cmd.AddCommand(newS3InfoCmd(a), newS3BucketCmd(a), newS3KeyCmd(a))
+	cmd.AddCommand(newS3InfoCmd(a), newS3BucketCmd(a), newS3KeyCmd(a), newS3AWSCmd(a), newS3GarageCmd(a))
 	return cmd
 }
 
@@ -213,7 +219,8 @@ func newS3InfoCmd(a *app) *cobra.Command {
 			t.Rows = [][]string{
 				{i18n.T("Endpoint (path style)"), "https://" + s3.Domain},
 				{i18n.T("Endpoint (virtual-host style)"), "https://<bucket>." + s3.Domain},
-				{i18n.T("Endpoint for PHP apps"), s3.Endpoint(e)},
+				{i18n.T("Endpoint for PHP apps"), s3.AppEndpoint(e, e.IsProduction())},
+				{i18n.T("Endpoint without TLS"), s3.Endpoint(e)},
 				{i18n.T("Region"), s3.Region(e)},
 				{i18n.T("Access key ID"), id},
 				{i18n.T("Secret access key"), secret},
@@ -228,7 +235,7 @@ func newS3InfoCmd(a *app) *cobra.Command {
 				"AWS_SECRET_ACCESS_KEY=" + secret,
 				"AWS_DEFAULT_REGION=" + s3.Region(e),
 				"AWS_BUCKET=<bucket>",
-				"AWS_ENDPOINT=" + s3.Endpoint(e),
+				"AWS_ENDPOINT=" + s3.AppEndpoint(e, e.IsProduction()),
 				"AWS_URL=" + s3.PublicURL("<bucket>"),
 				"AWS_USE_PATH_STYLE_ENDPOINT=true",
 			}, "\n")))
@@ -669,6 +676,132 @@ func (a *app) s3DeleteKeys(ctx context.Context, ids []string) (err error) {
 		a.log.Success(i18n.Tf("Access key %s deleted.", id))
 	}
 	return nil
+}
+
+// passthrough reads the arguments of a command without flag parsing:
+// the root options are dropped, and --help, -h or no argument shows its
+// help (help is true).
+func passthrough(args []string) (rest []string, help bool) {
+	_, args = stripRootOptions(args)
+	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
+		return nil, true
+	}
+	if args[0] == "--" {
+		args = args[1:]
+	}
+	return args, len(args) == 0
+}
+
+func newS3AWSCmd(a *app) *cobra.Command {
+	return &cobra.Command{
+		Use:   "aws ARGS...",
+		Short: i18n.T("Run the AWS CLI against the S3 server, with the global key."),
+		Long: i18n.T(`Run the AWS CLI against the S3 server, with the global key.
+
+The CLI runs in a one-off container (amazon/aws-cli, downloaded on first
+use), already set up: endpoint, region, credentials and path style. The
+current directory is its working directory, so that the local paths given
+to 'aws s3 cp' or 'aws s3 sync' resolve; paths outside of it do not.
+
+Examples:
+    frankenmanager s3 aws s3 ls
+    frankenmanager s3 aws s3 ls s3://media --recursive
+    frankenmanager s3 aws s3 cp ./logo.png s3://media/img/logo.png
+    frankenmanager s3 aws s3 sync ./public/uploads s3://media/uploads
+    frankenmanager s3 aws s3api head-object --bucket media --key img/logo.png`),
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			args, help := passthrough(args)
+			if help {
+				return cmd.Help()
+			}
+			return a.s3AWS(cmd.Context(), args)
+		},
+	}
+}
+
+func newS3GarageCmd(a *app) *cobra.Command {
+	return &cobra.Command{
+		Use:   "garage ARGS...",
+		Short: i18n.T("Run Garage's own CLI in the S3 container."),
+		Long: i18n.T(`Run Garage's own CLI in the S3 container, for what the s3 commands do not
+cover: statistics, bucket details and aliases, quotas, repairs...
+
+Examples:
+    frankenmanager s3 garage status
+    frankenmanager s3 garage stats
+    frankenmanager s3 garage bucket info media
+    frankenmanager s3 garage bucket set-quotas media --max-size 1GiB
+    frankenmanager s3 garage help`),
+		DisableFlagParsing: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			args, help := passthrough(args)
+			if help {
+				return cmd.Help()
+			}
+			return a.s3Garage(cmd.Context(), args)
+		},
+	}
+}
+
+// s3Runnable loads the configuration and checks that the S3 server runs.
+func (a *app) s3Runnable(ctx context.Context) (string, *env.Env, error) {
+	dir, err := a.projectDir()
+	if err != nil {
+		return "", nil, err
+	}
+	e, err := a.loadEnv(dir)
+	if err != nil {
+		return "", nil, err
+	}
+	if !s3.Enabled(e) {
+		return "", nil, i18n.NewError("S3 is disabled: run 'frankenmanager service enable s3' to use it.")
+	}
+	if !s3.NewGarage(e).Ready(ctx) {
+		return "", nil, i18n.NewError("The S3 server is not running: start it with 'frankenmanager start'.")
+	}
+	return dir, e, nil
+}
+
+// runDocker runs docker on the terminal, its exit code becoming ours.
+func (a *app) runDocker(ctx context.Context, args []string) error {
+	code, err := a.deps.Interactive(ctx, "docker", args)
+	if err != nil {
+		return err
+	}
+	if code != 0 {
+		return exitError(code)
+	}
+	return nil
+}
+
+func (a *app) s3Garage(ctx context.Context, args []string) error {
+	if _, _, err := a.s3Runnable(ctx); err != nil {
+		return err
+	}
+	return a.runDocker(ctx, s3.GarageExecArgs(args, a.deps.TTY()))
+}
+
+func (a *app) s3AWS(ctx context.Context, args []string) error {
+	dir, e, err := a.s3Runnable(ctx)
+	if err != nil {
+		return err
+	}
+	if e.Get(s3.AccessKeyKey) == "" || e.Get(s3.SecretKeyKey) == "" {
+		return i18n.NewError("No S3 credentials yet: they are generated on the next start.")
+	}
+	config, err := s3.WriteAWSConfig(dir, e)
+	if err != nil {
+		return err
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	if real, err := filepath.EvalSymlinks(cwd); err == nil {
+		cwd = real
+	}
+	return a.runDocker(ctx, s3.AWSRunArgs(config, cwd, containerPath(cwd), execUser(runtime.GOOS, e), args, a.deps.TTY()))
 }
 
 // humanBytes formats a size: 0 B, 1.5 KB, 12.0 MB...
