@@ -158,6 +158,8 @@ frankenmanager setup --status
 | `frankenmanager s3 info` | Show the S3 endpoints, the global credentials and the `.env` settings |
 | `frankenmanager s3 bucket list\|create\|delete\|empty\|public\|private` | Manage the S3 buckets (see [S3 server (Garage)](#s3-server-garage)) |
 | `frankenmanager s3 key list\|create\|show\|delete` | Manage the per-bucket S3 access keys |
+| `frankenmanager s3 aws <args>` | Run the AWS CLI against the S3 server, already set up |
+| `frankenmanager s3 garage <args>` | Run Garage's own CLI in the S3 container |
 | `frankenmanager completion bash\|zsh\|fish\|powershell` | Generate the shell completion script |
 | `frankenmanager trust-ca on \| off \| status [--port <port>]` | Share the local mkcert root CA over the LAN so other devices can trust your `.test` domains (off by default) |
 | `frankenmanager --help` | Show help for all commands |
@@ -685,7 +687,7 @@ frankenmanager s3 info          # Endpoints, global credentials and .env setting
 When the server runs, Garage starts at once (otherwise on the next `start`): the `franken_s3` container runs and:
 
 - the S3 API is served over TLS at `https://s3.frankenmanager.test` (path style, `https://s3.frankenmanager.test/<bucket>/<key>`) and at `https://<bucket>.s3.frankenmanager.test` (virtual-host style), with one mkcert certificate covering both. The hosts entries (and the LAN DNS records, when `DNS_SERVER=true`) of `s3.frankenmanager.test` and of every bucket are added for you;
-- PHP apps reach the API at `http://127.0.0.1:3900` (`S3_PORT`), with no TLS;
+- PHP apps use the same `https://s3.frankenmanager.test`: the PHP containers resolve it and trust the mkcert CA, and the presigned URLs they generate (`temporaryUrl()`) then also work in the browser and on the other devices. The API also answers without TLS at `http://127.0.0.1:3900` (`S3_PORT`), the endpoint to use in production, where the reverse proxy does not serve the S3 host;
 - the objects are stored in `<data directory>/s3` (`S3_DIR`, relative to the data directory or absolute).
 
 **Credentials.** A global access key (`S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`, generated on the first start) is allowed on every bucket and may create new ones. For an app that must only see its own bucket, create a key limited to it:
@@ -728,11 +730,27 @@ AWS_ACCESS_KEY_ID=<S3_ACCESS_KEY_ID or a bucket key>
 AWS_SECRET_ACCESS_KEY=<its secret>
 AWS_DEFAULT_REGION=us-east-1
 AWS_BUCKET=media
-# Server side: PHP -> Garage
-AWS_ENDPOINT=http://127.0.0.1:3900
-# Browser side: Storage::url()
+AWS_ENDPOINT=https://s3.frankenmanager.test
+# Storage::url()
 AWS_URL=https://s3.frankenmanager.test/media
 AWS_USE_PATH_STYLE_ENDPOINT=true
+```
+
+**Content type.** Garage, like AWS, returns the `Content-Type` sent with the upload: an object uploaded without one is served as `application/octet-stream` (downloaded instead of displayed). Laravel guesses it from the file extension; with another client, pass it explicitly (`--content-type`, `ContentType`).
+
+**Command line.** `s3 aws` runs the AWS CLI in a one-off container (`amazon/aws-cli`, downloaded on first use), already set up with the endpoint, the region, the global key and path style. The current directory is its working directory, so local paths must be inside it:
+
+```bash
+frankenmanager s3 aws s3 ls s3://media --recursive
+frankenmanager s3 aws s3 cp ./logo.png s3://media/img/logo.png    # content type guessed from the extension
+frankenmanager s3 aws s3 sync ./public/uploads s3://media/uploads
+```
+
+`s3 garage` runs Garage's own CLI in its container, for what the `s3` commands do not cover (statistics, quotas, aliases, repairs):
+
+```bash
+frankenmanager s3 garage stats
+frankenmanager s3 garage bucket set-quotas media --max-size 1GiB
 ```
 
 `service disable s3` stops the container and removes the reverse proxy route and the hosts entries at once; the objects stay in `S3_DIR`. Changing a port, the region or a credential takes effect on the next `stop`/`start`.
@@ -1003,7 +1021,7 @@ You can override this location with the `FRANKENMANAGER_DATA_DIR` environment va
 │   └── log/                # Access and error logs
 ├── dns/                    # LAN DNS server config and records (when DNS_SERVER=true)
 ├── phpmyadmin/             # Generated phpMyAdmin config (multi-server auto-login)
-├── garage/                 # Generated Garage config (when S3_ENABLED=true)
+├── garage/                 # Generated Garage and AWS CLI configs (when S3_ENABLED=true)
 ├── s3/                     # S3 metadata and objects (S3_DIR, when S3_ENABLED=true)
 ├── php/
 │   ├── php.ini             # PHP configuration

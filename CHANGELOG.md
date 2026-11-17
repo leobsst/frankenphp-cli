@@ -115,7 +115,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Global access key (`S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`, generated on start when empty) allowed on every bucket
   - `s3 bucket list|create|delete|empty|public|private` and `s3 key list|create|show|delete` (keys limited to one bucket, read-write or read-only), `s3 info` for the endpoints and the Laravel `.env` settings
   - Public buckets: every object readable without credentials at its S3 URL (Garage has no per-object visibility, the apps' ACLs are ignored, with a warning)
-  - Reachable by the PHP apps at `127.0.0.1:S3_PORT` (default `3900`), restartable with `restart --s3`
+  - Reached by the PHP apps at `https://s3.frankenmanager.test` too (or `127.0.0.1:S3_PORT`, default `3900`, in production), restartable with `restart --s3`
+  - `s3 aws` runs a preconfigured AWS CLI (current directory as working directory), `s3 garage` runs Garage's own CLI
 - **phpMyAdmin** (franken_phpmyadmin) - Web-based database management UI
 - **CoreDNS** (built in) - Optional LAN DNS server (`service enable dns`), so other devices on the network reach the `.test` domains without editing their hosts file
   - Embedded in FrankenManager and run by its background process rather than a container, so that it sees the real address of each device (behind Docker's VM on macOS and Windows, a container only sees the VM); the `franken_dns` container of earlier releases is removed on `start`, `restart --dns` and `service enable dns`
