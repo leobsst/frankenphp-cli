@@ -12,6 +12,7 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/env"
 	"github.com/leobsst/frankenphp-cli/internal/core/password"
 	"github.com/leobsst/frankenphp-cli/internal/core/phpversions"
+	"github.com/leobsst/frankenphp-cli/internal/core/s3"
 	"github.com/leobsst/frankenphp-cli/internal/core/soketi"
 	"github.com/leobsst/frankenphp-cli/internal/core/stack"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
@@ -20,13 +21,14 @@ import (
 
 // restartTargets are the --<target> options of restart, in the order they
 // are processed.
-var restartTargets = []string{"caddy", "database", "cache", "phpmyadmin", "dns", "soketi"}
+var restartTargets = []string{"caddy", "database", "cache", "phpmyadmin", "dns", "soketi", "s3"}
 
 // restartContainers maps the static targets to their container.
 var restartContainers = map[string]string{
 	"cache":      compose.RedisContainer,
 	"phpmyadmin": compose.PHPMyAdminContainer,
 	"soketi":     soketi.ContainerName,
+	"s3":         s3.ContainerName,
 }
 
 func newRestartCmd(a *app) *cobra.Command {
@@ -47,6 +49,7 @@ Examples:
     frankenmanager restart --cache --pma      # Restart Redis and phpMyAdmin
     frankenmanager restart --dns              # Restart the LAN DNS server
     frankenmanager restart --soketi           # Restart the Soketi WebSocket server
+    frankenmanager restart --s3               # Restart the S3 server
     frankenmanager restart --build            # Rebuild PHP images, then restart`),
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
@@ -73,6 +76,7 @@ Examples:
 	alias("phpmyadmin", "pma", i18n.T("Restart only the phpMyAdmin container (alias: --pma)"))
 	f.BoolVar(selected["dns"], "dns", false, i18n.T("Restart only the LAN DNS server (DNS_SERVER=true)"))
 	alias("soketi", "ws", i18n.T("Restart only the Soketi WebSocket server (SOKETI_ENABLED=true) (alias: --ws)"))
+	f.BoolVar(selected["s3"], "s3", false, i18n.T("Restart only the S3 server (S3_ENABLED=true)"))
 	f.BoolVar(&build, "build", false, i18n.T("Rebuild the PHP images and recreate their containers"))
 	return cmd
 }
@@ -125,6 +129,9 @@ func (a *app) restart(ctx context.Context, forceSSL bool, targets []string, buil
 			return err
 		}
 		domains = append(domains, soketi.Domains(e)...)
+		if s3.Enabled(e) {
+			domains = append(domains, s3.Domain)
+		}
 		a.con.Println()
 		a.log.Info(i18n.T("Generating SSL certificates..."))
 		// <CADDY_DIR>/certs, like the other commands, not CERTS_DIR
@@ -180,7 +187,7 @@ func (a *app) restart(ctx context.Context, forceSSL bool, targets []string, buil
 	if all {
 		d.RestartAll(ctx, docker.Containers{
 			PHPVersions: active, DBEngines: engines, Production: e.IsProduction(),
-			Redis: redis, Websocket: websocket,
+			Redis: redis, Websocket: websocket, S3: s3.Enabled(e),
 		})
 	} else {
 		for _, t := range targets {
@@ -201,6 +208,8 @@ func (a *app) restart(ctx context.Context, forceSSL bool, targets []string, buil
 				a.log.Warning(i18n.T("Redis is disabled: run 'frankenmanager service enable redis' to use it."))
 			case t == "soketi" && !websocket:
 				a.log.Warning(i18n.T("Soketi is disabled: run 'frankenmanager service enable soketi' to use it."))
+			case t == "s3" && !s3.Enabled(e):
+				a.log.Warning(i18n.T("S3 is disabled: run 'frankenmanager service enable s3' to use it."))
 			case t == "dns" && !dnsOn:
 				a.log.Warning(i18n.T("The LAN DNS server is disabled: run 'frankenmanager service enable dns'."))
 			case t == "dns":

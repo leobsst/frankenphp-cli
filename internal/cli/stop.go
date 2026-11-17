@@ -68,6 +68,8 @@ func (a *app) stop(ctx context.Context) (err error) {
 	if found, err := h.HasEntry("127.0.0.1", soketi.Domain); err == nil && found {
 		_, _ = h.RemoveEntry(ctx, "127.0.0.1", soketi.Domain)
 	}
+	// The S3 hosts, also when S3_ENABLED was turned off while running
+	a.removeS3Hosts(ctx, h, s)
 
 	a.con.Println()
 	a.log.Success(i18n.T("Web server stopped!"))

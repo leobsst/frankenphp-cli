@@ -18,6 +18,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/leobsst/frankenphp-cli/internal/core/s3"
 	"github.com/leobsst/frankenphp-cli/internal/core/soketi"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
@@ -289,10 +290,11 @@ type Registry interface {
 	DomainNames() ([]string, error)
 	Aliases() ([]store.Alias, error)
 	Proxies() ([]store.Proxy, error)
+	S3Buckets() ([]string, error)
 }
 
 // Sync writes the Corefile and the records of every domain, alias and
-// proxy (plus the Soketi host), all served by this host's reverse proxy.
+// proxy (plus the Soketi and S3 hosts), all served by this host's reverse proxy.
 // Does nothing when disabled.
 func Sync(dataDir string, c Config, r Registry) error {
 	if !Enabled(c) {
@@ -317,6 +319,11 @@ func Sync(dataDir string, c Config, r Registry) error {
 		domains = append(domains, p.Domain)
 	}
 	domains = append(domains, soketi.Domains(c)...)
+	buckets, err := r.S3Buckets()
+	if err != nil {
+		return err
+	}
+	domains = append(domains, s3.Domains(c, buckets)...)
 
 	ip, err := ResolveIP(c)
 	if err != nil {

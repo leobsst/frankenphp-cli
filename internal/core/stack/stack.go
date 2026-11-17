@@ -8,6 +8,7 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/compose"
 	"github.com/leobsst/frankenphp-cli/internal/core/docker"
 	"github.com/leobsst/frankenphp-cli/internal/core/env"
+	"github.com/leobsst/frankenphp-cli/internal/core/s3"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
 )
 
@@ -34,11 +35,18 @@ func ComposeOptions(e *env.Env, phpVersions []string) compose.Options {
 		DBEngines:   e.DBEngines(),
 		Redis:       e.RedisEnabled(),
 		Websocket:   e.SoketiEnabled(),
+		S3:          e.S3Enabled(),
 	}
 }
 
 // GenerateCompose rewrites the compose file from the configuration.
 func GenerateCompose(dataDir string, e *env.Env, phpVersions []string) error {
+	if e.S3Enabled() {
+		dir := e.ResolveDir(s3.DirKey, s3.DefaultDir, dataDir)
+		if err := s3.WriteConfig(dataDir, dir, e, e.IsProduction()); err != nil {
+			return err
+		}
+	}
 	_, err := compose.Write(dataDir, ComposeOptions(e, phpVersions))
 	return err
 }

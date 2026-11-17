@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/leobsst/frankenphp-cli/internal/command"
+	"github.com/leobsst/frankenphp-cli/internal/core/s3"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
 )
 
@@ -86,13 +87,15 @@ func (m *Manager) InstallCA(ctx context.Context) error {
 	return os.WriteFile(filepath.Join(m.Dir, "rootCA.pem"), data, 0o644)
 }
 
-// generate runs mkcert for domain into <domain>.pem / <domain>-key.pem.
-func (m *Manager) generate(ctx context.Context, mkcert, domain string) (command.Result, error) {
-	return m.Run.Run(ctx, command.Cmd{Name: mkcert, Args: []string{
+// generate runs mkcert for domain into <domain>.pem / <domain>-key.pem,
+// valid for domain and the extra names.
+func (m *Manager) generate(ctx context.Context, mkcert, domain string, extra ...string) (command.Result, error) {
+	args := []string{
 		"-cert-file", filepath.Join(m.Dir, domain+".pem"),
 		"-key-file", filepath.Join(m.Dir, domain+"-key.pem"),
 		domain,
-	}})
+	}
+	return m.Run.Run(ctx, command.Cmd{Name: mkcert, Args: append(args, extra...)})
 }
 
 // GenerateLocalhost (re)generates the localhost certificate.
@@ -110,7 +113,12 @@ func (m *Manager) GenerateLocalhost(ctx context.Context) error {
 
 // GenerateDomain generates the certificate of domain, unless one younger
 // than 30 days exists and force is off. It reports whether it generated.
+// The S3 certificate also covers every bucket host.
 func (m *Manager) GenerateDomain(ctx context.Context, domain string, force bool) (bool, error) {
+	var extra []string
+	if domain == s3.Domain {
+		extra = s3.CertNames[1:]
+	}
 	mkcert, err := m.mkcert()
 	if err != nil {
 		return false, err
@@ -120,7 +128,7 @@ func (m *Manager) GenerateDomain(ctx context.Context, domain string, force bool)
 			return false, nil
 		}
 	}
-	res, err := m.generate(ctx, mkcert, domain)
+	res, err := m.generate(ctx, mkcert, domain, extra...)
 	if err != nil || !res.OK() {
 		return false, &Error{i18n.Tf("Failed to generate certificate for %s: %s", domain, failure(res, err))}
 	}

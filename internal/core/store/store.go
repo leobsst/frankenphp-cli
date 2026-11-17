@@ -66,6 +66,10 @@ type DNSSighting struct {
 // SettingProjectPath stores the projects root given to `start`.
 const SettingProjectPath = "project_path"
 
+// SettingS3Buckets caches the S3 bucket names, one per line, for the
+// hosts entries and DNS records of their virtual-host style hosts.
+const SettingS3Buckets = "s3_buckets"
+
 // SettingEnvMigrated marks a configuration migrated from the .env file.
 const SettingEnvMigrated = "env_migrated"
 
@@ -159,6 +163,20 @@ func (s *Store) Setting(key string) (string, bool, error) {
 		return "", false, nil
 	}
 	return value, err == nil, err
+}
+
+// S3Buckets returns the cached S3 bucket names.
+func (s *Store) S3Buckets() ([]string, error) {
+	v, _, err := s.Setting(SettingS3Buckets)
+	if err != nil || v == "" {
+		return nil, err
+	}
+	return strings.Split(v, "\n"), nil
+}
+
+// SetS3Buckets caches the S3 bucket names.
+func (s *Store) SetS3Buckets(names []string) error {
+	return s.SetSetting(SettingS3Buckets, strings.Join(names, "\n"))
 }
 
 // SetSetting stores a setting, replacing its value.

@@ -3,7 +3,7 @@
 // The YAML is built line by line so that the file stays byte-identical to
 // the one written by earlier releases: 2-space indentation, no name:, no
 // version:, no named volumes. Services come in this order: databases (with
-// pgAdmin after PostgreSQL), phpMyAdmin, Redis, Soketi, the reverse proxy,
+// pgAdmin after PostgreSQL), phpMyAdmin, Redis, Soketi, S3, the reverse proxy,
 // then one FrankenPHP container per PHP version. The LAN DNS server is not
 // a container (see embeddns).
 package compose
@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/leobsst/frankenphp-cli/internal/core/phpversions"
+	"github.com/leobsst/frankenphp-cli/internal/core/s3"
 	"github.com/leobsst/frankenphp-cli/internal/core/soketi"
 )
 
@@ -94,6 +95,7 @@ type Options struct {
 	DBEngines   []string // nil means ["mariadb"]
 	Redis       bool
 	Websocket   bool // Soketi
+	S3          bool // Garage
 }
 
 // Write writes <dataDir>/docker-compose-generated.yml and, in development
@@ -132,6 +134,9 @@ func Build(o Options) string {
 	}
 	if o.Websocket {
 		lines = append(lines, soketi.Service(o.Production)...)
+	}
+	if o.S3 {
+		lines = append(lines, s3.Service(o.Production)...)
 	}
 	lines = append(lines, caddyService(versions, o.Production)...)
 	for _, v := range versions {

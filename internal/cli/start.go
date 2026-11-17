@@ -17,6 +17,7 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/password"
 	"github.com/leobsst/frankenphp-cli/internal/core/phpversions"
 	"github.com/leobsst/frankenphp-cli/internal/core/resources"
+	"github.com/leobsst/frankenphp-cli/internal/core/s3"
 	"github.com/leobsst/frankenphp-cli/internal/core/soketi"
 	"github.com/leobsst/frankenphp-cli/internal/core/stack"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
@@ -188,6 +189,12 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 	if len(generated) > 0 {
 		a.log.Info(i18n.Tf("Soketi %s generated and saved to the configuration", strings.Join(generated, ", ")))
 	}
+	if generated, err = s3.EnsureCredentials(e); err != nil {
+		return err
+	}
+	if len(generated) > 0 {
+		a.log.Info(i18n.Tf("S3 %s generated and saved to the configuration", strings.Join(generated, ", ")))
+	}
 
 	caddyDir := e.ResolveDir("CADDY_DIR", "./caddy", dir)
 	databaseDir := e.ResolveDir("DATABASE_DIR", "./database", dir)
@@ -294,6 +301,10 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 			served = append(served, ws)
 		}
 	}
+	// The bucket hosts get their entries once the S3 server answers
+	if s3.Enabled(e) && !slices.Contains(all, s3.Domain) {
+		served = append(served, s3.Domain)
+	}
 
 	certs, err := a.ssl(filepath.Join(caddyDir, "certs"))
 	if err != nil {
@@ -316,6 +327,7 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 	if err := caddyfile.WriteMain(caddyDir, caddyfile.Main{
 		Domains: merged, Aliases: aliasEntries, Proxies: proxies,
 		DBAdminTarget: e.DBAdminTarget(), WebsocketTarget: soketi.Target(e),
+		S3: s3.ProxyTargets(e),
 	}); err != nil {
 		return fail(err)
 	}
@@ -365,6 +377,12 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 		return fail(err)
 	}
 
+	if s3.Enabled(e) {
+		if err := a.syncS3(ctx, dir, e, s); err != nil {
+			return fail(err)
+		}
+	}
+
 	w, err := a.deps.Watcher(dir)
 	if err != nil {
 		return fail(err)
@@ -387,6 +405,9 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 	}
 	if soketi.Enabled(e) {
 		a.log.Info(i18n.Tf("Soketi WebSocket server: wss://%s (apps: 127.0.0.1:%s)", soketi.Domain, soketi.Port(e)))
+	}
+	if s3.Enabled(e) {
+		a.logS3Endpoints(e)
 	}
 	if listen != "" {
 		ip, err := dns.ResolveIP(e)

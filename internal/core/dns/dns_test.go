@@ -119,6 +119,7 @@ func TestServerAddresses(t *testing.T) {
 type fakeRegistry struct{}
 
 func (fakeRegistry) DomainNames() ([]string, error) { return []string{"b.test", "a.test"}, nil }
+func (fakeRegistry) S3Buckets() ([]string, error)   { return nil, nil }
 func (fakeRegistry) Aliases() ([]store.Alias, error) {
 	return []store.Alias{{Alias: "c.test", Target: "a.test"}}, nil
 }

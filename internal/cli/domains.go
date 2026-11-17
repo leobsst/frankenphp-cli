@@ -17,6 +17,7 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/hosts"
 	"github.com/leobsst/frankenphp-cli/internal/core/phpversions"
 	"github.com/leobsst/frankenphp-cli/internal/core/resources"
+	"github.com/leobsst/frankenphp-cli/internal/core/s3"
 	"github.com/leobsst/frankenphp-cli/internal/core/soketi"
 	"github.com/leobsst/frankenphp-cli/internal/core/stack"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
@@ -99,6 +100,7 @@ func (r *server) writeMain() error {
 	return caddyfile.WriteMain(r.caddyDir, caddyfile.Main{
 		Domains: domains, Aliases: aliases, Proxies: proxies,
 		DBAdminTarget: r.e.DBAdminTarget(), WebsocketTarget: soketi.Target(r.e),
+		S3: s3.ProxyTargets(r.e),
 	})
 }
 

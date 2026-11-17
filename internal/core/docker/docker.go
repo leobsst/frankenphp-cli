@@ -23,6 +23,7 @@ import (
 
 	"github.com/leobsst/frankenphp-cli/internal/core/compose"
 	"github.com/leobsst/frankenphp-cli/internal/core/phpversions"
+	"github.com/leobsst/frankenphp-cli/internal/core/s3"
 	"github.com/leobsst/frankenphp-cli/internal/core/soketi"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
 )
@@ -146,10 +147,11 @@ type Containers struct {
 	Production  bool
 	Redis       bool
 	Websocket   bool
+	S3          bool
 }
 
 // AllContainers returns the container names of the stack: PHP versions
-// (sorted), reverse proxy, Redis, Soketi, databases in DB_ENGINES order,
+// (sorted), reverse proxy, Redis, Soketi, S3, databases in DB_ENGINES order,
 // then phpMyAdmin and pgAdmin (development only) and the DNS server.
 func AllContainers(c Containers) []string {
 	engines := c.DBEngines
@@ -166,6 +168,9 @@ func AllContainers(c Containers) []string {
 	}
 	if c.Websocket {
 		names = append(names, soketi.ContainerName)
+	}
+	if c.S3 {
+		names = append(names, s3.ContainerName)
 	}
 	for _, e := range engines {
 		if name, ok := compose.DBContainers[e]; ok {

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/leobsst/frankenphp-cli/internal/core/phpversions"
+	"github.com/leobsst/frankenphp-cli/internal/core/s3"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
 )
 
@@ -140,6 +141,7 @@ var Services = map[string]string{
 	"dns":    "DNS_SERVER",
 	"redis":  "REDIS_ENABLED",
 	"soketi": "SOKETI_ENABLED",
+	"s3":     s3.EnabledKey,
 }
 
 // LanguageKey is the key of the language of the CLI messages.
@@ -294,6 +296,25 @@ func buildDefinitions() []Definition {
 		{Key: "SOKETI_DEFAULT_APP_KEY", Description: i18n.N("Soketi app key (generated on start when empty)"), Apply: ApplyRecreate},
 		{Key: "SOKETI_DEFAULT_APP_SECRET", Description: i18n.N("Soketi app secret (generated on start when empty)"),
 			Secret: true, Apply: ApplyRecreate},
+
+		{Key: s3.EnabledKey, Description: i18n.N("Run a Garage S3 server at https://s3.frankenmanager.test"),
+			Default: static("false"), Values: booleans, Apply: ApplyLive, Service: "s3"},
+		{Key: s3.DirKey, Description: i18n.N("S3 objects directory (relative to the data directory, or absolute)"),
+			Default: static(s3.DefaultDir), Apply: ApplyRecreate},
+		{Key: s3.PortKey, Description: i18n.N("S3 API port"), Default: static(s3.DefaultPort), Validate: validatePort, Apply: ApplyRecreate},
+		{Key: s3.WebPortKey, Description: i18n.N("S3 port of the public buckets (website endpoint)"),
+			Default: static(s3.DefaultWebPort), Validate: validatePort, Apply: ApplyRecreate},
+		{Key: s3.AdminPortKey, Description: i18n.N("S3 admin API port (always on 127.0.0.1)"),
+			Default: static(s3.DefaultAdminPort), Validate: validatePort, Apply: ApplyRecreate},
+		{Key: s3.RegionKey, Description: i18n.N("S3 region"), Default: static(s3.DefaultRegion), Apply: ApplyRecreate},
+		{Key: s3.AccessKeyKey, Description: i18n.N("Global S3 access key ID, allowed on every bucket (generated on start when empty)"),
+			Validate: s3.ValidateAccessKeyID, Apply: ApplyRecreate},
+		{Key: s3.SecretKeyKey, Description: i18n.N("Global S3 secret access key (generated on start when empty)"),
+			Validate: s3.ValidateHexSecret, Secret: true, Apply: ApplyRecreate},
+		{Key: s3.AdminTokenKey, Description: i18n.N("S3 admin API token (generated on start when empty)"),
+			Secret: true, Apply: ApplyRecreate},
+		{Key: s3.RPCSecretKey, Description: i18n.N("S3 internal RPC secret (generated on start when empty)"),
+			Validate: s3.ValidateHexSecret, Secret: true, Apply: ApplyRecreate},
 
 		{Key: "DNS_SERVER", Description: i18n.N("Run a LAN DNS server resolving every domain to this machine"),
 			Default: static("false"), Values: booleans, Apply: ApplyLive, Service: "dns"},

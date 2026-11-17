@@ -140,6 +140,7 @@ func (a *app) status(ctx context.Context) (err error) {
 		Production: e.IsProduction(),
 		Redis:      e.RedisEnabled(),
 		Websocket:  e.SoketiEnabled(),
+		S3:         e.S3Enabled(),
 	}) {
 		if !strings.HasPrefix(name, "frankenphp-") {
 			row(name)

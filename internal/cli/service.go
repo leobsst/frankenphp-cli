@@ -10,6 +10,7 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/compose"
 	"github.com/leobsst/frankenphp-cli/internal/core/dns"
 	"github.com/leobsst/frankenphp-cli/internal/core/env"
+	"github.com/leobsst/frankenphp-cli/internal/core/s3"
 	"github.com/leobsst/frankenphp-cli/internal/core/soketi"
 	"github.com/leobsst/frankenphp-cli/internal/core/stack"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
@@ -27,15 +28,17 @@ var serviceNames = slices.Sorted(func(yield func(string) bool) {
 
 // composeServices maps a containerized optional service to its compose
 // service. The LAN DNS server is the background process, not a container.
-var composeServices = map[string]string{"redis": "cache", "soketi": "soketi"}
+var composeServices = map[string]string{"redis": "cache", "soketi": "soketi", "s3": s3.ComposeService}
 
 // serviceContainers maps a containerized optional service to its container.
-var serviceContainers = map[string]string{"redis": compose.RedisContainer, "soketi": soketi.ContainerName}
+var serviceContainers = map[string]string{
+	"redis": compose.RedisContainer, "soketi": soketi.ContainerName, "s3": s3.ContainerName,
+}
 
 func newServiceCmd(a *app) *cobra.Command {
 	return &cobra.Command{
 		Use:   "service ACTION [NAME]",
-		Short: i18n.T("Turn an optional service (dns, redis, soketi) on or off, live."),
+		Short: i18n.T("Turn an optional service (dns, redis, s3, soketi) on or off, live."),
 		Long: i18n.Tf(`Turn an optional service on or off, live.
 
 When the server runs, the service is started or stopped at once, without
@@ -46,6 +49,7 @@ NAME:   %s (status: all when omitted).
 
 Examples:
     frankenmanager service enable redis    # Start a Redis server
+    frankenmanager service enable s3       # Start a Garage S3 server
     frankenmanager service disable dns     # Stop the LAN DNS server
     frankenmanager service status          # Show every optional service`, strings.Join(serviceNames, ", ")),
 		Args: func(cmd *cobra.Command, args []string) error {
@@ -175,6 +179,11 @@ func (a *app) applyService(ctx context.Context, dir string, e *env.Env, name str
 			return err
 		}
 	}
+	if name == "s3" && on {
+		if _, err := s3.EnsureCredentials(e); err != nil {
+			return err
+		}
+	}
 	// The compose file and its variables, for the containerized services
 	var vars map[string]string
 	if name != "dns" {
@@ -227,6 +236,31 @@ func (a *app) applyService(ctx context.Context, dir string, e *env.Env, name str
 				return err
 			}
 		}
+	case "s3":
+		h := a.deps.Hosts(a.log)
+		if on {
+			certs, err := a.ssl(e.CertsDir(dir))
+			if err != nil {
+				return err
+			}
+			if err := certs.GenerateAll(ctx, []string{s3.Domain}, false, e.IsProduction()); err != nil {
+				return err
+			}
+			if _, err := h.AddEntry(ctx, "127.0.0.1", s3.Domain); err != nil {
+				return err
+			}
+		} else {
+			a.removeS3Hosts(ctx, h, s)
+		}
+		r := &server{dir: dir, e: e, d: d, s: s, caddyDir: e.ResolveDir("CADDY_DIR", "./caddy", dir)}
+		if err := r.writeMain(); err != nil {
+			return err
+		}
+		if dns.Enabled(e) {
+			if err := dns.Sync(dir, e, s); err != nil {
+				return err
+			}
+		}
 	}
 
 	switch {
@@ -244,8 +278,13 @@ func (a *app) applyService(ctx context.Context, dir string, e *env.Env, name str
 		a.log.Info(i18n.Tf("Stopping %s...", name))
 		d.StopContainer(ctx, serviceContainers[name])
 	}
-	if name == "soketi" {
+	if name == "soketi" || name == "s3" {
 		a.restartProxy(ctx, d)
+	}
+	if name == "s3" && on {
+		if err := a.syncS3(ctx, dir, e, s); err != nil {
+			return err
+		}
 	}
 	if name == "dns" {
 		w, err := a.deps.Watcher(dir)
@@ -275,6 +314,8 @@ func (a *app) applyService(ctx context.Context, dir string, e *env.Env, name str
 		a.log.Info(i18n.Tf("LAN DNS server listening on %s (domains resolve to %s)", listen, ip))
 	case on && name == "soketi":
 		a.log.Info(i18n.Tf("Soketi WebSocket server: wss://%s (apps: 127.0.0.1:%s)", soketi.Domain, soketi.Port(e)))
+	case on && name == "s3":
+		a.logS3Endpoints(e)
 	case on && name == "redis":
 		a.log.Info(i18n.Tf("Redis listening on 127.0.0.1:%s", e.Get("REDIS_PORT")))
 	}

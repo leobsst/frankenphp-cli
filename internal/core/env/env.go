@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/leobsst/frankenphp-cli/internal/core/phpversions"
+	"github.com/leobsst/frankenphp-cli/internal/core/s3"
 	"github.com/leobsst/frankenphp-cli/internal/core/soketi"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
 	"github.com/leobsst/frankenphp-cli/internal/randstr"
@@ -227,6 +228,9 @@ func (e *Env) DNSServerEnabled() bool { return e.Get("DNS_SERVER") == "true" }
 // SoketiEnabled reports whether SOKETI_ENABLED is "true" (trimmed, any case).
 func (e *Env) SoketiEnabled() bool { return soketi.Enabled(e) }
 
+// S3Enabled reports whether S3_ENABLED is "true" (trimmed, any case).
+func (e *Env) S3Enabled() bool { return s3.Enabled(e) }
+
 // ParseDBEngines parses a comma-separated DB_ENGINES value: trimmed,
 // lowercased, unknown engines dropped, order and duplicates kept.
 func ParseDBEngines(s string) []string {
@@ -322,8 +326,13 @@ func (e *Env) ComposeEnvVars(projectDir, customPath string, dbEngines []string) 
 	if err != nil {
 		return nil, err
 	}
+	s3Vars, err := s3.ComposeEnvVars(e, localhost, e.ResolveDir(s3.DirKey, s3.DefaultDir, projectDir))
+	if err != nil {
+		return nil, err
+	}
 	maps.Copy(vars, dbVars)
 	maps.Copy(vars, soketiVars)
+	maps.Copy(vars, s3Vars)
 	return vars, nil
 }
 
