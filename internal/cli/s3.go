@@ -327,8 +327,10 @@ func (a *app) s3ListBuckets(ctx context.Context) (err error) {
 	global := x.e.Get(s3.AccessKeyKey)
 	t := ui.Table{Title: i18n.T("S3 buckets"), Columns: []ui.Column{
 		{Header: i18n.T("Bucket"), Color: ui.Cyan}, {Header: i18n.T("Public")}, {Header: i18n.T("Objects")},
-		{Header: i18n.T("Size")}, {Header: i18n.T("Bucket keys")}, {Header: "URL", Faint: true},
+		{Header: i18n.T("Public objects")}, {Header: i18n.T("Size")}, {Header: i18n.T("Bucket keys")},
+		{Header: "URL", Faint: true},
 	}}
+	objectsDir := x.e.ResolveDir(s3.DirKey, s3.DefaultDir, x.dir)
 	for _, b := range buckets {
 		keys := 0
 		for _, k := range b.Keys {
@@ -336,8 +338,12 @@ func (a *app) s3ListBuckets(ctx context.Context) (err error) {
 				keys++
 			}
 		}
+		public := strconv.Itoa(s3.PublicObjects(objectsDir, b.ID))
+		if b.WebsiteAccess {
+			public = i18n.T("all")
+		}
 		t.Rows = append(t.Rows, []string{b.Name(), yesNo(b.WebsiteAccess), strconv.FormatInt(b.Objects, 10),
-			humanBytes(b.Bytes), strconv.Itoa(keys), s3.PublicURL(b.Name())})
+			public, humanBytes(b.Bytes), strconv.Itoa(keys), s3.PublicURL(b.Name())})
 	}
 	a.con.PrintTable(t)
 	return nil
@@ -414,6 +420,9 @@ func (a *app) s3DeleteBuckets(ctx context.Context, names []string, force bool) (
 			a.log.Info(i18n.Tf("Bucket %s emptied (%d objects deleted).", name, n))
 		}
 		if err := x.g.DeleteBucket(ctx, b.ID); err != nil {
+			return err
+		}
+		if err := s3.DropBucketACL(x.e.ResolveDir(s3.DirKey, s3.DefaultDir, x.dir), b.ID); err != nil {
 			return err
 		}
 		// The keys made by `s3 key create` for this bucket
@@ -495,8 +504,8 @@ func (a *app) s3SetPublic(ctx context.Context, names []string, public bool) (err
 // warnPublic explains what a public bucket exposes.
 func (a *app) warnPublic() {
 	a.log.Warning(i18n.T("Every object of a public bucket can be read and downloaded by anyone reaching " +
-		"this server, without credentials: Garage has no per-object visibility, so the visibility " +
-		"set by the apps (ACL public-read or private) is ignored."))
+		"this server, without credentials, even the ones stored as private. To make only some objects " +
+		"public, keep the bucket private and store them with the public-read ACL (visibility 'public')."))
 }
 
 func newS3KeyCmd(a *app) *cobra.Command {

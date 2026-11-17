@@ -5,8 +5,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 )
 
@@ -158,5 +161,64 @@ func TestEnsureGlobalKeyImportsAndAllowsEveryBucket(t *testing.T) {
 	}
 	if len(f.posted["ImportKey"]) != 0 {
 		t.Error("known key imported again")
+	}
+}
+
+// Garage's S3 API must stay behind the ACL gateway: reached directly, it
+// would skip the ACL recording.
+func TestOnlyTheGatewayServesTheS3Port(t *testing.T) {
+	dev := strings.Join(Service(false), "\n")
+	garage, gateway, _ := strings.Cut(dev, "  "+GatewayService+":")
+	if strings.Contains(garage, "S3_PUBLISH") || strings.Contains(garage, ":"+DefaultPort+"}") {
+		t.Errorf("Garage publishes its S3 API:\n%s", garage)
+	}
+	if !strings.Contains(gateway, "${S3_PUBLISH:-127.0.0.1:3900:3900}") {
+		t.Errorf("the gateway does not publish S3_PORT:\n%s", gateway)
+	}
+
+	c := mapGetter{GaragePortKey: "3999", WebPortKey: "3998", PortKey: "3900"}
+	prod := GarageConfig(c, true)
+	for _, want := range []string{`api_bind_addr = "127.0.0.1:3999"`, `bind_addr = "127.0.0.1:3998"`} {
+		if !strings.Contains(prod, want) {
+			t.Errorf("production garage.toml lacks %s:\n%s", want, prod)
+		}
+	}
+}
+
+type mapGetter map[string]string
+
+func (m mapGetter) Get(key string) string { return m[key] }
+
+func TestWriteGatewayContext(t *testing.T) {
+	sources := fstest.MapFS{
+		gatewayDockerfile:              {Data: []byte("FROM scratch\n")},
+		"cmd/s3gateway/main.go":        {Data: []byte("package main\n")},
+		"cmd/s3gateway/main_test.go":   {Data: []byte("package main\n")},
+		"internal/sigv4/sigv4.go":      {Data: []byte("package sigv4\n")},
+		"internal/sigv4/sigv4_test.go": {Data: []byte("package sigv4\n")},
+	}
+	data := t.TempDir()
+	dir, hash, err := WriteGatewayContext(sources, data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"Dockerfile", "go.mod", "cmd/s3gateway/main.go", "internal/sigv4/sigv4.go"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+			t.Error(err)
+		}
+	}
+	for _, name := range []string{"cmd/s3gateway/main_test.go", gatewayDockerfile} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
+			t.Errorf("%s is in the build context", name)
+		}
+	}
+
+	// Same sources, same image; changed sources, rebuilt
+	if _, again, _ := WriteGatewayContext(sources, data); again != hash {
+		t.Error("hash changed without source change")
+	}
+	sources["cmd/s3gateway/main.go"] = &fstest.MapFile{Data: []byte("package main // v2\n")}
+	if _, changed, _ := WriteGatewayContext(sources, data); changed == hash {
+		t.Error("hash unchanged after a source change")
 	}
 }

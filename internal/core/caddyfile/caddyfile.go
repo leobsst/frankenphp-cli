@@ -344,9 +344,9 @@ type Main struct {
 	// WebsocketTarget is the Soketi upstream of ws.frankenmanager.test, ""
 	// when disabled (see soketi.Target).
 	WebsocketTarget string
-	// S3 are the upstreams of s3.frankenmanager.test and its bucket hosts,
-	// zero when disabled (see s3.ProxyTargets).
-	S3 s3.Targets
+	// S3Target is the ACL gateway, upstream of s3.frankenmanager.test and
+	// its bucket hosts, "" when disabled (see s3.ProxyTarget).
+	S3Target string
 }
 
 // WriteMain rewrites <caddyDir>/Caddyfile: domains, aliases, proxies, then
@@ -398,8 +398,8 @@ func WriteMain(caddyDir string, m Main) error {
 		lines = append(lines, rawProxyBlock(soketi.Domain, m.WebsocketTarget)...)
 	}
 	s3Cert := filepath.Join(caddyDir, "certs", s3.Domain+".pem")
-	if m.S3.API != "" && !registered[s3.Domain] && exists(s3Cert) {
-		lines = append(lines, s3Block(m.S3)...)
+	if m.S3Target != "" && !registered[s3.Domain] && exists(s3Cert) {
+		lines = append(lines, s3Block(m.S3Target)...)
 	}
 
 	content := strings.Join(lines, "\n") + "\n"
@@ -407,49 +407,16 @@ func WriteMain(caddyDir string, m Main) error {
 }
 
 // s3Block serves the S3 API at s3.frankenmanager.test (path style) and
-// <bucket>.s3.frankenmanager.test (virtual-host style). The anonymous reads
-// of an object (GET or HEAD, neither Authorization header nor presigned
-// query) go to the website endpoint, which finds the bucket from the
-// <bucket>.s3.frankenmanager.test host (its root domain), so that the
-// objects of a public bucket keep their S3 URL. The private buckets answer
-// 404 there.
-func s3Block(t s3.Targets) []string {
+// <bucket>.s3.frankenmanager.test (virtual-host style) through the ACL
+// gateway, which also answers the anonymous reads of the public objects.
+func s3Block(target string) []string {
 	domain := s3.Domain
-	anonymous := []string{
-		"\t\tmethod GET HEAD",
-		"\t\theader !Authorization",
-		"\t\tnot query X-Amz-Signature=*",
-	}
-	lines := []string{
+	return []string{
 		domain + ", *." + domain + " {",
 		"\ttls /certs/" + domain + ".pem /certs/" + domain + "-key.pem",
-		"\t@public_host {",
-		"\t\thost *." + domain,
-	}
-	lines = append(lines, anonymous...)
-	lines = append(lines,
-		"\t}",
-		"\t@public_path {",
-		"\t\thost "+domain,
-		"\t\tpath_regexp object ^/([a-z0-9][a-z0-9-]*[a-z0-9])/(.+)$",
-	)
-	lines = append(lines, anonymous...)
-	lines = append(lines,
-		"\t}",
-		"\thandle @public_host {",
-		"\t\treverse_proxy "+t.Web,
-		"\t}",
-		"\thandle @public_path {",
-		"\t\trewrite * /{re.object.2}",
-		"\t\treverse_proxy "+t.Web+" {",
-		"\t\t\theader_up Host {re.object.1}."+domain,
-		"\t\t}",
-		"\t}",
-		"\thandle {",
-		"\t\treverse_proxy "+t.API,
-		"\t}",
+		"\treverse_proxy " + target,
 		"\tlog {",
-		"\t\toutput file /var/log/caddy/"+SimpleDomain(domain)+"_access.log {",
+		"\t\toutput file /var/log/caddy/" + SimpleDomain(domain) + "_access.log {",
 		"\t\t\troll_size 10mb",
 		"\t\t\troll_keep 5",
 		"\t\t\troll_keep_for 720h",
@@ -458,8 +425,7 @@ func s3Block(t s3.Targets) []string {
 		"\t}",
 		"}",
 		"",
-	)
-	return lines
+	}
 }
 
 // proxyBlock forwards domain to the container of phpVersion over HTTP,

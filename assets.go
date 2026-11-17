@@ -16,6 +16,12 @@ import "embed"
 //go:embed php/php.ini php/php-prod.ini
 var FS embed.FS
 
+// GatewayFS holds the sources of the S3 ACL gateway and its Dockerfile,
+// from which the gateway image is built (see s3.WriteGatewayContext).
+//
+//go:embed docker/s3-gateway.Dockerfile cmd/s3gateway internal/sigv4
+var GatewayFS embed.FS
+
 // Files lists every embedded resource, in a fixed order.
 var Files = []string{
 	"docker-compose.yml",

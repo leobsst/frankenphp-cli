@@ -5,11 +5,13 @@ import (
 	"context"
 	"slices"
 
+	assets "github.com/leobsst/frankenphp-cli"
 	"github.com/leobsst/frankenphp-cli/internal/core/compose"
 	"github.com/leobsst/frankenphp-cli/internal/core/docker"
 	"github.com/leobsst/frankenphp-cli/internal/core/env"
 	"github.com/leobsst/frankenphp-cli/internal/core/s3"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
+	"github.com/leobsst/frankenphp-cli/internal/i18n"
 )
 
 // ProjectPath returns the projects root the server was started with,
@@ -62,7 +64,29 @@ func ComposeUp(ctx context.Context, d *docker.Manager, e *env.Env, phpVersions [
 	if err != nil {
 		return err
 	}
+	if e.S3Enabled() {
+		if err := BuildS3Gateway(ctx, d); err != nil {
+			return err
+		}
+	}
 	return d.ComposeUp(ctx, vars)
+}
+
+// BuildS3Gateway writes the build context of the S3 ACL gateway and builds
+// its image when its sources changed.
+func BuildS3Gateway(ctx context.Context, d *docker.Manager) error {
+	dir, hash, err := s3.WriteGatewayContext(assets.GatewayFS, d.Dir)
+	if err != nil {
+		return err
+	}
+	if d.IsImageCurrent(ctx, s3.GatewayImage, hash) {
+		return nil
+	}
+	if d.Log != nil {
+		d.Log.Info(i18n.T("Building the S3 ACL gateway image..."))
+	}
+	_, err = d.BuildLocalImage(ctx, s3.GatewayImage, hash, dir)
+	return err
 }
 
 // BuildImage builds the image of a PHP version with the configured build

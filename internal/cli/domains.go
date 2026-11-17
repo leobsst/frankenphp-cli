@@ -100,7 +100,7 @@ func (r *server) writeMain() error {
 	return caddyfile.WriteMain(r.caddyDir, caddyfile.Main{
 		Domains: domains, Aliases: aliases, Proxies: proxies,
 		DBAdminTarget: r.e.DBAdminTarget(), WebsocketTarget: soketi.Target(r.e),
-		S3: s3.ProxyTargets(r.e),
+		S3Target: s3.ProxyTarget(r.e),
 	})
 }
 

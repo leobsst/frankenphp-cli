@@ -327,7 +327,7 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 	if err := caddyfile.WriteMain(caddyDir, caddyfile.Main{
 		Domains: merged, Aliases: aliasEntries, Proxies: proxies,
 		DBAdminTarget: e.DBAdminTarget(), WebsocketTarget: soketi.Target(e),
-		S3: s3.ProxyTargets(e),
+		S3Target: s3.ProxyTarget(e),
 	}); err != nil {
 		return fail(err)
 	}

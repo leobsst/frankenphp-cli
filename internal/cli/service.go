@@ -27,12 +27,15 @@ var serviceNames = slices.Sorted(func(yield func(string) bool) {
 })
 
 // composeServices maps a containerized optional service to its compose
-// service. The LAN DNS server is the background process, not a container.
-var composeServices = map[string]string{"redis": "cache", "soketi": "soketi", "s3": s3.ComposeService}
+// services. The LAN DNS server is the background process, not a container.
+var composeServices = map[string][]string{
+	"redis": {"cache"}, "soketi": {"soketi"}, "s3": {s3.ComposeService, s3.GatewayService},
+}
 
-// serviceContainers maps a containerized optional service to its container.
-var serviceContainers = map[string]string{
-	"redis": compose.RedisContainer, "soketi": soketi.ContainerName, "s3": s3.ContainerName,
+// serviceContainers maps a containerized optional service to its
+// containers, in stop order.
+var serviceContainers = map[string][]string{
+	"redis": {compose.RedisContainer}, "soketi": {soketi.ContainerName}, "s3": {s3.GatewayContainer, s3.ContainerName},
 }
 
 func newServiceCmd(a *app) *cobra.Command {
@@ -139,9 +142,12 @@ func (a *app) serviceStatus(ctx context.Context, only string) error {
 			continue
 		}
 		key := env.Services[name]
-		state := statuses.Get(serviceContainers[name]).State
+		var state string
 		if name == "dns" {
 			state = a.dnsProcessState(dir)
+		} else {
+			// The front container: the S3 gateway is unhealthy without Garage
+			state = statuses.Get(serviceContainers[name][0]).State
 		}
 		t.Rows = append(t.Rows, []string{name, yesNo(e.Get(key) == "true"), state, key})
 	}
@@ -271,12 +277,19 @@ func (a *app) applyService(ctx context.Context, dir string, e *env.Env, name str
 		a.log.Info(i18n.Tf("Stopping %s...", name))
 	case on:
 		a.log.Info(i18n.Tf("Starting %s...", name))
-		if err := d.ComposeUp(ctx, vars, composeServices[name]); err != nil {
+		if name == "s3" {
+			if err := stack.BuildS3Gateway(ctx, d); err != nil {
+				return err
+			}
+		}
+		if err := d.ComposeUp(ctx, vars, composeServices[name]...); err != nil {
 			return err
 		}
 	default:
 		a.log.Info(i18n.Tf("Stopping %s...", name))
-		d.StopContainer(ctx, serviceContainers[name])
+		for _, c := range serviceContainers[name] {
+			d.StopContainer(ctx, c)
+		}
 	}
 	if name == "soketi" || name == "s3" {
 		a.restartProxy(ctx, d)

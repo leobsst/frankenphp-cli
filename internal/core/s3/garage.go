@@ -359,12 +359,12 @@ func (g *Garage) EnsureGlobalKey(ctx context.Context, id, secret string) error {
 	return nil
 }
 
-// WriteConfig writes <dataDir>/garage/garage.toml and creates the metadata
-// and data directories under dir, so that they belong to the user the
-// container runs as.
+// WriteConfig writes <dataDir>/garage/garage.toml and creates the metadata,
+// data and ACL directories under dir, so that they belong to the user the
+// containers run as.
 func WriteConfig(dataDir, dir string, c Getter, production bool) error {
 	for _, d := range []string{filepath.Join(dataDir, filepath.Dir(ConfigPath)),
-		filepath.Join(dir, "meta"), filepath.Join(dir, "data")} {
+		filepath.Join(dir, "meta"), filepath.Join(dir, "data"), filepath.Join(dir, aclDir)} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			return err
 		}

@@ -170,7 +170,7 @@ func AllContainers(c Containers) []string {
 		names = append(names, soketi.ContainerName)
 	}
 	if c.S3 {
-		names = append(names, s3.ContainerName)
+		names = append(names, s3.ContainerName, s3.GatewayContainer)
 	}
 	for _, e := range engines {
 		if name, ok := compose.DBContainers[e]; ok {
@@ -373,6 +373,22 @@ func (m *Manager) BuildImage(ctx context.Context, b Build) (bool, error) {
 	}
 	if err != nil {
 		return false, &Error{i18n.Tf("Failed to build image for PHP %s: %v", b.PHPVersion, err)}
+	}
+	return true, nil
+}
+
+// BuildLocalImage builds image from contextDir, labeled with hash, unless
+// an image with that label exists. It reports whether it built.
+func (m *Manager) BuildLocalImage(ctx context.Context, image, hash, contextDir string) (bool, error) {
+	if m.IsImageCurrent(ctx, image, hash) {
+		return false, nil
+	}
+	res, err := m.run(ctx, "build", "--quiet", "--rm", "--tag", image, "--label", BuildHashLabel+"="+hash, contextDir)
+	if err == nil && res.ExitCode != 0 {
+		err = errors.New(strings.TrimSpace(string(res.Stderr)))
+	}
+	if err != nil {
+		return false, &Error{i18n.Tf("Failed to build image %s: %v", image, err)}
 	}
 	return true, nil
 }

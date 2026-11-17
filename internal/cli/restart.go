@@ -28,7 +28,6 @@ var restartContainers = map[string]string{
 	"cache":      compose.RedisContainer,
 	"phpmyadmin": compose.PHPMyAdminContainer,
 	"soketi":     soketi.ContainerName,
-	"s3":         s3.ContainerName,
 }
 
 func newRestartCmd(a *app) *cobra.Command {
@@ -210,6 +209,10 @@ func (a *app) restart(ctx context.Context, forceSSL bool, targets []string, buil
 				a.log.Warning(i18n.T("Soketi is disabled: run 'frankenmanager service enable soketi' to use it."))
 			case t == "s3" && !s3.Enabled(e):
 				a.log.Warning(i18n.T("S3 is disabled: run 'frankenmanager service enable s3' to use it."))
+			case t == "s3":
+				// Garage, then the ACL gateway in front of it
+				d.RestartContainer(ctx, s3.ContainerName)
+				d.RestartContainer(ctx, s3.GatewayContainer)
 			case t == "dns" && !dnsOn:
 				a.log.Warning(i18n.T("The LAN DNS server is disabled: run 'frankenmanager service enable dns'."))
 			case t == "dns":
