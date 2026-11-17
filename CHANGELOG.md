@@ -114,7 +114,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Objects stored in `<data directory>/s3` by default, configurable with `S3_DIR`
   - Global access key (`S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`, generated on start when empty) allowed on every bucket
   - `s3 bucket list|create|delete|empty|public|private` and `s3 key list|create|show|delete` (keys limited to one bucket, read-write or read-only), `s3 info` for the endpoints and the Laravel `.env` settings
-  - Public buckets: every object readable without credentials at its S3 URL (Garage has no per-object visibility, the apps' ACLs are ignored, with a warning)
+  - Per-object ACLs as on AWS: the `franken_s3_gateway` container (built locally, standard library only) serves the S3 API in front of Garage, records the `public-read` objects of the private buckets (`x-amz-acl`, `PutObjectAcl`) and answers their anonymous reads; `GetObjectAcl`/`PutObjectAcl` answered with the signature and the key permission checked
+  - Public buckets: every object readable without credentials at its S3 URL (website endpoint, through the gateway)
   - Reached by the PHP apps at `https://s3.frankenmanager.test` too (or `127.0.0.1:S3_PORT`, default `3900`, in production), restartable with `restart --s3`
   - `s3 aws` runs a preconfigured AWS CLI (current directory as working directory), `s3 garage` runs Garage's own CLI
 - **phpMyAdmin** (franken_phpmyadmin) - Web-based database management UI
