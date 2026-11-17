@@ -3,19 +3,17 @@ package s3
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
 	"crypto/md5" //nolint:gosec // Content-MD5 is required by DeleteObjects
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/xml"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"sort"
 	"strings"
 	"time"
+
+	"github.com/leobsst/frankenphp-cli/internal/sigv4"
 )
 
 // Objects talks to the S3 API with SigV4-signed requests, path style. Only
@@ -138,8 +136,8 @@ func (o *Objects) abortUploads(ctx context.Context, bucket string) error {
 // do sends a signed request to /<path> and decodes the XML answer into
 // out (nil to ignore it).
 func (o *Objects) do(ctx context.Context, method, path string, query url.Values, body []byte, out any) error {
-	uri := "/" + encodePath(path)
-	rawQuery := canonicalQuery(query)
+	uri := "/" + sigv4.EncodePath(path)
+	rawQuery := sigv4.CanonicalQuery(query)
 	u := o.Endpoint + uri
 	if rawQuery != "" {
 		u += "?" + rawQuery
@@ -179,85 +177,6 @@ func (o *Objects) do(ctx context.Context, method, path string, query url.Values,
 
 // sign adds the AWS Signature Version 4 headers to req.
 func (o *Objects) sign(req *http.Request, uri, rawQuery string, body []byte) {
-	now := o.Now().UTC()
-	amzDate, day := now.Format("20060102T150405Z"), now.Format("20060102")
-	payload := sha256Hex(body)
-	req.Header.Set("X-Amz-Date", amzDate)
-	req.Header.Set("X-Amz-Content-Sha256", payload)
-
-	names := []string{"host", "x-amz-content-sha256", "x-amz-date"}
-	values := map[string]string{"host": req.URL.Host, "x-amz-content-sha256": payload, "x-amz-date": amzDate}
-	if v := req.Header.Get("Content-MD5"); v != "" {
-		names = append(names, "content-md5")
-		values["content-md5"] = v
-	}
-	sort.Strings(names)
-	var headers strings.Builder
-	for _, n := range names {
-		headers.WriteString(n + ":" + values[n] + "\n")
-	}
-	signed := strings.Join(names, ";")
-
-	canonical := strings.Join([]string{req.Method, uri, rawQuery, headers.String(), signed, payload}, "\n")
-	scope := day + "/" + o.Region + "/s3/aws4_request"
-	toSign := strings.Join([]string{"AWS4-HMAC-SHA256", amzDate, scope, sha256Hex([]byte(canonical))}, "\n")
-
-	key := hmacSHA256([]byte("AWS4"+o.SecretKey), day)
-	for _, part := range []string{o.Region, "s3", "aws4_request"} {
-		key = hmacSHA256(key, part)
-	}
-	signature := hex.EncodeToString(hmacSHA256(key, toSign))
-	req.Header.Set("Authorization", fmt.Sprintf("AWS4-HMAC-SHA256 Credential=%s/%s, SignedHeaders=%s, Signature=%s",
-		o.AccessKey, scope, signed, signature))
-}
-
-func sha256Hex(b []byte) string {
-	sum := sha256.Sum256(b)
-	return hex.EncodeToString(sum[:])
-}
-
-func hmacSHA256(key []byte, data string) []byte {
-	h := hmac.New(sha256.New, key)
-	h.Write([]byte(data))
-	return h.Sum(nil)
-}
-
-// encodePath URI-encodes each segment of a path the SigV4 way.
-func encodePath(p string) string {
-	segments := strings.Split(p, "/")
-	for i, s := range segments {
-		segments[i] = uriEncode(s)
-	}
-	return strings.Join(segments, "/")
-}
-
-// canonicalQuery is the query sorted by key, encoded the SigV4 way.
-func canonicalQuery(q url.Values) string {
-	keys := make([]string, 0, len(q))
-	for k := range q {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	var parts []string
-	for _, k := range keys {
-		for _, v := range q[k] {
-			parts = append(parts, uriEncode(k)+"="+uriEncode(v))
-		}
-	}
-	return strings.Join(parts, "&")
-}
-
-// uriEncode encodes every byte but the unreserved characters A-Z a-z 0-9
-// - _ . ~ (RFC 3986), as SigV4 requires.
-func uriEncode(s string) string {
-	var b strings.Builder
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if 'A' <= c && c <= 'Z' || 'a' <= c && c <= 'z' || '0' <= c && c <= '9' || strings.IndexByte("-_.~", c) >= 0 {
-			b.WriteByte(c)
-		} else {
-			fmt.Fprintf(&b, "%%%02X", c)
-		}
-	}
-	return b.String()
+	c := sigv4.Credentials{AccessKey: o.AccessKey, SecretKey: o.SecretKey, Region: o.Region}
+	sigv4.Sign(req, c, uri, rawQuery, sigv4.SHA256Hex(body), o.Now())
 }
