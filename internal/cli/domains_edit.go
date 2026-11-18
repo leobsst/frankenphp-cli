@@ -67,8 +67,8 @@ Examples:
 	}
 }
 
-// removeHost removes domains, aliases and proxy hosts, archiving the site
-// files of the domains.
+// removeHost removes domains, aliases, proxy and static hosts, archiving
+// the site files of the domains and static hosts.
 func (a *app) removeHost(ctx context.Context, names []string) (err error) {
 	r, err := a.openRunning(ctx, i18n.T("The server is not running."))
 	if err != nil {
@@ -100,8 +100,12 @@ func (a *app) removeHost(ctx context.Context, names []string) (err error) {
 	for _, p := range proxyList {
 		isProxy[p.Domain] = true
 	}
+	staticList, err := r.s.StaticHostNames()
+	if err != nil {
+		return err
+	}
 
-	var domains, aliases, proxies []string
+	var domains, aliases, proxies, statics []string
 	pick := func(list *[]string, name string) {
 		if slices.Contains(*list, name) {
 			a.log.Info(i18n.Tf("Domain '%s' is duplicated in input, skipping.", name))
@@ -117,11 +121,13 @@ func (a *app) removeHost(ctx context.Context, names []string) (err error) {
 			pick(&aliases, name)
 		case isProxy[name]:
 			pick(&proxies, name)
+		case slices.Contains(staticList, name):
+			pick(&statics, name)
 		default:
 			a.log.Warning(i18n.Tf("Domain '%s' is not configured, skipping.", name))
 		}
 	}
-	if len(domains)+len(aliases)+len(proxies) == 0 {
+	if len(domains)+len(aliases)+len(proxies)+len(statics) == 0 {
 		a.log.Info(i18n.T("No domains to remove."))
 		return nil
 	}
@@ -146,8 +152,8 @@ func (a *app) removeHost(ctx context.Context, names []string) (err error) {
 
 	var removedAliases []string
 	err = func() error {
-		a.log.Info(i18n.Tf("Removing %d domain(s), %d alternate host(s), and %d proxy host(s)...",
-			len(domains), len(aliases), len(proxies)))
+		a.log.Info(i18n.Tf("Removing %d domain(s), %d alternate host(s), %d proxy host(s), and %d static host(s)...",
+			len(domains), len(aliases), len(proxies), len(statics)))
 		a.log.Info(i18n.T("Removing hosts entries..."))
 		for _, d := range domains {
 			removeEntry(d)
@@ -182,6 +188,18 @@ func (a *app) removeHost(ctx context.Context, names []string) (err error) {
 		}
 		for _, p := range proxies {
 			removeEntry(p)
+		}
+		if len(statics) > 0 {
+			a.log.Info(i18n.T("Archiving Caddyfiles..."))
+			if err := g.ArchiveStatic(statics); err != nil {
+				return err
+			}
+		}
+		if err := r.s.RemoveStaticHosts(statics); err != nil {
+			return err
+		}
+		for _, st := range statics {
+			removeEntry(st)
 		}
 
 		after, err := r.s.ActivePHPVersions()
@@ -239,6 +257,13 @@ func (a *app) removeHost(ctx context.Context, names []string) (err error) {
 		for _, p := range proxies {
 			a.log.Info("  - " + p)
 		}
+	}
+	if len(statics) > 0 {
+		a.log.Info(i18n.T("Removed static hosts:"))
+		for _, st := range statics {
+			a.log.Info("  - " + st)
+		}
+		a.log.Info(i18n.Tf("\nCaddyfiles archived to: %s", g.StaticArchiveDir()))
 	}
 	return nil
 }
@@ -336,6 +361,11 @@ func (a *app) restoreHost(ctx context.Context, names []string, forceSSL bool, ph
 	if err != nil {
 		return err
 	}
+	statics, err := r.s.StaticHostNames()
+	if err != nil {
+		return err
+	}
+	existing = append(existing, statics...)
 	// The names are compared without their TLD: app.test is active when
 	// app.dev is registered
 	short := func(d string) string {

@@ -285,3 +285,77 @@ func TestExtractDomain(t *testing.T) {
 		t.Errorf("missing file: %q", got)
 	}
 }
+
+// A static host's site file is imported by the main Caddyfile, unless it
+// is missing: Caddy would refuse to start.
+func TestStaticSitesImportedByMain(t *testing.T) {
+	dataDir, caddyDir := newCaddyDir(t)
+	g := New(caddyDir, dataDir, &memLog{})
+	if HasStaticSites(caddyDir) {
+		t.Error("static sites before any")
+	}
+	site := store.StaticHost{Domain: "site.test", Root: "site"}
+	if err := g.GenerateStatic([]store.StaticHost{site}); err != nil {
+		t.Fatal(err)
+	}
+	if !HasStaticSites(caddyDir) {
+		t.Error("static site not found")
+	}
+	err := WriteMain(caddyDir, Main{Statics: []store.StaticHost{site, {Domain: "gone.test", Root: "gone"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := read(t, filepath.Join(caddyDir, MainName))
+	if !strings.Contains(got, "import "+StaticMount+"/site_Caddyfile\n") || strings.Contains(got, "gone") {
+		t.Errorf("main Caddyfile:\n%s", got)
+	}
+	if err := g.ArchiveStatic([]string{"site.test"}); err != nil {
+		t.Fatal(err)
+	}
+	if HasStaticSites(caddyDir) || !exists(filepath.Join(g.StaticArchiveDir(), "site_Caddyfile")) {
+		t.Error("static site not archived")
+	}
+}
+
+// A static site keeps its TLS line (the reverse proxy serves it) and has
+// the SPA fallback only with --spa.
+func TestStaticSite(t *testing.T) {
+	spa := staticSite(store.StaticHost{Domain: "front.test", Root: "front/dist", SPA: true})
+	for _, line := range []string{
+		"front.test {\n", "\ttls /certs/front.test.pem /certs/front.test-key.pem\n",
+		"\troot * /{$CUSTOM_PATH}/front/dist/\n", "\ttry_files {path} /index.html\n\tfile_server\n}\n",
+	} {
+		if !strings.Contains(spa, line) {
+			t.Errorf("missing %q in:\n%s", line, spa)
+		}
+	}
+	plain := staticSite(store.StaticHost{Domain: "site.test", Root: "."})
+	if !strings.Contains(plain, "\troot * /{$CUSTOM_PATH}/\n") || !strings.Contains(plain, "\t# try_files") ||
+		strings.Contains(plain, "\ttry_files") {
+		t.Errorf("plain site:\n%s", plain)
+	}
+}
+
+// --root replaces the template's root in a new PHP site file only.
+func TestGenerateForVersionRoot(t *testing.T) {
+	dataDir, caddyDir := newCaddyDir(t)
+	log := &memLog{}
+	g := New(caddyDir, dataDir, log)
+	if err := g.GenerateForVersionRoot([]string{"api.test"}, "8.4", "mono/apps/api/public"); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(caddyDir, "sites", "php-8.4", "api_Caddyfile")
+	got := read(t, path)
+	if !strings.Contains(got, "\troot * /{$CUSTOM_PATH}/mono/apps/api/public/\n") || strings.Contains(got, "api/public/\n\troot") {
+		t.Errorf("site file:\n%s", got)
+	}
+	if want := golden(t, "site"); strings.Count(got, "\n") != strings.Count(want, "\n") {
+		t.Error("more than the root line changed")
+	}
+	if err := g.GenerateForVersionRoot([]string{"api.test"}, "8.4", "other"); err != nil {
+		t.Fatal(err)
+	}
+	if read(t, path) != got || !strings.HasPrefix(log.lines[len(log.lines)-2], "warning: ") {
+		t.Errorf("existing site file changed or no warning: %v", log.lines)
+	}
+}

@@ -232,8 +232,12 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 		}
 	}
 
-	// The project path is only needed by PHP containers
-	if len(merged) > 0 {
+	statics, err := s.StaticHosts()
+	if err != nil {
+		return err
+	}
+	// The project path is only needed by PHP containers and static hosts
+	if len(merged) > 0 || len(statics) > 0 {
 		if customPath == "" {
 			a.log.Error(i18n.T("No project path specified and DEFAULT_PROJECT_PATH is not set " +
 				"(frankenmanager configuration set DEFAULT_PROJECT_PATH <path>)"))
@@ -296,6 +300,9 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 	for _, p := range proxies {
 		served = append(served, p.Domain)
 	}
+	for _, st := range statics {
+		served = append(served, st.Domain)
+	}
 	for _, ws := range soketi.Domains(e) {
 		if !slices.Contains(all, ws) {
 			served = append(served, ws)
@@ -324,8 +331,11 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 	if err := g.GenerateAllForVersions(merged); err != nil {
 		return fail(err)
 	}
+	if err := g.GenerateStatic(statics); err != nil {
+		return fail(err)
+	}
 	if err := caddyfile.WriteMain(caddyDir, caddyfile.Main{
-		Domains: merged, Aliases: aliasEntries, Proxies: proxies,
+		Domains: merged, Aliases: aliasEntries, Proxies: proxies, Statics: statics,
 		DBAdminTarget: e.DBAdminTarget(), WebsocketTarget: soketi.Target(e),
 		S3Target: s3.ProxyTarget(e),
 	}); err != nil {
@@ -402,6 +412,13 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 			}
 		}
 		a.log.Info(fmt.Sprintf("  PHP %s: %s", v, strings.Join(vd, ", ")))
+	}
+	if len(statics) > 0 {
+		var names []string
+		for _, st := range statics {
+			names = append(names, st.Domain)
+		}
+		a.log.Info(i18n.Tf("  Static: %s", strings.Join(names, ", ")))
 	}
 	if soketi.Enabled(e) {
 		a.log.Info(i18n.Tf("Soketi WebSocket server: wss://%s (apps: 127.0.0.1:%s)", soketi.Domain, soketi.Port(e)))

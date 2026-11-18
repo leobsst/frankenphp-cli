@@ -65,7 +65,7 @@ func TestProjectPath(t *testing.T) {
 
 func TestComposeOptionsFromEnv(t *testing.T) {
 	e := newEnv("APP_ENV=production\nDB_ENGINES=postgresql\nREDIS_ENABLED=true\nSOKETI_ENABLED=true\n")
-	got := ComposeOptions(e, []string{"8.4"})
+	got := ComposeOptions(e, []string{"8.4"}, false)
 	want := compose.Options{PHPVersions: []string{"8.4"}, Production: true, DBEngines: []string{"postgresql"},
 		Redis: true, Websocket: true}
 	if !slices.Equal(got.DBEngines, want.DBEngines) || got.Production != want.Production ||

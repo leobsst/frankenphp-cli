@@ -60,6 +60,11 @@ func (a *app) stop(ctx context.Context) (err error) {
 	for _, p := range proxies {
 		names = append(names, p.Domain)
 	}
+	statics, err := s.StaticHostNames()
+	if err != nil {
+		return err
+	}
+	names = append(names, statics...)
 	h := a.deps.Hosts(a.log)
 	for _, name := range names {
 		_, _ = h.RemoveEntry(ctx, "127.0.0.1", name) // errors ignored

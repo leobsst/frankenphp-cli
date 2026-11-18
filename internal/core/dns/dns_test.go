@@ -126,6 +126,7 @@ func (fakeRegistry) Aliases() ([]store.Alias, error) {
 func (fakeRegistry) Proxies() ([]store.Proxy, error) {
 	return []store.Proxy{{Domain: "api.test", Target: "127.0.0.1:8000"}}, nil
 }
+func (fakeRegistry) StaticHostNames() ([]string, error) { return []string{"site.test"}, nil }
 
 func TestSync(t *testing.T) {
 	fakeNetwork(t, "192.168.1.20", nil)
@@ -147,7 +148,7 @@ func TestSync(t *testing.T) {
 	if string(core) != Corefile(Server{Records: records, ListenIP: DefaultListenIP, Port: "53", Upstream: "8.8.8.8"}) {
 		t.Errorf("Corefile:\n%s", core)
 	}
-	want := Records("192.168.1.20", []string{"a.test", "b.test", "c.test", "api.test", "ws.frankenmanager.test"})
+	want := Records("192.168.1.20", []string{"a.test", "b.test", "c.test", "api.test", "site.test", "ws.frankenmanager.test"})
 	if string(hosts) != want {
 		t.Errorf("hosts:\n%s", hosts)
 	}

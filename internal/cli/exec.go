@@ -92,6 +92,11 @@ func resolvePHPVersion(s *store.Store, domain string) (string, error) {
 	} else if ok {
 		return "", &validate.Error{Msg: i18n.Tf("'%s' is a proxy host: it has no PHP version.", domain)}
 	}
+	if statics, err := s.StaticHostNames(); err != nil {
+		return "", err
+	} else if slices.Contains(statics, domain) {
+		return "", &validate.Error{Msg: i18n.Tf("'%s' is a static host: it has no PHP version.", domain)}
+	}
 	return "", &validate.Error{Msg: i18n.Tf("Domain '%s' is not configured.", domain)}
 }
 

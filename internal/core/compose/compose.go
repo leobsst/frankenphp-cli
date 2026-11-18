@@ -96,6 +96,9 @@ type Options struct {
 	Redis       bool
 	Websocket   bool // Soketi
 	S3          bool // Garage
+	// StaticSites makes the reverse proxy serve the static hosts: it
+	// mounts their site files and, read-only, the projects root
+	StaticSites bool
 }
 
 // Write writes <dataDir>/docker-compose-generated.yml and, in development
@@ -138,7 +141,7 @@ func Build(o Options) string {
 	if o.S3 {
 		lines = append(lines, s3.Service(o.Production)...)
 	}
-	lines = append(lines, caddyService(versions, o.Production)...)
+	lines = append(lines, caddyService(versions, o.Production, o.StaticSites)...)
 	for _, v := range versions {
 		lines = append(lines, phpService(v, o)...)
 	}
@@ -352,7 +355,7 @@ func serviceName(version string) string {
 
 // caddyService is the reverse proxy, on the host network in every mode so
 // that PHP apps reach the other domains through /etc/hosts.
-func caddyService(versions []string, production bool) []string {
+func caddyService(versions []string, production, staticSites bool) []string {
 	caddy := dir("CADDY_DIR", "caddy", production)
 	lines := []string{
 		"  caddy-proxy:",
@@ -360,12 +363,24 @@ func caddyService(versions []string, production bool) []string {
 		"    image: caddy:2-alpine",
 		"    restart: always",
 		"    network_mode: host",
+	}
+	if staticSites {
+		// The static site files read their root from {$CUSTOM_PATH}
+		lines = append(lines, "    environment:", "      CUSTOM_PATH: ${CUSTOM_PATH}")
+	}
+	lines = append(lines,
 		"    volumes:",
-		"      - " + caddy + "/Caddyfile:/etc/caddy/Caddyfile",
-		"      - " + caddy + "/certs:/certs",
-		"      - " + caddy + "/data:/data",
-		"      - " + caddy + "/config:/config",
-		"      - " + caddy + "/log:/var/log",
+		"      - "+caddy+"/Caddyfile:/etc/caddy/Caddyfile",
+		"      - "+caddy+"/certs:/certs",
+		"      - "+caddy+"/data:/data",
+		"      - "+caddy+"/config:/config",
+		"      - "+caddy+"/log:/var/log",
+	)
+	if staticSites {
+		lines = append(lines,
+			"      - "+caddy+"/sites/static:/etc/caddy/sites/static:ro",
+			"      - ${CUSTOM_PATH}:/${CUSTOM_PATH}:ro",
+		)
 	}
 	if production {
 		lines = append(lines, "      - /etc/letsencrypt:/etc/letsencrypt")

@@ -3,6 +3,7 @@ package compose
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -66,5 +67,25 @@ func TestWritePHPMyAdminConfigInDevelopmentOnly(t *testing.T) {
 				t.Errorf("phpMyAdmin config = %q", pma)
 			}
 		})
+	}
+}
+
+// The reverse proxy mounts the static sites and the projects root only
+// when there are static hosts.
+func TestCaddyServiceStaticSites(t *testing.T) {
+	mounts := []string{
+		"      CUSTOM_PATH: ${CUSTOM_PATH}\n",
+		"      - ${CADDY_DIR:-./caddy}/sites/static:/etc/caddy/sites/static:ro\n",
+		"      - ${CUSTOM_PATH}:/${CUSTOM_PATH}:ro\n",
+	}
+	with := Build(Options{StaticSites: true})
+	without := Build(Options{})
+	for _, m := range mounts {
+		if !strings.Contains(with, m) {
+			t.Errorf("missing %q in:\n%s", m, with)
+		}
+		if strings.Contains(without, m) {
+			t.Errorf("unexpected %q without static sites", m)
+		}
 	}
 }

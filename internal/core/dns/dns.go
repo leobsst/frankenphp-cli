@@ -290,11 +290,12 @@ type Registry interface {
 	DomainNames() ([]string, error)
 	Aliases() ([]store.Alias, error)
 	Proxies() ([]store.Proxy, error)
+	StaticHostNames() ([]string, error)
 	S3Buckets() ([]string, error)
 }
 
-// Sync writes the Corefile and the records of every domain, alias and
-// proxy (plus the Soketi and S3 hosts), all served by this host's reverse proxy.
+// Sync writes the Corefile and the records of every domain, alias, proxy
+// and static host (plus the Soketi and S3 hosts), all served by this host's reverse proxy.
 // Does nothing when disabled.
 func Sync(dataDir string, c Config, r Registry) error {
 	if !Enabled(c) {
@@ -318,6 +319,11 @@ func Sync(dataDir string, c Config, r Registry) error {
 	for _, p := range proxies {
 		domains = append(domains, p.Domain)
 	}
+	statics, err := r.StaticHostNames()
+	if err != nil {
+		return err
+	}
+	domains = append(domains, statics...)
 	domains = append(domains, soketi.Domains(c)...)
 	buckets, err := r.S3Buckets()
 	if err != nil {

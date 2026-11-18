@@ -17,7 +17,7 @@ func newListCmd(a *app) *cobra.Command {
 	}
 }
 
-// list prints the domains, aliases and proxies.
+// list prints the domains, aliases, proxies and static hosts.
 func (a *app) list() (err error) {
 	dir, err := a.projectDir()
 	if err != nil {
@@ -40,9 +40,13 @@ func (a *app) list() (err error) {
 	if err != nil {
 		return err
 	}
+	statics, err := s.StaticHosts()
+	if err != nil {
+		return err
+	}
 
 	c := a.con
-	if len(domains) == 0 && len(aliases) == 0 && len(proxies) == 0 {
+	if len(domains) == 0 && len(aliases) == 0 && len(proxies) == 0 && len(statics) == 0 {
 		c.Println("\n" + i18n.T("No domains registered."))
 		c.Println(i18n.T("Use 'frankenmanager start \"myapp.test\"' to add domains.") + "\n")
 		return nil
@@ -79,6 +83,15 @@ func (a *app) list() (err error) {
 			t.Rows = append(t.Rows, []string{p.Domain, p.Target})
 		}
 		section(t, i18n.Tf("%d proxy host(s) registered", len(proxies)))
+	}
+	if len(statics) > 0 {
+		t := ui.Table{Title: i18n.T("Static Hosts"), Columns: []ui.Column{
+			{Header: i18n.T("Domain"), Color: ui.Cyan}, {Header: i18n.T("Root"), Color: ui.Magenta}, {Header: "SPA", Faint: true},
+		}}
+		for _, st := range statics {
+			t.Rows = append(t.Rows, []string{st.Domain, st.Root, yesNo(st.SPA)})
+		}
+		section(t, i18n.Tf("%d static host(s) registered", len(statics)))
 	}
 	c.Println()
 	return nil

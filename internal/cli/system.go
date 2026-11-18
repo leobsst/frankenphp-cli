@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/leobsst/frankenphp-cli/internal/command"
+	"github.com/leobsst/frankenphp-cli/internal/core/caddyfile"
 	"github.com/leobsst/frankenphp-cli/internal/core/caserver"
 	"github.com/leobsst/frankenphp-cli/internal/core/privilege"
 	"github.com/leobsst/frankenphp-cli/internal/core/resources"
@@ -450,7 +451,8 @@ func (a *app) reset(ctx context.Context, db, caddyfiles bool) (err error) {
 		c.Println(c.Dim(i18n.T("Note: This does NOT affect your MariaDB database data")))
 	}
 	if caddyfiles {
-		c.Println("\n", c.Dim(i18n.Tf("Caddyfiles reset will delete all files in: %s", filepath.Join(sites, "php-*"))))
+		c.Println("\n", c.Dim(i18n.Tf("Caddyfiles reset will delete all files in: %s",
+			filepath.Join(sites, "php-*")+", "+filepath.Join(sites, caddyfile.StaticDirName))))
 	}
 	c.Println("\n", c.Bold(c.Color(ui.Red, i18n.T("This action cannot be undone!"))), "\n")
 
@@ -481,6 +483,11 @@ func (a *app) reset(ctx context.Context, db, caddyfiles bool) (err error) {
 			if err != nil {
 				return err
 			}
+			static, err := filepath.Glob(filepath.Join(sites, caddyfile.StaticDirName, "*_Caddyfile"))
+			if err != nil {
+				return err
+			}
+			files = append(files, static...)
 			for _, f := range files {
 				if err := os.Remove(f); err != nil {
 					return err

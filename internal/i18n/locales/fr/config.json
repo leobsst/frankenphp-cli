@@ -117,5 +117,6 @@
   "open %s: %w": "ouverture de %s : %w",
   "Invalid domain name: %s": "Nom de domaine invalide : %s",
   "Invalid proxy target: %s": "Cible de proxy invalide : %s",
-  "Directory does not exist: %s": "Le répertoire n'existe pas : %s"
+  "Directory does not exist: %s": "Le répertoire n'existe pas : %s",
+  "Invalid root: %s (a path relative to the project path, without '..')": "Racine invalide : %s (un chemin relatif au chemin des projets, sans « .. »)"
 }

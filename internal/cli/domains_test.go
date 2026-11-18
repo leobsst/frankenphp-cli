@@ -298,3 +298,111 @@ func TestSwitchPHPRollback(t *testing.T) {
 		t.Errorf("not rolled back: %q", v)
 	}
 }
+
+func TestUsageErrorsOfStaticOptions(t *testing.T) {
+	e := newEnv(t)
+	for args, want := range map[string]string{
+		"add-host a.test --spa":                     "Error: Option '--spa' requires '--static'.",
+		"add-host a.test 127.0.0.1:3000 --static":   "Error: Option '--static' cannot be used with a target.",
+		"add-host a.test 127.0.0.1:3000 --root dir": "Error: Option '--root' cannot be used with a target.",
+	} {
+		code, _, errOut := e.run(strings.Fields(args)...)
+		if code != ExitUsage || !strings.Contains(errOut, want) {
+			t.Errorf("%s: code %d, %q", args, code, errOut)
+		}
+	}
+}
+
+// The first static host recreates the reverse proxy with the static mounts,
+// the next ones only restart it; remove-host archives the site file.
+func TestAddAndRemoveStaticHost(t *testing.T) {
+	e := startedEnv(t)
+	if err := os.MkdirAll(filepath.Join(e.projects(), "front", "dist"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	code, out, _ := e.run("add-host", "front.test", "--static", "--root", "front/dist/", "--spa")
+	if code != 0 {
+		t.Fatalf("code %d, out:\n%s", code, out)
+	}
+	mustContain(t, out, "-- Adding 1 new static host(s)...\n",
+		"--   - https://front.test -> "+filepath.Join(e.projects(), "front", "dist")+", SPA\n")
+	if !slices.Contains(e.dockerLines(), "up -d --remove-orphans") {
+		t.Errorf("reverse proxy not recreated: %v", e.dockerLines())
+	}
+	site := filepath.Join(e.dir, "caddy", "sites", "static", "front_Caddyfile")
+	mustContain(t, readFile(t, site), "\troot * /{$CUSTOM_PATH}/front/dist/\n", "\ttry_files {path} /index.html\n")
+	main := filepath.Join(e.dir, "caddy", "Caddyfile")
+	mustContain(t, readFile(t, main), "import /etc/caddy/sites/static/front_Caddyfile\n")
+	mustContain(t, readFile(t, filepath.Join(e.dir, "docker-compose-generated.yml")),
+		"      CUSTOM_PATH: ${CUSTOM_PATH}\n", "      - ${CUSTOM_PATH}:/${CUSTOM_PATH}:ro\n")
+	if !strings.Contains(readFile(t, e.hostsFile), "127.0.0.1\tfront.test\n") {
+		t.Error("hosts entry missing")
+	}
+	if got, _ := e.store().StaticHosts(); !slices.Equal(got, []store.StaticHost{{Domain: "front.test", Root: "front/dist", SPA: true}}) {
+		t.Errorf("static hosts = %v", got)
+	}
+
+	// Default root, already mounted: the reverse proxy is only restarted
+	e.docker.calls = nil
+	code, out, _ = e.run("add-host", "site.test", "--static")
+	if code != 0 {
+		t.Fatalf("code %d, out:\n%s", code, out)
+	}
+	mustContain(t, out, "WARNING: Directory "+filepath.Join(e.projects(), "site")+" does not exist yet")
+	if !slices.Equal(e.dockerLines()[1:], []string{"restart franken-caddy-proxy"}) {
+		t.Errorf("docker: %v", e.dockerLines())
+	}
+	mustContain(t, readFile(t, filepath.Join(e.dir, "caddy", "sites", "static", "site_Caddyfile")),
+		"\troot * /{$CUSTOM_PATH}/site/\n", "\t# try_files {path} /index.html\n")
+
+	if code, out, _ := e.run("remove-host", "front.test"); code != 0 {
+		t.Fatalf("code %d, out:\n%s", code, out)
+	}
+	if exists(site) || !exists(filepath.Join(e.dir, "caddy", "sites", "archive", "static", "front_Caddyfile")) {
+		t.Error("site file not archived")
+	}
+	if strings.Contains(readFile(t, main), "front_Caddyfile") || strings.Contains(readFile(t, e.hostsFile), "front.test") {
+		t.Error("front.test still served")
+	}
+}
+
+// A --root must name an existing project: only its first directory is
+// checked, the build output may come later.
+func TestAddHostRootChecksProjectDirectory(t *testing.T) {
+	e := startedEnv(t)
+	for _, args := range [][]string{
+		{"add-host", "api.test", "--root", "monorepo/apps/api/public"},
+		{"add-host", "front.test", "--static", "--root", "front/dist"},
+	} {
+		code, out, _ := e.run(args...)
+		project, _, _ := strings.Cut(args[len(args)-1], "/")
+		if code != 1 || !strings.Contains(out, "Project directory does not exist: "+filepath.Join(e.projects(), project)) {
+			t.Errorf("%v: code %d, out:\n%s", args, code, out)
+		}
+	}
+	if code, out, _ := e.run("add-host", "a.test", "--root", "../outside"); code != 1 || !strings.Contains(out, "Invalid root: ../outside") {
+		t.Errorf("code %d, out:\n%s", code, out)
+	}
+
+	if err := os.MkdirAll(filepath.Join(e.projects(), "monorepo"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if code, out, _ := e.run("add-host", "api.test", "--root", "monorepo/apps/api/public", "--php", "8.4"); code != 0 {
+		t.Fatalf("code %d, out:\n%s", code, out)
+	}
+	mustContain(t, readFile(t, e.site("8.4", "api")), "\troot * /{$CUSTOM_PATH}/monorepo/apps/api/public/\n")
+}
+
+// A static host has no PHP version and no alternate host.
+func TestStaticHostIsNotPHP(t *testing.T) {
+	e := startedEnv(t)
+	if err := e.store().AddStaticHosts([]store.StaticHost{{Domain: "site.test", Root: "site"}}); err != nil {
+		t.Fatal(err)
+	}
+	if code, out, _ := e.run("add-alias", "site.test", "alt.test"); code != 1 || !strings.Contains(out, "'site.test' is a static host") {
+		t.Errorf("add-alias: code %d, out:\n%s", code, out)
+	}
+	if code, out, _ := e.run("add-host", "site.test"); code != 0 || !strings.Contains(out, "Domain 'site.test' is already configured, skipping.") {
+		t.Errorf("add-host: code %d, out:\n%s", code, out)
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	assets "github.com/leobsst/frankenphp-cli"
+	"github.com/leobsst/frankenphp-cli/internal/core/caddyfile"
 	"github.com/leobsst/frankenphp-cli/internal/core/compose"
 	"github.com/leobsst/frankenphp-cli/internal/core/docker"
 	"github.com/leobsst/frankenphp-cli/internal/core/env"
@@ -29,9 +30,10 @@ func ProjectPath(e *env.Env, s *store.Store) (string, error) {
 }
 
 // ComposeOptions returns what the compose file describes, from the
-// configuration.
-func ComposeOptions(e *env.Env, phpVersions []string) compose.Options {
+// configuration. staticSites mounts the static hosts in the reverse proxy.
+func ComposeOptions(e *env.Env, phpVersions []string, staticSites bool) compose.Options {
 	return compose.Options{
+		StaticSites: staticSites,
 		PHPVersions: phpVersions,
 		Production:  e.IsProduction(),
 		DBEngines:   e.DBEngines(),
@@ -41,7 +43,8 @@ func ComposeOptions(e *env.Env, phpVersions []string) compose.Options {
 	}
 }
 
-// GenerateCompose rewrites the compose file from the configuration.
+// GenerateCompose rewrites the compose file from the configuration. The
+// static hosts are mounted when their site files exist.
 func GenerateCompose(dataDir string, e *env.Env, phpVersions []string) error {
 	if e.S3Enabled() {
 		dir := e.ResolveDir(s3.DirKey, s3.DefaultDir, dataDir)
@@ -49,7 +52,8 @@ func GenerateCompose(dataDir string, e *env.Env, phpVersions []string) error {
 			return err
 		}
 	}
-	_, err := compose.Write(dataDir, ComposeOptions(e, phpVersions))
+	static := caddyfile.HasStaticSites(e.ResolveDir("CADDY_DIR", "./caddy", dataDir))
+	_, err := compose.Write(dataDir, ComposeOptions(e, phpVersions, static))
 	return err
 }
 

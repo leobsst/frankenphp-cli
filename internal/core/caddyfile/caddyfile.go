@@ -3,8 +3,12 @@
 //   - one site Caddyfile per domain, in caddy/sites/php-<v>/, served over
 //     plain HTTP by the FrankenPHP container of that version. Created only
 //     when missing: the user may edit it;
+//   - one site Caddyfile per static host, in caddy/sites/static/, served
+//     over HTTPS by the reverse proxy itself (no PHP container). Created
+//     only when missing too;
 //   - the main caddy/Caddyfile, rewritten every time, where the reverse
-//     proxy terminates TLS for every host and forwards to the containers.
+//     proxy terminates TLS for every host, forwards to the containers and
+//     imports the static sites.
 package caddyfile
 
 import (
@@ -28,6 +32,12 @@ const (
 	TemplateName = "Caddyfile.template"
 	// MainName is the reverse proxy Caddyfile, in the Caddy directory.
 	MainName = "Caddyfile"
+
+	// StaticDirName is the directory of the static site files, in
+	// <caddyDir>/sites/ and in the reverse proxy container.
+	StaticDirName = "static"
+	// StaticMount is where the reverse proxy sees the static site files.
+	StaticMount = "/etc/caddy/sites/" + StaticDirName
 
 	suffix   = "_Caddyfile"
 	fileMode = 0o644
@@ -117,6 +127,13 @@ func (g *Generator) GenerateAllForVersions(domains []store.Domain) error {
 // GenerateForVersion creates the missing site files of domains in
 // sites/php-<phpVersion>/, built from the template.
 func (g *Generator) GenerateForVersion(domains []string, phpVersion string) error {
+	return g.GenerateForVersionRoot(domains, phpVersion, "")
+}
+
+// GenerateForVersionRoot is GenerateForVersion with the root of the new
+// site files set to root, relative to the projects root ("" keeps the
+// template's). An existing site file is kept as is, root included.
+func (g *Generator) GenerateForVersionRoot(domains []string, phpVersion, root string) error {
 	versionDir := g.versionDir(phpVersion)
 	if err := os.MkdirAll(versionDir, dirMode); err != nil {
 		return err
@@ -126,12 +143,18 @@ func (g *Generator) GenerateForVersion(domains []string, phpVersion string) erro
 		simple := SimpleDomain(domain)
 		path := filepath.Join(versionDir, simple+suffix)
 		if exists(path) {
+			if root != "" {
+				g.Log.Warning(i18n.Tf("%s already exists: its root is kept, --root is ignored.", path))
+			}
 			continue
 		}
 		g.Log.Info(i18n.Tf("Creating %s%s (PHP %s)...", simple, suffix, phpVersion))
 		content, err := g.buildWorkerSite(domain, simple)
 		if err != nil {
 			return err
+		}
+		if root != "" {
+			content = withRoot(content, root)
 		}
 		if err := os.WriteFile(path, []byte(content), fileMode); err != nil {
 			return err
@@ -182,6 +205,19 @@ func fallbackSite(domain, simple string) string {
 		"\t}",
 		"}",
 	}, "\n") + "\n"
+}
+
+// rootDirective matches the root line of a site file.
+var rootDirective = regexp.MustCompile(`(?m)^(\s*root \* )\S+`)
+
+// withRoot sets the first root directive of a site file to root, relative
+// to the projects root.
+func withRoot(content, root string) string {
+	loc := rootDirective.FindStringSubmatchIndex(content)
+	if loc == nil {
+		return content
+	}
+	return content[:loc[3]] + RootPath(root) + content[loc[1]:]
 }
 
 // toHTTP serves a site over plain HTTP: "http://" before the first site
@@ -333,11 +369,128 @@ func exists(p string) bool {
 	return err == nil
 }
 
+// StaticDir is the directory of the static site files.
+func (g *Generator) StaticDir() string { return filepath.Join(g.SitesDir, StaticDirName) }
+
+// StaticArchiveDir is where removed static hosts' site files are kept,
+// apart from the PHP ones that restore-host brings back.
+func (g *Generator) StaticArchiveDir() string { return filepath.Join(g.ArchiveDir(), StaticDirName) }
+
+// GenerateStatic creates the missing site files of static hosts in
+// sites/static/.
+func (g *Generator) GenerateStatic(hosts []store.StaticHost) error {
+	if len(hosts) == 0 {
+		return nil
+	}
+	if err := os.MkdirAll(g.StaticDir(), dirMode); err != nil {
+		return err
+	}
+	for _, h := range hosts {
+		path := filepath.Join(g.StaticDir(), fileName(h.Domain))
+		if exists(path) {
+			continue
+		}
+		g.Log.Info(i18n.Tf("Creating %s (static)...", fileName(h.Domain)))
+		if err := os.WriteFile(path, []byte(staticSite(h)), fileMode); err != nil {
+			return err
+		}
+	}
+	g.Log.Success(i18n.T("Caddyfile configurations generated"))
+	return nil
+}
+
+// ArchiveStatic moves the site files of static hosts to
+// sites/archive/static/, replacing older archives.
+func (g *Generator) ArchiveStatic(domains []string) error {
+	if err := os.MkdirAll(g.StaticArchiveDir(), dirMode); err != nil {
+		return err
+	}
+	for _, domain := range domains {
+		name := fileName(domain)
+		src := filepath.Join(g.StaticDir(), name)
+		if !exists(src) {
+			g.Log.Warning(i18n.Tf("Caddyfile for %s not found, skipping archive", domain))
+			continue
+		}
+		if err := replace(src, filepath.Join(g.StaticArchiveDir(), name)); err != nil {
+			return err
+		}
+		g.Log.Info(i18n.Tf("Archived %s", name))
+	}
+	return nil
+}
+
+// RootPath is the container path of a site root: the projects
+// root (CUSTOM_PATH, mounted at the same path) joined with root.
+func RootPath(root string) string {
+	root = strings.Trim(filepath.ToSlash(root), "/")
+	if root == "" || root == "." {
+		return "/{$CUSTOM_PATH}/"
+	}
+	return "/{$CUSTOM_PATH}/" + root + "/"
+}
+
+// staticSite is the site file of a static host, served over HTTPS by the
+// reverse proxy. A non-SPA site keeps the fallback commented out.
+func staticSite(h store.StaticHost) string {
+	simple := SimpleDomain(h.Domain)
+	lines := []string{
+		h.Domain + " {",
+		"\ttls /certs/" + h.Domain + ".pem /certs/" + h.Domain + "-key.pem",
+		"",
+		"\troot * " + RootPath(h.Root),
+		"",
+		"\tencode br gzip",
+		"",
+		"\tlog {",
+		"\t\toutput file /var/log/caddy/" + simple + "_access.log {",
+		"\t\t\troll_size 10mb",
+		"\t\t\troll_keep 5",
+		"\t\t\troll_keep_for 720h",
+		"\t\t}",
+		"\t\tformat console",
+		"\t}",
+		"",
+		"\theader {",
+		"\t\tX-Frame-Options \"SAMEORIGIN\"",
+		"\t\tReferrer-Policy \"no-referrer\"",
+		"\t\t-Server",
+		"\t}",
+		"",
+	}
+	if h.SPA {
+		lines = append(lines,
+			"\t# The entry page is never cached: it references the built assets",
+			"\t@html path / /index.html",
+			"\theader @html Cache-Control \"no-cache\"",
+			"",
+			"\t# Single-page app: unknown paths fall back to /index.html",
+			"\ttry_files {path} /index.html",
+		)
+	} else {
+		lines = append(lines,
+			"\t# Single-page app: uncomment to fall back to /index.html",
+			"\t# try_files {path} /index.html",
+		)
+	}
+	return strings.Join(append(lines, "\tfile_server", "}"), "\n") + "\n"
+}
+
+// HasStaticSites reports whether caddyDir holds static site files: the
+// reverse proxy then mounts them and the projects root.
+func HasStaticSites(caddyDir string) bool {
+	files, _ := filepath.Glob(filepath.Join(caddyDir, "sites", StaticDirName, "*"+suffix))
+	return len(files) > 0
+}
+
 // Main is what the main Caddyfile serves.
 type Main struct {
 	Domains []store.Domain     // served by their PHP container
 	Aliases []store.AliasEntry // served by their target's container or upstream
 	Proxies []store.Proxy      // forwarded to a raw upstream
+	// Statics are imported from their site file, skipped when it is
+	// missing: Caddy would refuse to start
+	Statics []store.StaticHost
 	// DBAdminTarget is the database admin UI https://localhost forwards
 	// to, "" for none (see env.DBAdminTarget).
 	DBAdminTarget string
@@ -349,7 +502,8 @@ type Main struct {
 	S3Target string
 }
 
-// WriteMain rewrites <caddyDir>/Caddyfile: domains, aliases, proxies, then
+// WriteMain rewrites <caddyDir>/Caddyfile: domains, aliases, proxies, static
+// hosts, then
 // localhost and ws.frankenmanager.test unless already registered. The
 // WebSocket block also waits for its certificate, so that Caddy never loads
 // a block whose certificate is missing (Soketi turned on while running).
@@ -387,6 +541,15 @@ func WriteMain(caddyDir string, m Main) error {
 	for _, p := range m.Proxies {
 		lines = append(lines, rawProxyBlock(p.Domain, p.Target)...)
 		registered[p.Domain] = true
+	}
+
+	for _, h := range m.Statics {
+		name := fileName(h.Domain)
+		if registered[h.Domain] || !exists(filepath.Join(caddyDir, "sites", StaticDirName, name)) {
+			continue
+		}
+		lines = append(lines, "import "+StaticMount+"/"+name, "")
+		registered[h.Domain] = true
 	}
 
 	if m.DBAdminTarget != "" && !registered["localhost"] {

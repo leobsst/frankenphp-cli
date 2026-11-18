@@ -46,6 +46,14 @@ type Proxy struct {
 	Target string
 }
 
+// StaticHost is a domain whose files the reverse proxy serves itself, with
+// no PHP container: an HTML site or a built single-page app.
+type StaticHost struct {
+	Domain string
+	Root   string // relative to the projects root
+	SPA    bool   // unknown paths fall back to /index.html
+}
+
 // DNSClient is a device that queried the LAN DNS server.
 type DNSClient struct {
 	IP         string    `json:"ip"`
@@ -96,6 +104,14 @@ var schema = []string{
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		domain TEXT NOT NULL UNIQUE,
 		target TEXT NOT NULL,
+		added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	)`,
+	// Unknown to earlier releases, which leave it alone
+	`CREATE TABLE IF NOT EXISTS static_hosts (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		domain TEXT NOT NULL UNIQUE,
+		root TEXT NOT NULL,
+		spa INTEGER NOT NULL DEFAULT 0,
 		added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	)`,
 	// The devices of the LAN DNS server, times in Unix seconds. Unknown to
@@ -444,6 +460,39 @@ func (s *Store) RemoveProxies(domains []string) error {
 	return s.execEach("DELETE FROM proxies WHERE domain = ?", domains)
 }
 
+// --- Static hosts ------------------------------------------------------------
+
+// StaticHosts returns the static hosts, in insertion order.
+func (s *Store) StaticHosts() ([]StaticHost, error) {
+	return queryList(s.db, "SELECT domain, root, spa FROM static_hosts ORDER BY id", func(r *sql.Rows) (StaticHost, error) {
+		var h StaticHost
+		return h, r.Scan(&h.Domain, &h.Root, &h.SPA)
+	})
+}
+
+// StaticHostNames returns the static host domains, in insertion order.
+func (s *Store) StaticHostNames() ([]string, error) {
+	return queryList(s.db, "SELECT domain FROM static_hosts ORDER BY id", scanString)
+}
+
+// AddStaticHosts adds static hosts, ignoring those already present.
+func (s *Store) AddStaticHosts(hosts []StaticHost) error {
+	return s.inTx(func(tx *sql.Tx) error {
+		for _, h := range hosts {
+			if _, err := tx.Exec("INSERT OR IGNORE INTO static_hosts (domain, root, spa) VALUES (?, ?, ?)",
+				h.Domain, h.Root, h.SPA); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// RemoveStaticHosts removes static hosts.
+func (s *Store) RemoveStaticHosts(domains []string) error {
+	return s.execEach("DELETE FROM static_hosts WHERE domain = ?", domains)
+}
+
 // --- DNS clients -------------------------------------------------------------
 
 // RecordDNSClients adds the sightings to their clients, creating the new
@@ -498,11 +547,11 @@ func (s *Store) PruneDNSClients(before time.Time) (int64, error) {
 	return res.RowsAffected()
 }
 
-// Reset empties domains, aliases, proxies and DNS clients (`reset --db`).
+// Reset empties domains, aliases, proxies, static hosts and DNS clients (`reset --db`).
 // Settings are kept.
 func (s *Store) Reset() error {
 	return s.inTx(func(tx *sql.Tx) error {
-		for _, table := range []string{"domains", "aliases", "proxies", "dns_clients"} {
+		for _, table := range []string{"domains", "aliases", "proxies", "static_hosts", "dns_clients"} {
 			if _, err := tx.Exec("DELETE FROM " + table); err != nil {
 				return err
 			}

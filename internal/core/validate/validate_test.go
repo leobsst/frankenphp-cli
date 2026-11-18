@@ -48,3 +48,15 @@ func TestDirectory(t *testing.T) {
 		}
 	}
 }
+
+func TestRoot(t *testing.T) {
+	for root, ok := range map[string]bool{
+		"app": true, "app/public": true, "front/apps/web/dist/": true, ".": true, `front\dist`: true,
+		"my.app/v2_build": true, "": false, "/abs/path": false, "../up": false, "a/../../b": false,
+		"a b": false, "a/{x}": false, "a//b": false,
+	} {
+		if got := Root(root) == nil; got != ok {
+			t.Errorf("Root(%q) valid = %v", root, got)
+		}
+	}
+}

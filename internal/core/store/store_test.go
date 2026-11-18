@@ -208,3 +208,22 @@ func TestDNSClients(t *testing.T) {
 		t.Errorf("after prune: %+v", got)
 	}
 }
+
+func TestStaticHosts(t *testing.T) {
+	s, _ := openTemp(t)
+	check(t, s.AddStaticHosts([]StaticHost{{"site.test", "site", false}, {"front.test", "front/dist", true}}))
+	check(t, s.AddStaticHosts([]StaticHost{{"site.test", "other", true}})) // ignored
+
+	want := []StaticHost{{"site.test", "site", false}, {"front.test", "front/dist", true}}
+	if got := must(s.StaticHosts()); !reflect.DeepEqual(got, want) {
+		t.Errorf("StaticHosts() = %v, want %v", got, want)
+	}
+	check(t, s.RemoveStaticHosts([]string{"site.test"}))
+	if got := must(s.StaticHostNames()); !reflect.DeepEqual(got, []string{"front.test"}) {
+		t.Errorf("after removal: %v", got)
+	}
+	check(t, s.Reset())
+	if got := must(s.StaticHosts()); len(got) != 0 {
+		t.Errorf("after reset: %v", got)
+	}
+}
