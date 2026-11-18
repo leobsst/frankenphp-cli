@@ -33,6 +33,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Optional raw upstream target (e.g. `add-host domain.test 127.0.0.1:8006`) registers the domain(s) as proxy host(s) that reverse-proxy straight to that address instead of getting a PHP container of their own — `--php` is ignored in this mode
   - Dedicated SSL certificate and `/etc/hosts` entry per proxy host
   - Shown in their own table in `frankenmanager list`
+  - `--root` sets the directory served, relative to the project path (default `<domain without TLD>/public`); its first directory (the project) must exist
+  - `--static` registers the domain(s) as static hosts (HTML site, built front-end app) served by the reverse proxy itself, with no PHP container: `--root` sets the directory served, relative to the project path (default: the domain without its TLD), and `--spa` falls back to `/index.html` for client-side routing
+  - Editable site Caddyfile per static host in `caddy/sites/static/`, archived to `sites/archive/static/` by `remove-host`; static hosts are listed in their own table by `frankenmanager list`
 - `add-alias` - Add alternate host(s) that reverse-proxy to an already-configured domain or proxy host
   - No per-site Caddyfile or new PHP container: only the reverse proxy's Caddyfile is updated
   - Dedicated SSL certificate and `/etc/hosts` entry per alias
@@ -178,6 +181,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Automatic Caddy reload on configuration changes
 - Alternate host (alias) support in the reverse proxy Caddyfile: dedicated TLS block per alias, proxied to its target domain's site with no separate per-site Caddyfile
 - Proxy host support in the reverse proxy Caddyfile: dedicated TLS block per proxy host, forwarding straight to a raw upstream address with no separate per-site Caddyfile
+- Static host support: the reverse proxy imports each static host's site Caddyfile and mounts the project path read-only to serve its files
 
 #### Developer Experience
 - Color-coded console output and tables, plain when the output is not a terminal

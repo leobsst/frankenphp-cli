@@ -23,6 +23,7 @@
 - Live PHP version switching per domain (`switch-php`)
 - Alternate hosts (aliases) that reverse-proxy to an existing domain's site or proxy host's upstream (`add-alias`), with no extra Caddyfile or container
 - Proxy hosts that reverse-proxy straight to a raw upstream address (`add-host <domain> <target>`), with no PHP container or per-site Caddyfile
+- Static hosts (HTML sites, built front-end apps, single-page apps) served by the reverse proxy itself (`add-host <domain> --static`), with no PHP container
 - Automated SSL certificate generation via mkcert
 - Optional extra apt/Composer packages in the PHP image, scoped per PHP version
 - FrankenPHP with Caddy reverse proxy
@@ -142,8 +143,9 @@ frankenmanager setup --status
 | `frankenmanager status` | Show current server and container status |
 | `frankenmanager list` | List all registered domains with their PHP versions |
 | `frankenmanager dns-clients [--all] [--json]` | List the devices using the LAN DNS server (connected in the last 5 minutes, or all) |
-| `frankenmanager add-host <domains> [--php <version>]` | Add new domains while server is running |
+| `frankenmanager add-host <domains> [--php <version>] [--root <dir>]` | Add new domains while server is running |
 | `frankenmanager add-host <domain> <target>` | Add domain(s) that reverse-proxy to a raw upstream address (e.g. `127.0.0.1:8006`) |
+| `frankenmanager add-host <domains> --static [--root <dir>] [--spa]` | Add static host(s) (HTML, built front-end app) served without PHP |
 | `frankenmanager add-alias <target> <aliases>` | Add alternate host(s) that reverse-proxy to an existing domain or proxy host |
 | `frankenmanager remove-host <domains>` | Remove domains (or alternate hosts) while server is running |
 | `frankenmanager restore-host [domains] [--php <version>]` | Restore archived domains |
@@ -461,7 +463,12 @@ frankenmanager add-host "app1.test app2.test"
 
 # Force SSL certificate regeneration
 frankenmanager add-host "newapp.test" --force-ssl
+
+# Serve another directory than <domain without TLD>/public
+frankenmanager add-host "api.test" --root monorepo/apps/api/public
 ```
+
+- **--root** (optional): the directory served, relative to the project path. Defaults to `<domain without TLD>/public`. Its first directory — the project (`monorepo` above) — must exist, otherwise the host is not added; the deeper ones are not checked. Applied when the site Caddyfile is created only: an existing one keeps its root (a warning says so)
 
 This will:
 1. Validate the domain name(s)
@@ -493,6 +500,34 @@ This will:
 5. Restart only the reverse proxy
 
 `--php` is ignored when a target is given — proxy hosts have no PHP container of their own. Proxy hosts are shown in their own table in `frankenmanager list`.
+
+#### Add a static host
+
+Give `add-host` the `--static` option to serve a site made of plain files — an HTML site, or the build output of a front-end app (Vite, Angular, React...) — with no PHP container: the reverse proxy serves the files itself, over HTTPS.
+
+```bash
+# Serves <project path>/site/
+frankenmanager add-host "site.test" --static
+
+# Serves a build directory
+frankenmanager add-host "front.test" --static --root front/apps/web/dist
+
+# Single-page app: unknown paths fall back to /index.html (client-side routing)
+frankenmanager add-host "front.test" --static --root front/apps/web/dist --spa
+```
+
+- **--root** (optional): the directory to serve, relative to the project path (`DEFAULT_PROJECT_PATH` or the `--path` of `start`). Defaults to the domain without its TLD (`site.test` → `site/`). With `--root`, its first directory — the project — must exist; a warning is shown when the full directory does not exist yet: build the app, then browse
+- **--spa** (optional): unknown paths serve `/index.html`, which is never cached. Without it, a missing file is a real 404
+- **--php** is ignored: a static host has no PHP container
+
+This will:
+1. Validate the domain name(s) and the root
+2. Generate SSL certificates
+3. Add entries to `/etc/hosts`
+4. Create the site Caddyfile `~/.frankenmanager/caddy/sites/static/<domain>_Caddyfile`, imported by the reverse proxy's Caddyfile
+5. Restart only the reverse proxy. With the first static host, the reverse proxy is recreated to mount the project path (read-only) and the static site files
+
+The site Caddyfile is created only when missing: edit it freely (cache headers, redirects...), then `frankenmanager restart --caddy`. Static hosts are shown in their own table in `frankenmanager list`; `remove-host` archives their Caddyfile to `sites/archive/static/`. They cannot have alternate hosts (`add-alias`): add another static host with the same `--root` instead.
 
 #### Add an alternate host (alias)
 
@@ -569,6 +604,8 @@ This will:
 ### Caddyfile Customization
 
 Each domain gets its own Caddyfile generated from `caddy/Caddyfile.template`. You can edit a site's Caddyfile directly at `~/.frankenmanager/caddy/sites/php-<version>/<domain>_Caddyfile` to customize behavior for that site.
+
+Each static host (`add-host --static`) gets its own Caddyfile at `~/.frankenmanager/caddy/sites/static/<domain>_Caddyfile`, served by the reverse proxy over HTTPS (it keeps its `tls` line). The projects root is mounted read-only in the reverse proxy at the same path as in the PHP containers, so roots are written `/{$CUSTOM_PATH}/<dir>/`.
 
 If the custom template at `caddy/Caddyfile.template` is unreadable, FrankenManager will automatically fall back to its built-in template.
 
@@ -1094,6 +1131,15 @@ CREATE TABLE proxies (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     domain TEXT NOT NULL UNIQUE,
     target TEXT NOT NULL,
+    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Static hosts table (added via `add-host <domain> --static`), root relative to the project path
+CREATE TABLE static_hosts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    domain TEXT NOT NULL UNIQUE,
+    root TEXT NOT NULL,
+    spa INTEGER NOT NULL DEFAULT 0,
     added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 ```
