@@ -201,7 +201,14 @@ func Ensure(ctx context.Context, dir, version string, start Starter) (*Client, S
 		if v == version {
 			return c, AlreadyRunning, nil
 		}
-		if err := c.Stop(ctx); err != nil {
+		if err := c.Do(ctx, http.MethodPost, "/api/daemon/stop", nil, nil); err != nil {
+			return nil, 0, i18n.Errorf("Could not stop the daemon of version %s: %v", v, err)
+		}
+		// A service manager relaunches it at once, on the new binary
+		switch err := c.waitVersion(ctx, version, 10*time.Second); {
+		case err == nil:
+			return c, Replaced, nil
+		case !errors.Is(err, errDown):
 			return nil, 0, i18n.Errorf("Could not stop the daemon of version %s: %v", v, err)
 		}
 		what = Replaced
@@ -221,4 +228,60 @@ func Ensure(ctx context.Context, dir, version string, start Starter) (*Client, S
 		return nil, 0, i18n.Errorf("The daemon started is version %s, not %s.", v, version)
 	}
 	return c, what, nil
+}
+
+var errDown = errors.New("down")
+
+// waitVersion waits until the daemon of version answers (nil), or none
+// does (errDown), failing after timeout while another version still runs.
+func (c *Client) waitVersion(ctx context.Context, version string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		v, err := c.Version(ctx)
+		switch {
+		case err != nil:
+			return errDown
+		case v == version:
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
+		if time.Now().After(deadline) {
+			return errTimeout
+		}
+	}
+}
+
+// Run submits an operation (method and path of an action, body as JSON),
+// waits until it finishes, and decodes its result into out (nil: ignored).
+// A failed operation returns its error.
+func (c *Client) Run(ctx context.Context, method, path string, body, out any) error {
+	var op daemon.Operation
+	if err := c.Do(ctx, method, path, body, &op); err != nil {
+		return err
+	}
+	for op.Status != daemon.Succeeded && op.Status != daemon.Failed {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(50 * time.Millisecond):
+		}
+		if err := c.Do(ctx, http.MethodGet, "/api/operations/"+op.ID, nil, &op); err != nil {
+			return err
+		}
+	}
+	if op.Status == daemon.Failed {
+		return errors.New(op.Error)
+	}
+	if out == nil || op.Result == nil {
+		return nil
+	}
+	data, err := json.Marshal(op.Result)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(data, out)
 }

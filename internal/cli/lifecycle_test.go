@@ -228,7 +228,7 @@ func TestStop(t *testing.T) {
 	}
 	writeFile(t, e.hostsFile, "127.0.0.1\tlocalhost\n127.0.0.1\tapp.test\n::1\t\tapp.test\n"+
 		"127.0.0.1\tvite.test\n127.0.0.1\tws.frankenmanager.test\n")
-	writeFile(t, filepath.Join(e.dir, ".dns_watcher.pid"), "424242")
+	e.dns.running = true
 	e.docker.ps = running
 
 	code, out, _ = e.run("stop")
@@ -238,8 +238,8 @@ func TestStop(t *testing.T) {
 	if got := readFile(t, e.hostsFile); got != "127.0.0.1\tlocalhost\n" {
 		t.Errorf("hosts:\n%s", got)
 	}
-	if !slices.Contains(e.dockerLines(), "down") || !slices.Equal(e.killed, []int{424242}) {
-		t.Errorf("docker %v, killed %v", e.dockerLines(), e.killed)
+	if !slices.Contains(e.dockerLines(), "down") || e.dns.running {
+		t.Errorf("docker %v, LAN DNS server serving: %v", e.dockerLines(), e.dns.running)
 	}
 }
 
@@ -341,9 +341,9 @@ func TestStartVerboseShowsBuildLogs(t *testing.T) {
 	}
 }
 
-// The LAN DNS server is the background process: restart --dns syncs the
-// records, removes the container of earlier releases and restarts the
-// process, without any compose call; service disable dns stops it.
+// The daemon serves the LAN DNS server: restart --dns syncs the records,
+// removes the container of earlier releases and has it serve again, without
+// any compose call; service disable dns stops it.
 func TestDNSDrivesTheBackgroundProcess(t *testing.T) {
 	e := newEnv(t)
 	e.initEnv("DNS_SERVER=true\nDNS_IP=192.168.1.20\n")
@@ -364,8 +364,8 @@ func TestDNSDrivesTheBackgroundProcess(t *testing.T) {
 	if got := readFile(t, filepath.Join(e.dir, "dns", "hosts")); !strings.Contains(got, "192.168.1.20 app.test") {
 		t.Errorf("records:\n%s", got)
 	}
-	if got := readFile(t, filepath.Join(e.dir, ".dns_watcher.pid")); got != "424242" {
-		t.Errorf("process not started: pid file %q", got)
+	if !e.dns.running {
+		t.Error("the LAN DNS server does not serve")
 	}
 
 	e.docker.calls = nil
@@ -378,7 +378,7 @@ func TestDNSDrivesTheBackgroundProcess(t *testing.T) {
 			t.Errorf("container call %q", line)
 		}
 	}
-	if !slices.Equal(e.killed, []int{424242}) {
-		t.Errorf("process not stopped: killed %v", e.killed)
+	if e.dns.running {
+		t.Error("the LAN DNS server still serves")
 	}
 }

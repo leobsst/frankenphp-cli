@@ -55,6 +55,7 @@
   "%s LAN IP changed: %s -> %s, DNS records updated\n": "%s Adresse IP du réseau local changée : %s -> %s, enregistrements DNS mis à jour\n",
   "%w\nThe LAN DNS server may not use this port: run `sudo frankenmanager setup`, or set DNS_PORT above 1023": "%w\nLe serveur DNS du réseau local ne peut peut-être pas utiliser ce port : lancez « sudo frankenmanager setup », ou réglez DNS_PORT au-dessus de 1023",
   "DNS watcher error: %v": "Erreur de la surveillance DNS : %v",
+  "LAN DNS server stopped (%v): retrying in %s": "Serveur DNS LAN arrêté (%v) : nouvel essai dans %s",
   "DNS clients prune error: %v": "Erreur de purge des clients DNS : %v",
   "DNS clients write error: %v": "Erreur d'écriture des clients DNS : %v",
   "DNS clients identity error: %v": "Erreur d'identification des clients DNS : %v",

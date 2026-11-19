@@ -80,7 +80,7 @@ func (a *app) status(ctx context.Context) (err error) {
 			c.Println(line)
 		}
 		if running {
-			if a.dnsProcessState(dir) != "running" {
+			if a.dnsProcessState(ctx, dir) != "running" {
 				c.Println(i18n.Tf("  Server: %s (run `restart --dns`)", c.Color(ui.Red, i18n.T("not running"))))
 			} else {
 				c.Println(i18n.Tf("  Server: %s", c.Color(ui.Green, i18n.T("running"))))

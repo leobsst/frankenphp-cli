@@ -56,7 +56,7 @@ func (s *Server) dnsClients(w http.ResponseWriter, r *http.Request) {
 		if !res.Enabled {
 			return res, nil
 		}
-		res.State = ws.Stack.DNSProcessState()
+		res.State = ws.Stack.DNSProcessState(r.Context())
 		stored, err := ws.Store.DNSClients()
 		if err != nil {
 			return nil, err
@@ -66,17 +66,50 @@ func (s *Server) dnsClients(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// --- LAN DNS server ---
+
+// DNSState is whether the LAN DNS server is on and serves.
+type DNSState struct {
+	Enabled bool `json:"enabled"`
+	Running bool `json:"running"`
+}
+
+func (s *Server) dnsState(w http.ResponseWriter, r *http.Request) {
+	s.read(w, func(ws *Workspace) (any, error) {
+		return DNSState{Enabled: dns.Enabled(ws.Env), Running: ws.Stack.DNS.Running(r.Context())}, nil
+	})
+}
+
+// applyDNS serves when DNS_SERVER=true, stops otherwise, reading the DNS_*
+// settings again.
+func (s *Server) applyDNS(w http.ResponseWriter, _ *http.Request) {
+	s.submit(w, "dns.apply", func(ctx context.Context, ws *Workspace) (any, error) {
+		running, err := ws.Stack.DNS.Apply(ctx)
+		return DNSState{Enabled: dns.Enabled(ws.Env), Running: running}, err
+	})
+}
+
+// stopDNS stops serving until the next start or apply.
+func (s *Server) stopDNS(w http.ResponseWriter, _ *http.Request) {
+	s.submit(w, "dns.stop", func(ctx context.Context, ws *Workspace) (any, error) {
+		ws.Stack.DNS.Stop(ctx)
+		return DNSState{Enabled: dns.Enabled(ws.Env)}, nil
+	})
+}
+
 // --- Root CA sharing ---------------------------------------------------------
 
 type caResponse struct {
 	Sharing bool   `json:"sharing"`
+	Port    int    `json:"port,omitempty"`
 	URL     string `json:"url,omitempty"` // where the other devices download it
 }
 
 func (s *Server) caStatus(w http.ResponseWriter, _ *http.Request) {
 	s.read(w, func(ws *Workspace) (any, error) {
 		url, ok := ws.CA.Status()
-		return caResponse{Sharing: ok, URL: url}, nil
+		_, port, _ := ws.CA.State(ws.Dir)
+		return caResponse{Sharing: ok, Port: port, URL: url}, nil
 	})
 }
 
@@ -102,7 +135,7 @@ func (s *Server) setCA(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return nil, err
 		}
-		return caResponse{Sharing: true, URL: url}, nil
+		return caResponse{Sharing: true, Port: req.Port, URL: url}, nil
 	})
 }
 

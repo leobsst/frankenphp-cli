@@ -15,6 +15,8 @@ import (
 
 	"github.com/leobsst/frankenphp-cli/internal/client"
 	"github.com/leobsst/frankenphp-cli/internal/core/buckets"
+	"github.com/leobsst/frankenphp-cli/internal/core/caserver"
+	"github.com/leobsst/frankenphp-cli/internal/core/dnswatcher"
 	"github.com/leobsst/frankenphp-cli/internal/core/docker"
 	"github.com/leobsst/frankenphp-cli/internal/core/domains"
 	"github.com/leobsst/frankenphp-cli/internal/core/env"
@@ -112,7 +114,13 @@ func (a *app) daemonStop(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := client.New(dir).Stop(ctx); err != nil {
+	// A daemon handed to the service manager would be relaunched: the
+	// service goes, until the next command that needs the daemon
+	stopped := false
+	if svc, err := a.deps.DaemonService(dir); err == nil {
+		stopped = svc.Stop(ctx)
+	}
+	if err := client.New(dir).Stop(ctx); err != nil && !(stopped && errors.Is(err, client.ErrNotRunning)) {
 		return err
 	}
 	a.log.Success(i18n.T("Daemon stopped."))
@@ -169,7 +177,20 @@ func (a *app) runDaemon(ctx context.Context) error {
 
 	a.log.Success(i18n.Tf("Dashboard API listening on http://%s (token: %s)", local.Addr(), filepath.Join(dir, daemon.TokenFile)))
 	a.log.Info(i18n.Tf("CLI socket: %s", socketPath))
-	srv := daemon.New(func(log events.Log) (*daemon.Workspace, error) { return a.workspace(dir, log) },
+	// The background processes of earlier releases: the daemon serves the
+	// LAN DNS server and shares the root CA itself now
+	if w, err := a.deps.Watcher(dir); err == nil {
+		w.Stop(ctx)
+	}
+	caserver.StopSharing(dir)
+	h := &daemonHosts{dns: &dnswatcher.Host{DataDir: dir, Log: a.errOut}, ca: &caserver.Host{}}
+	defer h.dns.Stop()
+	defer h.ca.Stop()
+	if h.dns.Apply(e) {
+		a.log.Info(i18n.T("LAN DNS server started."))
+	}
+
+	srv := daemon.New(func(log events.Log) (*daemon.Workspace, error) { return a.workspace(dir, h, log) },
 		token, port, version.Version)
 	err = srv.Serve(ctx, socket, local)
 	a.log.Info(i18n.T("Dashboard API stopped."))
@@ -198,9 +219,15 @@ func listenSocket(path string) (net.Listener, error) {
 	return ln, nil
 }
 
+// daemonHosts are what the daemon runs in its own process.
+type daemonHosts struct {
+	dns *dnswatcher.Host
+	ca  *caserver.Host
+}
+
 // workspace opens the configuration, the database and the services of dir
 // for the daemon, reporting to log, with the dependencies of the commands.
-func (a *app) workspace(dir string, log events.Log) (*daemon.Workspace, error) {
+func (a *app) workspace(dir string, h *daemonHosts, log events.Log) (*daemon.Workspace, error) {
 	e, _, err := env.Open(dir)
 	if err != nil {
 		return nil, err
@@ -211,7 +238,7 @@ func (a *app) workspace(dir string, log events.Log) (*daemon.Workspace, error) {
 	}
 	d := docker.New(dir, log)
 	d.Runner = a.deps.Docker
-	h := a.deps.Hosts(log)
+	hostsFile := a.deps.Hosts(log)
 	certs := func(certsDir string) (stack.Certs, error) {
 		m, err := ssl.New(certsDir, log)
 		if err != nil {
@@ -220,12 +247,13 @@ func (a *app) workspace(dir string, log events.Log) (*daemon.Workspace, error) {
 		m.Run = a.deps.Command
 		return m, nil
 	}
-	st := &stack.Service{Dir: dir, Env: e, Store: s, Docker: d, Hosts: h, Certs: certs, Watcher: a.deps.Watcher, Log: log}
+	st := &stack.Service{Dir: dir, Env: e, Store: s, Docker: d, Hosts: hostsFile, Certs: certs,
+		DNS: &inProcessDNS{host: h.dns, dir: dir}, Log: log}
 	caddyDir := e.ResolveDir("CADDY_DIR", "./caddy", dir)
 	return &daemon.Workspace{
 		Dir: dir, Env: e, Store: s, Stack: st,
 		Domains: func() *domains.Service {
-			return &domains.Service{Dir: dir, CaddyDir: caddyDir, Env: e, Store: s, Docker: d, Hosts: h,
+			return &domains.Service{Dir: dir, CaddyDir: caddyDir, Env: e, Store: s, Docker: d, Hosts: hostsFile,
 				Certs: func() (domains.Certs, error) { return certs(e.CertsDir(dir)) }, Log: log}
 		},
 		Buckets: func(ctx context.Context) (*buckets.Service, error) {
@@ -233,9 +261,11 @@ func (a *app) workspace(dir string, log events.Log) (*daemon.Workspace, error) {
 			if err != nil {
 				return nil, err
 			}
-			return &buckets.Service{Dir: dir, Env: e, Store: s, Hosts: h, Garage: g, Log: log}, nil
+			return &buckets.Service{Dir: dir, Env: e, Store: s, Hosts: hostsFile, Garage: g, Log: log}, nil
 		},
-		CA:    a.caSharing(dir),
+		CA: h.ca.Sharing(dir, func(ctx context.Context) (string, error) {
+			return ssl.RootCAPath(ctx, a.deps.Command)
+		}, a.deps.LANIP),
 		Close: s.Close,
 	}, nil
 }

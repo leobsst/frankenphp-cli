@@ -29,5 +29,8 @@
   "The daemon failed to start: %v": "Le daemon n'a pas pu démarrer : %v",
   "The daemon stopped at once: see %s": "Le daemon s'est arrêté aussitôt : voir %s",
   "The daemon does not answer (%v): see %s": "Le daemon ne répond pas (%v) : voir %s",
-  "The daemon started is version %s, not %s.": "Le daemon démarré est en version %s, pas %s."
+  "The daemon started is version %s, not %s.": "Le daemon démarré est en version %s, pas %s.",
+  "LAN DNS server started.": "Serveur DNS LAN démarré.",
+  "The dashboard daemon did not start: %v": "Le daemon du dashboard n'a pas démarré : %v",
+  "Dashboard: %s": "Dashboard : %s"
 }

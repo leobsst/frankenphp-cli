@@ -174,8 +174,8 @@ func (a *app) serviceStatus(ctx context.Context, only string) error {
 	return nil
 }
 
-// dnsProcessState is the state of the LAN DNS server process: "running" or
+// dnsProcessState is the state of the LAN DNS server: "running" or
 // "stopped".
-func (a *app) dnsProcessState(dir string) string {
-	return a.stackService(dir, nil, nil, nil).DNSProcessState()
+func (a *app) dnsProcessState(ctx context.Context, dir string) string {
+	return a.stackService(dir, nil, nil, nil).DNSProcessState(ctx)
 }

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -73,7 +74,7 @@ func (a *app) dnsClients(all, asJSON bool, now time.Time) (err error) {
 		return err
 	}
 
-	if a.dnsProcessState(dir) != "running" {
+	if a.dnsProcessState(context.Background(), dir) != "running" {
 		a.log.Warning(i18n.T("The LAN DNS server is not running: run 'frankenmanager restart --dns'."))
 	}
 	c := a.con

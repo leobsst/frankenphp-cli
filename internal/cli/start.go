@@ -95,7 +95,7 @@ func (a *app) stackService(dir string, e *env.Env, d *docker.Manager, s *store.S
 	log := a.events()
 	return &stack.Service{
 		Dir: dir, Env: e, Store: s, Docker: d, Hosts: a.deps.Hosts(log),
-		Certs: a.certs, Watcher: a.deps.Watcher, Log: log,
+		Certs: a.certs, DNS: a.dns(dir), Log: log,
 	}
 }
 
@@ -123,6 +123,16 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 	if err != nil {
 		return reported(err)
 	}
+	// The daemon of the dashboard, handed to the service manager: it then
+	// runs at login (DAEMON_AUTOSTART=false: on demand only)
+	dashboard := ""
+	if e.Get(env.DaemonAutostartKey) != "false" {
+		if _, _, err := a.ensureDaemon(ctx, dir); err != nil {
+			a.log.Warning(i18n.Tf("The dashboard daemon did not start: %v", err))
+		} else {
+			dashboard = "http://127.0.0.1:" + e.Get(env.DashboardPortKey)
+		}
+	}
 
 	a.con.Println()
 	a.log.Success(i18n.T("Web server started!"))
@@ -147,6 +157,9 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 	}
 	if s3.Enabled(e) {
 		a.logS3Endpoints(e)
+	}
+	if dashboard != "" {
+		a.log.Info(i18n.Tf("Dashboard: %s", dashboard))
 	}
 	if res.DNSListen != "" {
 		ip, err := dns.ResolveIP(e)

@@ -13,6 +13,7 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/client"
 	"github.com/leobsst/frankenphp-cli/internal/command"
 	"github.com/leobsst/frankenphp-cli/internal/core/alias"
+	"github.com/leobsst/frankenphp-cli/internal/core/background"
 	"github.com/leobsst/frankenphp-cli/internal/core/caserver"
 	"github.com/leobsst/frankenphp-cli/internal/core/dnswatcher"
 	"github.com/leobsst/frankenphp-cli/internal/core/docker"
@@ -22,6 +23,7 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/privilege"
 	"github.com/leobsst/frankenphp-cli/internal/core/resources"
 	"github.com/leobsst/frankenphp-cli/internal/core/ssl"
+	"github.com/leobsst/frankenphp-cli/internal/core/stack"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
 	"github.com/leobsst/frankenphp-cli/internal/core/updater"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
@@ -50,8 +52,8 @@ type Deps struct {
 	// Privilege and Mkcert return the hosts privilege and mkcert managers.
 	Privilege func(log privilege.Logger) *privilege.Manager
 	Mkcert    func(log mkcert.Logger) *mkcert.Installer
-	// ShareCA starts sharing the root CA (detached server), StopCA stops
-	// it, CAState reports it.
+	// ShareCA starts sharing the root CA (in the daemon), StopCA stops it,
+	// CAState reports it.
 	ShareCA func(dataDir, certFile string, port int) error
 	StopCA  func(dataDir string) bool
 	CAState func(dataDir string) (pid, port int, ok bool)
@@ -70,6 +72,11 @@ type Deps struct {
 	Refresh  func(ctx context.Context, dataDir string, log updater.Logger) error
 	// StartDaemon starts the daemon of a data directory in the background.
 	StartDaemon client.Starter
+	// DaemonService returns the background service of the daemon.
+	DaemonService func(dataDir string) (*background.Service, error)
+	// DNS returns the LAN DNS server of a data directory; nil: the one of
+	// the daemon.
+	DNS func(dataDir string) stack.DNS
 	// Language returns the system language (a locale name, "fr_FR.UTF-8"),
 	// for the CLI_LANGUAGE "auto" setting.
 	Language func() string
@@ -96,15 +103,6 @@ func (d Deps) withDefaults() Deps {
 	}
 	if d.Mkcert == nil {
 		d.Mkcert = mkcert.New
-	}
-	if d.ShareCA == nil {
-		d.ShareCA = shareCA
-	}
-	if d.StopCA == nil {
-		d.StopCA = caserver.StopSharing
-	}
-	if d.CAState == nil {
-		d.CAState = caserver.RunningState
 	}
 	if d.LANIP == nil {
 		d.LANIP = platform.LANIP
@@ -133,8 +131,20 @@ func (d Deps) withDefaults() Deps {
 	if d.Language == nil {
 		d.Language = i18n.System
 	}
+	if d.DaemonService == nil {
+		d.DaemonService = daemonService
+	}
 	if d.StartDaemon == nil {
-		d.StartDaemon = startDaemon
+		d.StartDaemon = serviceStarter(d.DaemonService, startDetached)
+	}
+	if d.ShareCA == nil {
+		d.ShareCA = shareCAVia(d.StartDaemon)
+	}
+	if d.StopCA == nil {
+		d.StopCA = stopCAVia
+	}
+	if d.CAState == nil {
+		d.CAState = caStateVia
 	}
 	if d.Notify == nil {
 		d.Notify = func(dataDir string, log updater.Logger) { updater.New(dataDir, log).Notify() }
@@ -290,22 +300,11 @@ func (a *app) ssl(certsDir string) (*ssl.Manager, error) {
 	return m, nil
 }
 
-// startDaemon starts the daemon in the background, from the running
-// binary.
-func startDaemon(dir string) (<-chan struct{}, error) {
+// startDetached starts the daemon detached, from the running binary.
+func startDetached(dir string) (<-chan struct{}, error) {
 	exe, err := platform.Executable()
 	if err != nil {
 		return nil, err
 	}
 	return client.StartDetached(exe)(dir)
-}
-
-// shareCA starts the detached root CA server, from the running binary.
-func shareCA(dataDir, certFile string, port int) error {
-	exe, err := platform.Executable()
-	if err != nil {
-		return err
-	}
-	_, err = caserver.StartSharing(dataDir, exe, certFile, port)
-	return err
 }

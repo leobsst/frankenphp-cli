@@ -152,6 +152,10 @@ const LanguageKey = "CLI_LANGUAGE"
 // the daemon starts.
 const DashboardPortKey = "DASHBOARD_PORT"
 
+// DaemonAutostartKey is the key telling whether the daemon is handed to the
+// OS service manager (started at login), or started on demand only.
+const DaemonAutostartKey = "DAEMON_AUTOSTART"
+
 // DefaultDashboardPort is the default port of the dashboard API.
 const DefaultDashboardPort = "9081"
 
@@ -294,6 +298,8 @@ func buildDefinitions() []Definition {
 		{Key: "PGADMIN_PORT", Description: i18n.N("pgAdmin port (dev only)"), Default: static("8081"), Validate: validatePort, Apply: ApplyRecreate},
 		{Key: DashboardPortKey, Description: i18n.N("Port of the dashboard API (frankenmanager daemon), on 127.0.0.1"),
 			Default: static(DefaultDashboardPort), Validate: validatePort, Apply: ApplyNow},
+		{Key: DaemonAutostartKey, Description: i18n.N("Run the daemon (dashboard API, LAN DNS server) at login, through the OS service manager"),
+			Default: static("true"), Values: booleans, Apply: ApplyNow},
 
 		{Key: "REDIS_ENABLED", Description: i18n.N("Run a Redis cache server"),
 			Default: static("false"), Values: booleans, Apply: ApplyLive, Service: "redis"},

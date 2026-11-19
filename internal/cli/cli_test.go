@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -17,6 +18,7 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/command"
 	"github.com/leobsst/frankenphp-cli/internal/command/commandtest"
 	"github.com/leobsst/frankenphp-cli/internal/core/alias"
+	"github.com/leobsst/frankenphp-cli/internal/core/background"
 	"github.com/leobsst/frankenphp-cli/internal/core/dnswatcher"
 	"github.com/leobsst/frankenphp-cli/internal/core/docker"
 	"github.com/leobsst/frankenphp-cli/internal/core/env"
@@ -24,8 +26,10 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/mkcert"
 	"github.com/leobsst/frankenphp-cli/internal/core/privilege"
 	"github.com/leobsst/frankenphp-cli/internal/core/resources"
+	"github.com/leobsst/frankenphp-cli/internal/core/stack"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
 	"github.com/leobsst/frankenphp-cli/internal/core/updater"
+	"github.com/leobsst/frankenphp-cli/internal/daemon"
 	"github.com/leobsst/frankenphp-cli/internal/platform"
 )
 
@@ -73,6 +77,11 @@ type testEnv struct {
 	hostsFile string
 	notified  []string
 	killed    []int
+	// dns is the LAN DNS server, as the daemon would serve it
+	dns fakeDNS
+	// daemonStarts counts the daemon starts (none succeeds: no daemon in
+	// tests)
+	daemonStarts int
 	// interactive replaces the terminal programs (exec); tty is the
 	// terminal answer
 	interactive func(ctx context.Context, name string, args []string) (int, error)
@@ -170,6 +179,44 @@ func (e *testEnv) watcher(dataDir string) (*dnswatcher.Watcher, error) {
 	}, nil
 }
 
+// fakeDNS is the LAN DNS server of the daemon: it serves when DNS_SERVER
+// is on at the last Apply.
+type fakeDNS struct {
+	dir              string
+	applied, stopped int
+	running          bool
+}
+
+func (f *fakeDNS) Apply(context.Context) (bool, error) {
+	f.applied++
+	e, _, err := env.Open(f.dir)
+	if err != nil {
+		return false, err
+	}
+	f.running = e.Get("DNS_SERVER") == "true"
+	return f.running, nil
+}
+
+func (f *fakeDNS) Stop(context.Context) {
+	f.stopped++
+	f.running = false
+}
+
+func (f *fakeDNS) Running(context.Context) bool { return f.running }
+
+// daemonService is the service of the daemon in the temporary directory,
+// through the fake runner (no launchctl: detached, never spawned).
+func (e *testEnv) daemonService(dataDir string) (*background.Service, error) {
+	return &background.Service{
+		Spec: daemon.ServiceSpec, DataDir: dataDir, GOOS: "darwin", Exe: "/usr/local/lib/frankenmanager/frankenmanager",
+		PlistPath: filepath.Join(e.root, "LaunchAgents", daemon.ServiceSpec.Label+".plist"),
+		UnitPath:  filepath.Join(e.root, "systemd", daemon.ServiceSpec.Unit),
+		UID:       501, Run: e.cmd, Sleep: func(time.Duration) {},
+		Spawn: func(*background.Service) (int, error) { return 0, errors.New("no daemon in tests") },
+		Alive: func(int) bool { return false }, Kill: func(int) error { return nil },
+	}, nil
+}
+
 func (e *testEnv) run(args ...string) (code int, out, errOut string) {
 	e.t.Helper()
 	var o, eo bytes.Buffer
@@ -178,6 +225,15 @@ func (e *testEnv) run(args ...string) (code int, out, errOut string) {
 		Command: e.cmd,
 		Hosts:   e.hosts,
 		Watcher: e.watcher,
+		DNS: func(dataDir string) stack.DNS {
+			e.dns.dir = dataDir
+			return &e.dns
+		},
+		StartDaemon: func(string) (<-chan struct{}, error) {
+			e.daemonStarts++
+			return nil, errors.New("no daemon in tests")
+		},
+		DaemonService: e.daemonService,
 		Interactive: func(ctx context.Context, name string, args []string) (int, error) {
 			if e.interactive == nil {
 				e.t.Errorf("unexpected %s %v", name, args)

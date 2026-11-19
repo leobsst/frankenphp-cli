@@ -11,7 +11,6 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/caddyfile"
 	"github.com/leobsst/frankenphp-cli/internal/core/compose"
 	"github.com/leobsst/frankenphp-cli/internal/core/dns"
-	"github.com/leobsst/frankenphp-cli/internal/core/dnswatcher"
 	"github.com/leobsst/frankenphp-cli/internal/core/docker"
 	"github.com/leobsst/frankenphp-cli/internal/core/env"
 	"github.com/leobsst/frankenphp-cli/internal/core/events"
@@ -45,9 +44,20 @@ type Service struct {
 	// called only when certificates are needed: creating it creates the
 	// directory.
 	Certs func(certsDir string) (Certs, error)
-	// Watcher returns the LAN DNS process of the data directory.
-	Watcher func(dataDir string) (*dnswatcher.Watcher, error)
-	Log     events.Log
+	// DNS runs the LAN DNS server
+	DNS DNS
+	Log events.Log
+}
+
+// DNS runs the LAN DNS server: in the daemon, or reached through it.
+type DNS interface {
+	// Apply serves when DNS_SERVER=true, stops otherwise, reading the
+	// DNS_* settings again, and reports whether it serves.
+	Apply(ctx context.Context) (bool, error)
+	// Stop stops serving until the next Apply.
+	Stop(ctx context.Context)
+	// Running reports whether it serves.
+	Running(ctx context.Context) bool
 }
 
 // IsRunning reports whether the stack runs: its containers are up.
@@ -512,11 +522,7 @@ func (s *Service) Start(ctx context.Context, o StartOptions) (StartResult, error
 		}
 	}
 
-	w, err := s.Watcher(s.Dir)
-	if err != nil {
-		return fail(err)
-	}
-	watched, err := w.Update(ctx, e)
+	watched, err := s.DNS.Apply(ctx)
 	if err != nil {
 		return fail(err)
 	}
@@ -536,9 +542,7 @@ func (s *Service) Stop(ctx context.Context) error {
 	}
 
 	s.Log.Step(i18n.T("Stopping web server..."))
-	if w, err := s.Watcher(s.Dir); err == nil {
-		w.Stop(ctx)
-	}
+	s.DNS.Stop(ctx)
 	d.ComposeDown(ctx)
 
 	names, err := st.DomainNames()
@@ -668,11 +672,7 @@ func (s *Service) Restart(ctx context.Context, targets []string, forceSSL, build
 		}
 		// Restarts the server process, picking up the DNS_* changes made
 		// since the last start; stops it when DNS_SERVER was turned off
-		w, err := s.Watcher(s.Dir)
-		if err != nil {
-			return err
-		}
-		if _, err := w.Update(ctx, e); err != nil {
+		if _, err := s.DNS.Apply(ctx); err != nil {
 			return err
 		}
 	}

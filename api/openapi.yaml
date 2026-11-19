@@ -313,6 +313,33 @@ paths:
         "202": { $ref: "#/components/responses/Queued" }
         "400": { $ref: "#/components/responses/Error" }
 
+  /api/dns:
+    get:
+      tags: [network]
+      summary: Whether the LAN DNS server is on and serves
+      responses:
+        "200":
+          description: The state.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DNSState" }
+
+  /api/dns/apply:
+    post:
+      tags: [network]
+      summary: Serve when DNS_SERVER=true, stop otherwise
+      description: "Operation `dns.apply`, result `DNSState`. Reads the DNS_* settings again."
+      responses:
+        "202": { $ref: "#/components/responses/Queued" }
+
+  /api/dns/stop:
+    post:
+      tags: [network]
+      summary: Stop the LAN DNS server until the next start or apply
+      description: "Operation `dns.stop`, result `DNSState`."
+      responses:
+        "202": { $ref: "#/components/responses/Queued" }
+
   /api/dns/clients:
     get:
       tags: [network]
@@ -813,6 +840,13 @@ components:
         applied: { type: boolean, description: Already applied (optional services). }
         hint: { type: string, description: How to apply it otherwise. }
 
+    DNSState:
+      type: object
+      required: [enabled, running]
+      properties:
+        enabled: { type: boolean, description: DNS_SERVER. }
+        running: { type: boolean, description: The daemon serves it. }
+
     DNSClient:
       type: object
       required: [ip, name, mac, first_seen, last_seen, queries, status, randomized_mac]
@@ -842,6 +876,7 @@ components:
       required: [sharing]
       properties:
         sharing: { type: boolean }
+        port: { type: integer }
         url: { type: string, description: Where the other devices download the root CA (QR code). }
 
     CARequest:

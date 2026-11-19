@@ -2,7 +2,6 @@ package cli
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -31,7 +30,7 @@ func TestDNSClients(t *testing.T) {
 	e := newEnv(t)
 	// Pinned addresses: the real interfaces of the machine are not read
 	e.initEnv("DNS_SERVER=true\nDNS_IP=192.168.1.20\nDNS_LISTEN_IP=192.168.1.20\n")
-	writeFile(t, filepath.Join(e.dir, ".dns_watcher.pid"), "424242")
+	e.dns.running = true
 
 	// No device yet: which address to give them
 	code, out, _ := e.run("dns-clients")
@@ -95,7 +94,7 @@ func TestStatusShowsDNSDevices(t *testing.T) {
 	}
 	seedClients(t, e)
 	e.docker.ps = running
-	writeFile(t, filepath.Join(e.dir, ".dns_watcher.pid"), "424242")
+	e.dns.running = true
 
 	code, out, _ := e.run("status")
 	if code != 0 {

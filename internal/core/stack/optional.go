@@ -175,11 +175,7 @@ func (s *Service) ApplyOptional(ctx context.Context, name string) (OptionalResul
 		}
 	}
 	if name == "dns" {
-		w, err := s.Watcher(s.Dir)
-		if err != nil {
-			return OptionalResult{}, err
-		}
-		if _, err := w.Update(ctx, e); err != nil {
+		if _, err := s.DNS.Apply(ctx); err != nil {
 			return OptionalResult{}, err
 		}
 	}
@@ -208,7 +204,7 @@ func (s *Service) OptionalStatuses(ctx context.Context, only string) []OptionalS
 		key := env.Services[name]
 		var state string
 		if name == "dns" {
-			state = s.DNSProcessState()
+			state = s.DNSProcessState(ctx)
 		} else {
 			// The front container: the S3 gateway is unhealthy without Garage
 			state = statuses.Get(serviceContainers[name][0]).State
@@ -218,10 +214,10 @@ func (s *Service) OptionalStatuses(ctx context.Context, only string) []OptionalS
 	return out
 }
 
-// DNSProcessState is the state of the LAN DNS server process: "running" or
+// DNSProcessState is the state of the LAN DNS server: "running" or
 // "stopped".
-func (s *Service) DNSProcessState() string {
-	if w, err := s.Watcher(s.Dir); err == nil && w.RunningPID() != 0 {
+func (s *Service) DNSProcessState(ctx context.Context) string {
+	if s.DNS.Running(ctx) {
 		return "running"
 	}
 	return "stopped"
