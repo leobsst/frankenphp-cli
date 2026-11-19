@@ -12,9 +12,9 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/leobsst/frankenphp-cli/internal/core/buckets"
 	"github.com/leobsst/frankenphp-cli/internal/core/env"
 	"github.com/leobsst/frankenphp-cli/internal/core/s3"
-	"github.com/leobsst/frankenphp-cli/internal/core/stack"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
 	"github.com/leobsst/frankenphp-cli/internal/ui"
@@ -28,12 +28,6 @@ func (a *app) syncS3(ctx context.Context, dir string, e *env.Env, s *store.Store
 	return a.stackService(dir, e, nil, s).SyncS3(ctx)
 }
 
-// syncS3Hosts brings the hosts entries of the bucket hosts in line with
-// the buckets of the server (see stack.SyncS3Hosts).
-func (a *app) syncS3Hosts(ctx context.Context, dir string, e *env.Env, s *store.Store, g *s3.Garage) error {
-	return stack.SyncS3Hosts(ctx, dir, e, s, a.deps.Hosts(a.log), g)
-}
-
 // logS3Endpoints shows where the S3 server answers.
 func (a *app) logS3Endpoints(e *env.Env) {
 	a.log.Info(i18n.Tf("S3 server: https://%s (apps: %s, region %s)", s3.Domain,
@@ -43,10 +37,8 @@ func (a *app) logS3Endpoints(e *env.Env) {
 
 // s3Session is what the bucket and key commands work with.
 type s3Session struct {
-	dir string
-	e   *env.Env
 	s   *store.Store
-	g   *s3.Garage
+	svc *buckets.Service
 }
 
 // openS3 checks that the S3 server is enabled and answers. The caller
@@ -60,18 +52,18 @@ func (a *app) openS3(ctx context.Context) (*s3Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	if !s3.Enabled(e) {
-		return nil, i18n.NewError("S3 is disabled: run 'frankenmanager service enable s3' to use it.")
-	}
-	g := s3.NewGarage(e)
-	if !g.Ready(ctx) {
-		return nil, i18n.NewError("The S3 server is not running: start it with 'frankenmanager start'.")
+	g, err := buckets.Open(ctx, e)
+	if err != nil {
+		return nil, err
 	}
 	s, err := a.openStore(dir)
 	if err != nil {
 		return nil, err
 	}
-	return &s3Session{dir: dir, e: e, s: s, g: g}, nil
+	log := a.events()
+	return &s3Session{s: s, svc: &buckets.Service{
+		Dir: dir, Env: e, Store: s, Hosts: a.deps.Hosts(log), Garage: g, Log: log,
+	}}, nil
 }
 
 // cachedBuckets returns the bucket names known from the last sync, for
@@ -247,34 +239,26 @@ func (a *app) s3ListBuckets(ctx context.Context) (err error) {
 		return err
 	}
 	defer closeStore(x.s, &err)
-	buckets, err := x.g.Buckets(ctx)
+	list, err := x.svc.List(ctx)
 	if err != nil {
 		return err
 	}
-	if len(buckets) == 0 {
+	if len(list) == 0 {
 		a.log.Info(i18n.T("No bucket. Create one with: frankenmanager s3 bucket create <name>"))
 		return nil
 	}
-	global := x.e.Get(s3.AccessKeyKey)
 	t := ui.Table{Title: i18n.T("S3 buckets"), Columns: []ui.Column{
 		{Header: i18n.T("Bucket"), Color: ui.Cyan}, {Header: i18n.T("Public")}, {Header: i18n.T("Objects")},
 		{Header: i18n.T("Public objects")}, {Header: i18n.T("Size")}, {Header: i18n.T("Bucket keys")},
 		{Header: "URL", Faint: true},
 	}}
-	objectsDir := x.e.ResolveDir(s3.DirKey, s3.DefaultDir, x.dir)
-	for _, b := range buckets {
-		keys := 0
-		for _, k := range b.Keys {
-			if k.ID != global {
-				keys++
-			}
+	for _, b := range list {
+		public := i18n.T("all")
+		if b.PublicObjects >= 0 {
+			public = strconv.Itoa(b.PublicObjects)
 		}
-		public := strconv.Itoa(s3.PublicObjects(objectsDir, b.ID))
-		if b.WebsiteAccess {
-			public = i18n.T("all")
-		}
-		t.Rows = append(t.Rows, []string{b.Name(), yesNo(b.WebsiteAccess), strconv.FormatInt(b.Objects, 10),
-			public, humanBytes(b.Bytes), strconv.Itoa(keys), s3.PublicURL(b.Name())})
+		t.Rows = append(t.Rows, []string{b.Name, yesNo(b.Public), strconv.FormatInt(b.Objects, 10),
+			public, humanBytes(b.Bytes), strconv.Itoa(b.Keys), b.URL})
 	}
 	a.con.PrintTable(t)
 	return nil
@@ -291,32 +275,8 @@ func (a *app) s3CreateBuckets(ctx context.Context, names []string, public bool) 
 		return err
 	}
 	defer closeStore(x.s, &err)
-	global := x.e.Get(s3.AccessKeyKey)
-	for _, name := range names {
-		if _, err := x.g.BucketInfo(ctx, name); err == nil {
-			a.log.Info(i18n.Tf("Bucket %s already exists.", name))
-			continue
-		}
-		b, err := x.g.CreateBucket(ctx, name)
-		if err != nil {
-			return err
-		}
-		if global != "" {
-			if err := x.g.Allow(ctx, b.ID, global, s3.Perms{Owner: true, Read: true, Write: true}); err != nil {
-				return err
-			}
-		}
-		if public {
-			if err := x.g.SetPublic(ctx, b.ID, true); err != nil {
-				return err
-			}
-		}
-		a.log.Success(i18n.Tf("Bucket %s created: %s", name, s3.PublicURL(name)))
-	}
-	if public {
-		a.warnPublic()
-	}
-	return a.syncS3Hosts(ctx, x.dir, x.e, x.s, x.g)
+	_, err = x.svc.Create(ctx, names, public)
+	return err
 }
 
 func (a *app) s3DeleteBuckets(ctx context.Context, names []string, force bool) (err error) {
@@ -325,49 +285,7 @@ func (a *app) s3DeleteBuckets(ctx context.Context, names []string, force bool) (
 		return err
 	}
 	defer closeStore(x.s, &err)
-	buckets := make([]s3.Bucket, 0, len(names))
-	for _, name := range names {
-		b, err := x.g.BucketInfo(ctx, name)
-		if err != nil {
-			return err
-		}
-		if b.Objects > 0 && !force {
-			return i18n.Errorf("Bucket '%s' is not empty (%d objects): use --force to empty and delete it.",
-				name, b.Objects)
-		}
-		buckets = append(buckets, b)
-	}
-	keys, err := x.g.Keys(ctx)
-	if err != nil {
-		return err
-	}
-	for _, b := range buckets {
-		name := b.Name()
-		if b.Objects > 0 {
-			n, err := s3.NewObjects(x.e).Empty(ctx, name)
-			if err != nil {
-				return err
-			}
-			a.log.Info(i18n.Tf("Bucket %s emptied (%d objects deleted).", name, n))
-		}
-		if err := x.g.DeleteBucket(ctx, b.ID); err != nil {
-			return err
-		}
-		if err := s3.DropBucketACL(x.e.ResolveDir(s3.DirKey, s3.DefaultDir, x.dir), b.ID); err != nil {
-			return err
-		}
-		// The keys made by `s3 key create` for this bucket
-		for _, k := range keys {
-			if strings.HasPrefix(k.Name, name+"/") {
-				if err := x.g.DeleteKey(ctx, k.ID); err != nil {
-					return err
-				}
-				a.log.Info(i18n.Tf("Access key %s (%s) deleted.", k.ID, k.Name))
-			}
-		}
-		a.log.Success(i18n.Tf("Bucket %s deleted.", name))
-	}
-	return a.syncS3Hosts(ctx, x.dir, x.e, x.s, x.g)
+	return x.svc.Delete(ctx, names, force)
 }
 
 func (a *app) s3EmptyBuckets(ctx context.Context, names []string, yes bool) (err error) {
@@ -376,10 +294,8 @@ func (a *app) s3EmptyBuckets(ctx context.Context, names []string, yes bool) (err
 		return err
 	}
 	defer closeStore(x.s, &err)
-	for _, name := range names {
-		if _, err := x.g.BucketInfo(ctx, name); err != nil {
-			return err
-		}
+	if err := x.svc.Check(ctx, names); err != nil {
+		return err
 	}
 	if !yes {
 		ok, err := a.confirm(i18n.Tf("Delete every object of %s? This cannot be undone.", strings.Join(names, ", ")))
@@ -396,14 +312,7 @@ func (a *app) s3EmptyBuckets(ctx context.Context, names []string, yes bool) (err
 			return nil
 		}
 	}
-	for _, name := range names {
-		n, err := s3.NewObjects(x.e).Empty(ctx, name)
-		if err != nil {
-			return err
-		}
-		a.log.Success(i18n.Tf("Bucket %s emptied (%d objects deleted).", name, n))
-	}
-	return nil
+	return x.svc.Empty(ctx, names)
 }
 
 func (a *app) s3SetPublic(ctx context.Context, names []string, public bool) (err error) {
@@ -412,31 +321,7 @@ func (a *app) s3SetPublic(ctx context.Context, names []string, public bool) (err
 		return err
 	}
 	defer closeStore(x.s, &err)
-	for _, name := range names {
-		b, err := x.g.BucketInfo(ctx, name)
-		if err != nil {
-			return err
-		}
-		if err := x.g.SetPublic(ctx, b.ID, public); err != nil {
-			return err
-		}
-		if public {
-			a.log.Success(i18n.Tf("Bucket %s is public: %s/<key>", name, s3.PublicURL(name)))
-		} else {
-			a.log.Success(i18n.Tf("Bucket %s is private.", name))
-		}
-	}
-	if public {
-		a.warnPublic()
-	}
-	return nil
-}
-
-// warnPublic explains what a public bucket exposes.
-func (a *app) warnPublic() {
-	a.log.Warning(i18n.T("Every object of a public bucket can be read and downloaded by anyone reaching " +
-		"this server, without credentials, even the ones stored as private. To make only some objects " +
-		"public, keep the bucket private and store them with the public-read ACL (visibility 'public')."))
+	return x.svc.SetPublic(ctx, names, public)
 }
 
 func newS3KeyCmd(a *app) *cobra.Command {
@@ -496,26 +381,18 @@ func newS3KeyCmd(a *app) *cobra.Command {
 func (a *app) s3CreateKey(ctx context.Context, bucket, label string, readOnly bool) (err error) {
 	label = strings.TrimSpace(label)
 	if label == "" || strings.Contains(label, "/") {
-		return usageError{i18n.NewError("The key name must not be empty nor contain '/'.")}
+		return usageError{buckets.ErrKeyName}
 	}
 	x, err := a.openS3(ctx)
 	if err != nil {
 		return err
 	}
 	defer closeStore(x.s, &err)
-	b, err := x.g.BucketInfo(ctx, bucket)
+	k, err := x.svc.CreateKey(ctx, bucket, label, readOnly)
 	if err != nil {
 		return err
 	}
-	k, err := x.g.CreateKey(ctx, bucket+"/"+label)
-	if err != nil {
-		return err
-	}
-	perms := s3.Perms{Read: true, Write: !readOnly}
-	if err := x.g.Allow(ctx, b.ID, k.ID, perms); err != nil {
-		return err
-	}
-	a.log.Success(i18n.Tf("Access key created for bucket %s (%s).", bucket, perms))
+	a.log.Success(i18n.Tf("Access key created for bucket %s (%s).", bucket, k.Perms))
 	a.printKey(k.ID, k.Name, k.Secret)
 	return nil
 }
@@ -537,44 +414,26 @@ func (a *app) s3ListKeys(ctx context.Context, bucket string) (err error) {
 		return err
 	}
 	defer closeStore(x.s, &err)
+	keys, err := x.svc.Keys(ctx, bucket)
+	if err != nil {
+		return err
+	}
+	if len(keys) == 0 {
+		a.log.Info(i18n.T("No access key."))
+		return nil
+	}
 	t := ui.Table{Title: i18n.T("S3 access keys"), Columns: []ui.Column{
 		{Header: i18n.T("Access key ID"), Color: ui.Cyan}, {Header: i18n.T("Name")}, {Header: i18n.T("Buckets")},
 	}}
-	if bucket != "" {
-		b, err := x.g.BucketInfo(ctx, bucket)
-		if err != nil {
-			return err
+	for _, k := range keys {
+		var grants []string
+		for _, g := range k.Grants {
+			grants = append(grants, g.Bucket+" ("+g.Perms.String()+")")
 		}
-		for _, k := range b.Keys {
-			t.Rows = append(t.Rows, []string{k.ID, k.Name, bucket + " (" + k.Permissions.String() + ")"})
+		if k.Global {
+			grants = []string{i18n.T("every bucket (global key)")}
 		}
-	} else {
-		keys, err := x.g.Keys(ctx)
-		if err != nil {
-			return err
-		}
-		for _, summary := range keys {
-			k, err := x.g.KeyInfo(ctx, summary.ID)
-			if err != nil {
-				return err
-			}
-			var buckets []string
-			for _, b := range k.Buckets {
-				name := b.ID
-				if len(b.GlobalAliases) > 0 {
-					name = b.GlobalAliases[0]
-				}
-				buckets = append(buckets, name+" ("+b.Permissions.String()+")")
-			}
-			if k.ID == x.e.Get(s3.AccessKeyKey) {
-				buckets = []string{i18n.T("every bucket (global key)")}
-			}
-			t.Rows = append(t.Rows, []string{k.ID, k.Name, strings.Join(buckets, ", ")})
-		}
-	}
-	if len(t.Rows) == 0 {
-		a.log.Info(i18n.T("No access key."))
-		return nil
+		t.Rows = append(t.Rows, []string{k.ID, k.Name, strings.Join(grants, ", ")})
 	}
 	a.con.PrintTable(t)
 	return nil
@@ -586,10 +445,8 @@ func (a *app) s3ShowKey(ctx context.Context, id string) (err error) {
 		return err
 	}
 	defer closeStore(x.s, &err)
-	k, err := x.g.KeyInfo(ctx, id)
-	if s3.IsNotFound(err) {
-		return i18n.Errorf("Access key '%s' not found.", id)
-	} else if err != nil {
+	k, err := x.svc.ShowKey(ctx, id)
+	if err != nil {
 		return err
 	}
 	a.printKey(k.ID, k.Name, k.Secret)
@@ -602,20 +459,7 @@ func (a *app) s3DeleteKeys(ctx context.Context, ids []string) (err error) {
 		return err
 	}
 	defer closeStore(x.s, &err)
-	for _, id := range ids {
-		if id == x.e.Get(s3.AccessKeyKey) {
-			return i18n.Errorf("%s is the global key: change S3_ACCESS_KEY_ID instead.", id)
-		}
-	}
-	for _, id := range ids {
-		if err := x.g.DeleteKey(ctx, id); s3.IsNotFound(err) {
-			return i18n.Errorf("Access key '%s' not found.", id)
-		} else if err != nil {
-			return err
-		}
-		a.log.Success(i18n.Tf("Access key %s deleted.", id))
-	}
-	return nil
+	return x.svc.DeleteKeys(ctx, ids)
 }
 
 // passthrough reads the arguments of a command without flag parsing:
