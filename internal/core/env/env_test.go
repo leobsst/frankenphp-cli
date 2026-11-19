@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
+	"github.com/leobsst/frankenphp-cli/internal/platform"
 )
 
 // Each case states what earlier releases read from the line: the migrated
@@ -81,7 +82,7 @@ func TestDefaults(t *testing.T) {
 	}
 	for key, want := range map[string]string{
 		"UID": uid, "GID": gid, "DEFAULT_PHP_VERSION": "8.3", "CLI_ALIAS": "fkm",
-		"DNS_UPSTREAM": "1.1.1.1 8.8.8.8", "DEFAULT_PROJECT_PATH": "", "UNKNOWN": "",
+		"DNS_UPSTREAM": "1.1.1.1 8.8.8.8", "DEFAULT_PROJECT_PATH": platform.DefaultProjectsDir(), "UNKNOWN": "",
 	} {
 		if got := e.Get(key); got != want {
 			t.Errorf("Get(%s) = %q, want %q", key, got, want)

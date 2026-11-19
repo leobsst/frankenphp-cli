@@ -150,19 +150,22 @@ func TestStartAlreadyRunning(t *testing.T) {
 
 func TestStartErrors(t *testing.T) {
 	for name, tc := range map[string]struct {
+		env  string
 		args []string
 		out  string
 	}{
 		// An error message
-		"invalid php": {[]string{"start", "app.test", "--php", "7.4"}, "ERROR: Unsupported PHP version '7.4'"},
-		"no path":     {[]string{"start", "app.test"}, "ERROR: No project path specified and DEFAULT_PROJECT_PATH is not set (frankenmanager configuration set DEFAULT_PROJECT_PATH <path>)\n"},
-		"bad path":    {[]string{"start", "app.test", "-p", "/nonexistent"}, "ERROR: Directory does not exist: /nonexistent\n"},
-		"bad domain":  {[]string{"start", "bad_domain.test", "-p", "."}, "ERROR: Invalid domain name: bad_domain.test\n"},
-		"extra arg":   {[]string{"start", "a.test", "b.test"}, ""},
+		"invalid php":    {"", []string{"start", "app.test", "--php", "7.4"}, "ERROR: Unsupported PHP version '7.4'"},
+		"no path":        {"DEFAULT_PROJECT_PATH=\n", []string{"start", "app.test"}, "ERROR: No project path specified and DEFAULT_PROJECT_PATH is not set (frankenmanager configuration set DEFAULT_PROJECT_PATH <path>)\n"},
+		"no default dir": {"", []string{"start", "app.test"}, "ERROR: The default projects directory does not exist: "},
+		"bad path":       {"", []string{"start", "app.test", "-p", "/nonexistent"}, "ERROR: Directory does not exist: /nonexistent\n"},
+		"bad setting":    {"DEFAULT_PROJECT_PATH=/nonexistent\n", []string{"start", "app.test"}, "ERROR: Directory does not exist: /nonexistent\n"},
+		"bad domain":     {"", []string{"start", "bad_domain.test", "-p", "."}, "ERROR: Invalid domain name: bad_domain.test\n"},
+		"extra arg":      {"", []string{"start", "a.test", "b.test"}, ""},
 	} {
 		t.Run(name, func(t *testing.T) {
 			e := newEnv(t)
-			e.initEnv("")
+			e.initEnv(tc.env)
 			code, out, errOut := e.run(tc.args...)
 			if name == "extra arg" {
 				if code != ExitUsage || !strings.Contains(errOut, "Got unexpected extra argument (b.test)") {
@@ -284,7 +287,7 @@ func TestRestartSomeContainers(t *testing.T) {
 
 func TestRestartBuildWithoutProjectPath(t *testing.T) {
 	e := newEnv(t)
-	e.initEnv("")
+	e.initEnv("DEFAULT_PROJECT_PATH=\n")
 	if err := e.store().AddDomains([]string{"app.test"}, "8.4"); err != nil {
 		t.Fatal(err)
 	}

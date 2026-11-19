@@ -13,6 +13,7 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/phpversions"
 	"github.com/leobsst/frankenphp-cli/internal/core/s3"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
+	"github.com/leobsst/frankenphp-cli/internal/platform"
 )
 
 // Apply tells what a new value needs to take effect on a running server.
@@ -251,7 +252,7 @@ func buildDefinitions() []Definition {
 		{Key: LanguageKey, Description: i18n.N("Language of the messages: auto follows the system language (LANG, LC_ALL...)"),
 			Default: static(i18n.Auto), Values: append([]string{i18n.Auto}, i18n.Languages()...), Apply: ApplyNow},
 		{Key: "DEFAULT_PROJECT_PATH", Description: i18n.N("Projects root used when start has no --path"),
-			Apply: ApplyNow},
+			Default: platform.DefaultProjectsDir, Apply: ApplyNow},
 		{Key: "DEFAULT_PHP_VERSION", Description: i18n.N("PHP version of new domains when --php is not given"),
 			Default: static(phpversions.Default), Values: phpversions.Supported, Apply: ApplyNow},
 		{Key: "CADDY_DIR", Description: i18n.N("Caddy files directory (relative to the data directory, or absolute)"),

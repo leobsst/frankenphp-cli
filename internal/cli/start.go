@@ -244,6 +244,12 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 			return exitError(1)
 		}
 		if err := validate.Directory(customPath); err != nil {
+			if o.path == "" && !e.IsSet("DEFAULT_PROJECT_PATH") {
+				// The OS default, never chosen: tell how to choose
+				a.log.Error(i18n.Tf("The default projects directory does not exist: %s "+
+					"(create it or run frankenmanager configuration set DEFAULT_PROJECT_PATH <path>)", customPath))
+				return exitError(1)
+			}
 			return err
 		}
 	}

@@ -111,5 +111,6 @@
   "Could not update the static files now: they will be on the next command.": "Impossible de mettre à jour les fichiers statiques maintenant : ils le seront à la prochaine commande.",
   "Static files (Dockerfile, compose and Caddy templates, php.ini) updated.": "Fichiers statiques (Dockerfile, modèles compose et Caddy, php.ini) mis à jour.",
   "Failed to build image %s: %v": "Échec de la construction de l'image %s : %v",
-  "  Static: %s": "  Statique : %s"
+  "  Static: %s": "  Statique : %s",
+  "The default projects directory does not exist: %s (create it or run frankenmanager configuration set DEFAULT_PROJECT_PATH <path>)": "Le dossier de projets par défaut n'existe pas : %s (créez-le ou lancez frankenmanager configuration set DEFAULT_PROJECT_PATH <path>)"
 }

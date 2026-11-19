@@ -119,6 +119,7 @@ func TestAddHostFailureRemovesHostsEntries(t *testing.T) {
 	if err := e.store().SetSetting(store.SettingProjectPath, ""); err != nil {
 		t.Fatal(err)
 	}
+	e.writeEnv("DEFAULT_PROJECT_PATH=\n")
 	before := readFile(t, e.hostsFile)
 	code, out, _ := e.run("add-host", "new.test", "--php", "8.5")
 	mustContain(t, out,

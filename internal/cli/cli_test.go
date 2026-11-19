@@ -98,6 +98,10 @@ func newEnv(t *testing.T) *testEnv {
 	root := t.TempDir()
 	dir := filepath.Join(root, "data")
 	t.Setenv(platform.DataDirEnv, dir)
+	// The default projects root lies under the home directory: a temporary
+	// one, so that the real ~/Sites or ~/projects is never used
+	t.Setenv("HOME", root)
+	t.Setenv("USERPROFILE", root)
 	if err := resources.New(dir, quietLog{}).Ensure(); err != nil {
 		t.Fatal(err)
 	}
