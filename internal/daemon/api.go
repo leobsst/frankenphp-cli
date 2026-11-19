@@ -56,6 +56,7 @@ type route struct {
 func (s *Server) routeTable() []route {
 	return []route{
 		{"GET /api/health", s.health},
+		{"POST /api/daemon/stop", s.stopDaemon},
 		{"GET /api/status", s.status},
 		{"GET /api/events", s.events},
 		{"GET /api/operations", s.operations},
@@ -149,6 +150,16 @@ type healthResponse struct {
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, healthResponse{Version: s.Version})
+}
+
+// stopDaemon stops the daemon once the response is sent: the CLI replaces
+// a daemon of another version.
+func (s *Server) stopDaemon(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusAccepted, struct{}{})
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
+	go s.Stop()
 }
 
 // Host is a registered host.

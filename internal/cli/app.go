@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/leobsst/frankenphp-cli/internal/client"
 	"github.com/leobsst/frankenphp-cli/internal/command"
 	"github.com/leobsst/frankenphp-cli/internal/core/alias"
 	"github.com/leobsst/frankenphp-cli/internal/core/caserver"
@@ -67,6 +68,8 @@ type Deps struct {
 	ServeCA  func(ctx context.Context, certFile string, port int) error
 	WatchDNS func(ctx context.Context, dataDir string, stderr io.Writer) error
 	Refresh  func(ctx context.Context, dataDir string, log updater.Logger) error
+	// StartDaemon starts the daemon of a data directory in the background.
+	StartDaemon client.Starter
 	// Language returns the system language (a locale name, "fr_FR.UTF-8"),
 	// for the CLI_LANGUAGE "auto" setting.
 	Language func() string
@@ -129,6 +132,9 @@ func (d Deps) withDefaults() Deps {
 	}
 	if d.Language == nil {
 		d.Language = i18n.System
+	}
+	if d.StartDaemon == nil {
+		d.StartDaemon = startDaemon
 	}
 	if d.Notify == nil {
 		d.Notify = func(dataDir string, log updater.Logger) { updater.New(dataDir, log).Notify() }
@@ -282,6 +288,16 @@ func (a *app) ssl(certsDir string) (*ssl.Manager, error) {
 	}
 	m.Run = a.deps.Command
 	return m, nil
+}
+
+// startDaemon starts the daemon in the background, from the running
+// binary.
+func startDaemon(dir string) (<-chan struct{}, error) {
+	exe, err := platform.Executable()
+	if err != nil {
+		return nil, err
+	}
+	return client.StartDetached(exe)(dir)
 }
 
 // shareCA starts the detached root CA server, from the running binary.

@@ -13,6 +13,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/leobsst/frankenphp-cli/internal/client"
 	"github.com/leobsst/frankenphp-cli/internal/core/buckets"
 	"github.com/leobsst/frankenphp-cli/internal/core/docker"
 	"github.com/leobsst/frankenphp-cli/internal/core/domains"
@@ -26,21 +27,113 @@ import (
 )
 
 func newDaemonCmd(a *app) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "daemon",
-		Short: i18n.T("Run the API of the dashboard (foreground)."),
-		Long: i18n.T(`Run the API of the dashboard, in the foreground until interrupted.
+		Short: i18n.T("Run, start, stop or check the API of the dashboard."),
+		Long: i18n.T(`Run, start, stop or check the API of the dashboard.
 
-It is served on a Unix socket of the data directory (daemon.sock, for this
-user only) and on 127.0.0.1:DASHBOARD_PORT, where the access token of
-daemon.token is required. The actions run one at a time.`),
+The daemon serves it on a Unix socket of the data directory (daemon.sock, for
+this user only) and on 127.0.0.1:DASHBOARD_PORT, where the access token of
+daemon.token is required. The actions run one at a time.
+
+Examples:
+    frankenmanager daemon start    # Start it in the background
+    frankenmanager daemon status   # Check whether it runs, and its version
+    frankenmanager daemon stop
+    frankenmanager daemon run      # Run it in the foreground (services)`),
 		Args: noArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error { return cmd.Help() },
+	}
+	run := &cobra.Command{
+		Use:   "run",
+		Short: i18n.T("Run the daemon in the foreground, until interrupted."),
+		Args:  noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 			return a.runDaemon(ctx)
 		},
 	}
+	start := &cobra.Command{
+		Use:   "start",
+		Short: i18n.T("Start the daemon in the background, or replace one of another version."),
+		Args:  noArgs,
+		RunE:  func(cmd *cobra.Command, _ []string) error { return a.daemonStart(cmd.Context()) },
+	}
+	stop := &cobra.Command{
+		Use:   "stop",
+		Short: i18n.T("Stop the daemon."),
+		Args:  noArgs,
+		RunE:  func(cmd *cobra.Command, _ []string) error { return a.daemonStop(cmd.Context()) },
+	}
+	status := &cobra.Command{
+		Use:   "status",
+		Short: i18n.T("Show whether the daemon runs, and its version."),
+		Args:  noArgs,
+		RunE:  func(cmd *cobra.Command, _ []string) error { return a.daemonStatus(cmd.Context()) },
+	}
+	cmd.AddCommand(run, start, stop, status)
+	return cmd
+}
+
+// ensureDaemon returns the client of the daemon of this release, starting
+// or replacing it when needed.
+func (a *app) ensureDaemon(ctx context.Context, dir string) (*client.Client, client.Started, error) {
+	return client.Ensure(ctx, dir, version.Version, a.deps.StartDaemon)
+}
+
+func (a *app) daemonStart(ctx context.Context) error {
+	dir, err := a.projectDir()
+	if err != nil {
+		return err
+	}
+	e, err := a.loadEnv(dir)
+	if err != nil {
+		return err
+	}
+	_, what, err := a.ensureDaemon(ctx, dir)
+	if err != nil {
+		return err
+	}
+	url := "http://127.0.0.1:" + e.Get(env.DashboardPortKey)
+	switch what {
+	case client.AlreadyRunning:
+		a.log.Info(i18n.Tf("The daemon is already running: %s", url))
+	case client.Replaced:
+		a.log.Success(i18n.Tf("Daemon replaced by version %s: %s", version.Version, url))
+	default:
+		a.log.Success(i18n.Tf("Daemon started: %s", url))
+	}
+	return nil
+}
+
+func (a *app) daemonStop(ctx context.Context) error {
+	dir, err := a.projectDir()
+	if err != nil {
+		return err
+	}
+	if err := client.New(dir).Stop(ctx); err != nil {
+		return err
+	}
+	a.log.Success(i18n.T("Daemon stopped."))
+	return nil
+}
+
+func (a *app) daemonStatus(ctx context.Context) error {
+	dir, err := a.projectDir()
+	if err != nil {
+		return err
+	}
+	v, err := client.New(dir).Version(ctx)
+	if err != nil {
+		a.log.Info(i18n.T("The daemon is not running."))
+		return nil
+	}
+	a.log.Info(i18n.Tf("The daemon is running (version %s).", v))
+	if v != version.Version {
+		a.log.Warning(i18n.Tf("This CLI is version %s: run 'frankenmanager daemon start' to replace it.", version.Version))
+	}
+	return nil
 }
 
 // runDaemon serves the API until ctx is done.
@@ -61,17 +154,18 @@ func (a *app) runDaemon(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	local, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
-	if err != nil {
-		return err
-	}
+	// The socket first: it tells a daemon already running
 	socketPath := filepath.Join(dir, daemon.SocketFile)
 	socket, err := listenSocket(socketPath)
 	if err != nil {
-		_ = local.Close()
 		return err
 	}
 	defer func() { _ = os.Remove(socketPath) }()
+	local, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
+	if err != nil {
+		_ = socket.Close()
+		return err
+	}
 
 	a.log.Success(i18n.Tf("Dashboard API listening on http://%s (token: %s)", local.Addr(), filepath.Join(dir, daemon.TokenFile)))
 	a.log.Info(i18n.Tf("CLI socket: %s", socketPath))

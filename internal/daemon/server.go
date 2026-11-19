@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
@@ -31,6 +32,9 @@ type Server struct {
 	Version string
 	Queue   *Queue
 	Bus     *Bus
+
+	mu   sync.Mutex
+	stop context.CancelFunc // ends Serve, set while it runs
 }
 
 // New returns a server with its queue and bus.
@@ -45,6 +49,9 @@ func New(backend Backend, token string, port int, version string) *Server {
 func (s *Server) Serve(ctx context.Context, socket, local net.Listener) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	s.mu.Lock()
+	s.stop = cancel
+	s.mu.Unlock()
 	go s.Queue.Run(ctx)
 
 	api := s.routes()
@@ -74,6 +81,15 @@ func (s *Server) Serve(ctx context.Context, socket, local net.Listener) error {
 	}
 	s.shutdown(servers)
 	return nil
+}
+
+// Stop ends Serve, after the requests in progress.
+func (s *Server) Stop() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.stop != nil {
+		s.stop()
+	}
 }
 
 func (s *Server) shutdown(servers []*http.Server) {

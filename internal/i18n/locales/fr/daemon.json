@@ -1,6 +1,4 @@
 {
-  "Run the API of the dashboard (foreground).": "Lancer l'API du dashboard (au premier plan).",
-  "Run the API of the dashboard, in the foreground until interrupted.\n\nIt is served on a Unix socket of the data directory (daemon.sock, for this\nuser only) and on 127.0.0.1:DASHBOARD_PORT, where the access token of\ndaemon.token is required. The actions run one at a time.": "Lancer l'API du dashboard, au premier plan jusqu'à interruption.\n\nElle est servie sur un socket Unix du dossier de données (daemon.sock, pour cet\nutilisateur seulement) et sur 127.0.0.1:DASHBOARD_PORT, où le jeton d'accès de\ndaemon.token est obligatoire. Les actions s'exécutent une à la fois.",
   "Dashboard API listening on http://%s (token: %s)": "API du dashboard à l'écoute sur http://%s (jeton : %s)",
   "CLI socket: %s": "Socket du CLI : %s",
   "Dashboard API stopped.": "API du dashboard arrêtée.",
@@ -13,5 +11,23 @@
   "Forbidden origin.": "Origine refusée.",
   "Missing or invalid access token.": "Jeton d'accès manquant ou invalide.",
   "Invalid request body: %v": "Corps de requête invalide : %v",
-  "Streaming is not supported.": "Le streaming n'est pas pris en charge."
+  "Streaming is not supported.": "Le streaming n'est pas pris en charge.",
+  "Run, start, stop or check the API of the dashboard.": "Lancer, démarrer, arrêter ou vérifier l'API du dashboard.",
+  "Run, start, stop or check the API of the dashboard.\n\nThe daemon serves it on a Unix socket of the data directory (daemon.sock, for\nthis user only) and on 127.0.0.1:DASHBOARD_PORT, where the access token of\ndaemon.token is required. The actions run one at a time.\n\nExamples:\n    frankenmanager daemon start    # Start it in the background\n    frankenmanager daemon status   # Check whether it runs, and its version\n    frankenmanager daemon stop\n    frankenmanager daemon run      # Run it in the foreground (services)": "Lancer, démarrer, arrêter ou vérifier l'API du dashboard.\n\nLe daemon la sert sur un socket Unix du dossier de données (daemon.sock, pour\ncet utilisateur seulement) et sur 127.0.0.1:DASHBOARD_PORT, où le jeton d'accès\nde daemon.token est obligatoire. Les actions s'exécutent une à la fois.\n\nExemples :\n    frankenmanager daemon start    # Le démarrer en arrière-plan\n    frankenmanager daemon status   # Vérifier s'il tourne, et sa version\n    frankenmanager daemon stop\n    frankenmanager daemon run      # Le lancer au premier plan (services)",
+  "Run the daemon in the foreground, until interrupted.": "Lancer le daemon au premier plan, jusqu'à interruption.",
+  "Start the daemon in the background, or replace one of another version.": "Démarrer le daemon en arrière-plan, ou remplacer celui d'une autre version.",
+  "Stop the daemon.": "Arrêter le daemon.",
+  "Show whether the daemon runs, and its version.": "Indiquer si le daemon tourne, et sa version.",
+  "The daemon is already running: %s": "Le daemon tourne déjà : %s",
+  "Daemon replaced by version %s: %s": "Daemon remplacé par la version %s : %s",
+  "Daemon started: %s": "Daemon démarré : %s",
+  "Daemon stopped.": "Daemon arrêté.",
+  "The daemon is not running.": "Le daemon ne tourne pas.",
+  "The daemon is running (version %s).": "Le daemon tourne (version %s).",
+  "This CLI is version %s: run 'frankenmanager daemon start' to replace it.": "Ce CLI est en version %s : lancez 'frankenmanager daemon start' pour le remplacer.",
+  "Could not stop the daemon of version %s: %v": "Impossible d'arrêter le daemon en version %s : %v",
+  "The daemon failed to start: %v": "Le daemon n'a pas pu démarrer : %v",
+  "The daemon stopped at once: see %s": "Le daemon s'est arrêté aussitôt : voir %s",
+  "The daemon does not answer (%v): see %s": "Le daemon ne répond pas (%v) : voir %s",
+  "The daemon started is version %s, not %s.": "Le daemon démarré est en version %s, pas %s."
 }
