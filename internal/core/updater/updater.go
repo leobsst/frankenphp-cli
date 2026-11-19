@@ -203,10 +203,30 @@ func releaseTuple(v string) ([]int, bool) {
 // versions are never newer. Release segments compare element by element,
 // a shorter one first when it is a prefix: 1.2 < 1.2.0, as in earlier
 // releases.
+//
+// For the same release segment, the final release is newer than its
+// pre-releases (1.2.4 > 1.2.4-rc.1): someone testing a pre-release gets the
+// final one. Development suffixes still compare as their release.
 func Newer(latest, current string) bool {
 	l, ok1 := releaseTuple(latest)
 	c, ok2 := releaseTuple(current)
-	return ok1 && ok2 && slices.Compare(l, c) > 0
+	if !ok1 || !ok2 {
+		return false
+	}
+	if d := slices.Compare(l, c); d != 0 {
+		return d > 0
+	}
+	return isPreRelease(current) && !isPreRelease(latest)
+}
+
+// preReleaseRe matches a version with a pre-release marker after its
+// release segment (1.2.4a, 2.0.0rc1, 0.10.0-rc.1, 1.2.4-beta).
+var preReleaseRe = regexp.MustCompile(`(?i)^\s*v?(?:\d+!)?\d+(?:\.\d+)*[-_.]?(?:alpha|beta|preview|pre|rc|a|b|c)(?:[-_.]?\d*)`)
+
+// isPreRelease reports whether v is a pre-release (a valid version with a
+// pre-release marker).
+func isPreRelease(v string) bool {
+	return releaseRe.MatchString(v) && preReleaseRe.MatchString(v)
 }
 
 // isRelease reports whether the running binary is a release build. A build

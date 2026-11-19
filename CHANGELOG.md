@@ -69,6 +69,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `--check` option to check for updates without installing
   - `--force` option to force reinstall latest version
   - Automatic update notifications on command execution
+  - A final release is newer than its pre-releases (`0.10.0` replaces `0.10.0-rc.1`); pre-releases are never offered to the stable installs
   - Refreshes the static files of the data directory right after installing the new version (as the real user under `sudo`)
   - Works on Windows too, from an Administrator terminal: the running `.exe` is moved aside and removed by the next update
   - Stops a running server before installing and starts it again on the new version (as the real user under `sudo`); a stopped server stays stopped, a failed install restarts the previous version
