@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/leobsst/frankenphp-cli/internal/core/buckets"
+	"github.com/leobsst/frankenphp-cli/internal/core/caserver"
 	"github.com/leobsst/frankenphp-cli/internal/core/domains"
 	"github.com/leobsst/frankenphp-cli/internal/core/env"
 	"github.com/leobsst/frankenphp-cli/internal/core/events"
@@ -24,7 +26,12 @@ type Workspace struct {
 	Stack *stack.Service
 	// Domains returns the hosts service; Running is checked first
 	Domains func() *domains.Service
-	Close   func() error
+	// Buckets returns the S3 service, an error when S3 is disabled or does
+	// not answer
+	Buckets func(ctx context.Context) (*buckets.Service, error)
+	// CA shares the root CA on the LAN
+	CA    caserver.Sharing
+	Close func() error
 }
 
 // Running reports whether the stack runs.
@@ -39,30 +46,55 @@ type Backend func(log events.Log) (*Workspace, error)
 // errNotRunning is the error of the actions that need the stack running.
 var errNotRunning = i18n.NewError("The server is not running.")
 
+// route is an endpoint of the API: "METHOD /path" and its handler.
+type route struct {
+	pattern string
+	handler http.HandlerFunc
+}
+
+// routeTable lists the endpoints, as api/openapi.yaml describes them.
+func (s *Server) routeTable() []route {
+	return []route{
+		{"GET /api/health", s.health},
+		{"GET /api/status", s.status},
+		{"GET /api/events", s.events},
+		{"GET /api/operations", s.operations},
+		{"GET /api/operations/{id}", s.operation},
+		{"POST /api/stack/start", s.startStack},
+		{"POST /api/stack/stop", s.stopStack},
+		{"POST /api/stack/restart", s.restartStack},
+		{"POST /api/hosts", s.addHosts},
+		{"DELETE /api/hosts/{name}", s.removeHost},
+		{"POST /api/hosts/{name}/aliases", s.addAliases},
+		{"PUT /api/hosts/{name}/php", s.switchPHP},
+		{"POST /api/hosts/restore", s.restoreHosts},
+		{"GET /api/services", s.services},
+		{"PUT /api/services/{name}", s.setService},
+		{"GET /api/settings", s.settings},
+		{"PUT /api/settings/{key}", s.setSetting},
+		{"GET /api/hosts/archived", s.archivedHosts},
+		{"GET /api/dns/clients", s.dnsClients},
+		{"GET /api/ca", s.caStatus},
+		{"PUT /api/ca", s.setCA},
+		{"GET /api/s3", s.s3Info},
+		{"GET /api/s3/buckets", s.listBuckets},
+		{"POST /api/s3/buckets", s.createBuckets},
+		{"DELETE /api/s3/buckets/{name}", s.deleteBucket},
+		{"POST /api/s3/buckets/{name}/empty", s.emptyBucket},
+		{"PUT /api/s3/buckets/{name}/public", s.setBucketPublic},
+		{"GET /api/s3/keys", s.listKeys},
+		{"POST /api/s3/keys", s.createKey},
+		{"GET /api/s3/keys/{id}", s.showKey},
+		{"DELETE /api/s3/keys/{id}", s.deleteKey},
+	}
+}
+
 // routes returns the API.
 func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/health", s.health)
-	mux.HandleFunc("GET /api/status", s.status)
-	mux.HandleFunc("GET /api/events", s.events)
-	mux.HandleFunc("GET /api/operations", s.operations)
-	mux.HandleFunc("GET /api/operations/{id}", s.operation)
-
-	mux.HandleFunc("POST /api/stack/start", s.startStack)
-	mux.HandleFunc("POST /api/stack/stop", s.stopStack)
-	mux.HandleFunc("POST /api/stack/restart", s.restartStack)
-
-	mux.HandleFunc("POST /api/hosts", s.addHosts)
-	mux.HandleFunc("DELETE /api/hosts/{name}", s.removeHost)
-	mux.HandleFunc("POST /api/hosts/{name}/aliases", s.addAliases)
-	mux.HandleFunc("PUT /api/hosts/{name}/php", s.switchPHP)
-	mux.HandleFunc("POST /api/hosts/restore", s.restoreHosts)
-
-	mux.HandleFunc("GET /api/services", s.services)
-	mux.HandleFunc("PUT /api/services/{name}", s.setService)
-
-	mux.HandleFunc("GET /api/settings", s.settings)
-	mux.HandleFunc("PUT /api/settings/{key}", s.setSetting)
+	for _, r := range s.routeTable() {
+		mux.HandleFunc(r.pattern, r.handler)
+	}
 	return mux
 }
 
@@ -225,17 +257,27 @@ type Setting struct {
 	Values      []string `json:"values,omitempty"`
 	Custom      bool     `json:"custom"`
 	Secret      bool     `json:"secret"`
-	// Applies tells how a change applies, Hint the command that applies it
+	// Apply tells how a change applies (see applyNames), Applies is its
+	// label in the language of the daemon, Hint the command that applies it
+	Apply   string `json:"apply"`
 	Applies string `json:"applies"`
 	Hint    string `json:"hint,omitempty"`
 }
 
-func (s *Server) settings(w http.ResponseWriter, _ *http.Request) {
+// applyNames are the stable names of how a setting change applies.
+var applyNames = map[env.Apply]string{
+	env.ApplyNow: "now", env.ApplyLive: "live", env.ApplyAlias: "alias", env.ApplyRecreate: "recreate",
+	env.ApplyRebuild: "rebuild", env.ApplyRestartDNS: "restart_dns", env.ApplyRestartDB: "restart_db",
+}
+
+func (s *Server) settings(w http.ResponseWriter, r *http.Request) {
+	showSecrets := r.URL.Query().Get("show_secrets") == "true"
 	s.read(w, func(ws *Workspace) (any, error) {
 		out := []Setting{}
-		for _, e := range settings.List(ws.Env, false) {
+		for _, e := range settings.List(ws.Env, showSecrets) {
 			out = append(out, Setting{Key: e.Key, Value: e.Value, Default: e.Default, Description: e.Description,
-				Values: e.Values, Custom: e.Custom, Secret: e.Secret, Applies: e.Apply.Label(), Hint: e.Apply.Hint()})
+				Values: e.Values, Custom: e.Custom, Secret: e.Secret, Apply: applyNames[e.Apply], Applies: e.Apply.Label(),
+				Hint: e.Apply.Hint()})
 		}
 		return out, nil
 	})

@@ -13,6 +13,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/leobsst/frankenphp-cli/internal/core/buckets"
 	"github.com/leobsst/frankenphp-cli/internal/core/docker"
 	"github.com/leobsst/frankenphp-cli/internal/core/domains"
 	"github.com/leobsst/frankenphp-cli/internal/core/env"
@@ -133,6 +134,14 @@ func (a *app) workspace(dir string, log events.Log) (*daemon.Workspace, error) {
 			return &domains.Service{Dir: dir, CaddyDir: caddyDir, Env: e, Store: s, Docker: d, Hosts: h,
 				Certs: func() (domains.Certs, error) { return certs(e.CertsDir(dir)) }, Log: log}
 		},
+		Buckets: func(ctx context.Context) (*buckets.Service, error) {
+			g, err := buckets.Open(ctx, e)
+			if err != nil {
+				return nil, err
+			}
+			return &buckets.Service{Dir: dir, Env: e, Store: s, Hosts: h, Garage: g, Log: log}, nil
+		},
+		CA:    a.caSharing(dir),
 		Close: s.Close,
 	}, nil
 }
