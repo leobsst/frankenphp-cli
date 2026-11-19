@@ -61,7 +61,7 @@ services:
     volumes:
       - ${CUSTOM_PATH}:/${CUSTOM_PATH}
       - ${CADDY_DIR:-${PWD}/caddy}/Caddyfile.worker:/etc/caddy/Caddyfile
-      - ${CADDY_DIR:-${PWD}/caddy}/sites/php-8.4:/etc/caddy/sites/custom
+      - ${CADDY_DIR:-${PWD}/caddy}/sites/php-8.4:/etc/caddy/sites
       - ${CADDY_DIR:-${PWD}/caddy}/certs:/certs
       - ${CADDY_DIR:-${PWD}/caddy}/log:/var/log
       - ${PWD}/php/8.4/php.ini:/usr/local/etc/php/php.ini

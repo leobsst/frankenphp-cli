@@ -422,7 +422,7 @@ func phpService(version string, o Options) []string {
 		"    volumes:",
 		"      - ${CUSTOM_PATH}:/${CUSTOM_PATH}",
 		"      - "+caddy+"/Caddyfile.worker:/etc/caddy/Caddyfile",
-		"      - "+caddy+"/sites/php-"+version+":/etc/caddy/sites/custom",
+		"      - "+caddy+"/sites/php-"+version+":/etc/caddy/sites",
 		"      - "+caddy+"/certs:/certs",
 		"      - "+caddy+"/log:/var/log",
 		"      - "+iniDir+"/php.ini:/usr/local/etc/php/php.ini",

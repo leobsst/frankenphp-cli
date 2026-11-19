@@ -7,4 +7,4 @@
 	order php_server before file_server
 }
 
-import /etc/caddy/sites/custom/*
+import /etc/caddy/sites/*

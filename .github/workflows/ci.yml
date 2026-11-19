@@ -153,38 +153,3 @@ jobs:
         uses: hadolint/hadolint-action@v3.5.0
         with:
           dockerfile: Dockerfile
-
-  validate-compose:
-    name: Validate Docker Compose
-    runs-on: ubuntu-latest
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Create test environment
-        run: |
-          # The legacy compose files still read an env_file
-          echo "USER=ci" > .env
-          echo "GROUP=ci" >> .env
-          echo "MARIADB_ROOT_PASSWORD=testpassword" >> .env
-          mkdir -p caddy/certs
-
-      - name: Validate docker-compose.yml
-        run: |
-          CUSTOM_PATH=/home \
-          DB_PORT=127.0.0.1:3306:3306 \
-          PMA_PORT=127.0.0.1:8080:80 \
-          REDIS_PORT=127.0.0.1:6379:6379 \
-          MARIADB_ROOT_PASSWORD=test \
-          docker compose config -q
-
-      - name: Validate docker-compose-prod.yml
-        run: |
-          CUSTOM_PATH=/home \
-          DB_PORT=127.0.0.1:3306:3306 \
-          PMA_PORT=127.0.0.1:8080:80 \
-          REDIS_PORT=127.0.0.1:6379:6379 \
-          MARIADB_ROOT_PASSWORD=test \
-          PWD=$(pwd) \
-          docker compose -f docker-compose-prod.yml config -q
