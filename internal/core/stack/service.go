@@ -253,14 +253,14 @@ func RemoveS3Hosts(ctx context.Context, h *hosts.Manager, s *store.Store) {
 type StartOptions struct {
 	// Domains are added to the registered ones with PHP; nil starts the
 	// registered domains only
-	Domains []string
+	Domains []string `json:"domains"`
 	// Path is the projects root, "" for DEFAULT_PROJECT_PATH
-	Path string
+	Path string `json:"path,omitempty"`
 	// PHP is the version of the new domains, "" for DEFAULT_PHP_VERSION
-	PHP      string
-	ForceSSL bool
+	PHP      string `json:"php,omitempty"`
+	ForceSSL bool   `json:"force_ssl,omitempty"`
 	// Build rebuilds the PHP images even when up to date
-	Build bool
+	Build bool `json:"build,omitempty"`
 }
 
 // StartResult is what Start brought up.

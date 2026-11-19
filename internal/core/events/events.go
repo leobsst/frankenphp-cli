@@ -3,6 +3,8 @@
 // a daemon can stream them to its clients.
 package events
 
+import "io"
+
 // Level is the severity of an event.
 type Level uint8
 
@@ -26,6 +28,8 @@ const (
 	// Break separates two parts of the output: the console prints a blank
 	// line, the other clients may ignore it.
 	Break
+	// Output is raw output of a program (docker build), printed as is.
+	Output
 )
 
 // Event is one thing a service reports.
@@ -87,6 +91,16 @@ func (l Log) Step(msg string) { l.emit(Step, Info, msg) }
 
 // Break separates two parts of the output.
 func (l Log) Break() { l.emit(Break, Info, "") }
+
+// Writer returns a writer reporting what it receives as Output events.
+func (l Log) Writer() io.Writer { return outputWriter{l} }
+
+type outputWriter struct{ l Log }
+
+func (w outputWriter) Write(p []byte) (int, error) {
+	w.l.emit(Output, Info, string(p))
+	return len(p), nil
+}
 
 // ReportedError is the failure of an operation whose error and cleanup
 // were already reported as events: the caller must not print it again.

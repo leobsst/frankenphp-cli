@@ -12,7 +12,8 @@ info:
       `<data dir>/daemon.token` is required.
 
     The actions that change the shared state (database, Caddyfiles, hosts file,
-    Docker) are operations: the request answers `202` with the operation, queued.
+    Docker) are operations; with `?verbose=true`, the image builds stream their
+    output as events: the request answers `202` with the operation, queued.
     The operations run one at a time; follow them on `/api/events` or
     `/api/operations/{id}`. Their `result` is described with each action.
 
@@ -173,18 +174,22 @@ paths:
         "202": { $ref: "#/components/responses/Queued" }
         "400": { $ref: "#/components/responses/Error" }
 
-  /api/hosts/{name}:
-    delete:
+  /api/hosts/remove:
+    post:
       tags: [hosts]
-      summary: Remove a host (stack running)
+      summary: Remove hosts (stack running)
       description: |
         Operation `hosts.remove`, result `RemoveResult`. The site files of a PHP
         domain or static host are archived; the aliases of a removed host are
         removed too.
-      parameters:
-        - { name: name, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HostsRequest" }
       responses:
         "202": { $ref: "#/components/responses/Queued" }
+        "400": { $ref: "#/components/responses/Error" }
 
   /api/hosts/{name}/aliases:
     post:
@@ -417,44 +422,47 @@ paths:
         "202": { $ref: "#/components/responses/Queued" }
         "400": { $ref: "#/components/responses/Error" }
 
-  /api/s3/buckets/{name}:
-    delete:
-      tags: [s3]
-      summary: Delete a bucket and its own keys
-      description: "Operation `s3.buckets.delete`, no result. A bucket with objects needs `force`."
-      parameters:
-        - { name: name, in: path, required: true, schema: { type: string } }
-        - name: force
-          in: query
-          description: Empty the bucket first.
-          schema: { type: boolean, default: false }
-      responses:
-        "202": { $ref: "#/components/responses/Queued" }
-
-  /api/s3/buckets/{name}/empty:
+  /api/s3/buckets/delete:
     post:
       tags: [s3]
-      summary: Delete every object of a bucket
-      description: "Operation `s3.buckets.empty`, no result. Confirm before calling."
-      parameters:
-        - { name: name, in: path, required: true, schema: { type: string } }
-      responses:
-        "202": { $ref: "#/components/responses/Queued" }
-
-  /api/s3/buckets/{name}/public:
-    put:
-      tags: [s3]
-      summary: Make a bucket public or private
-      description: "Operation `s3.buckets.public`, no result. Public: every object is readable without credentials."
-      parameters:
-        - { name: name, in: path, required: true, schema: { type: string } }
+      summary: Delete buckets and their own keys
+      description: "Operation `s3.buckets.delete`, no result. A bucket with objects needs `force`: none is deleted otherwise."
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/PublicRequest" }
+            schema: { $ref: "#/components/schemas/BucketsRequest" }
       responses:
         "202": { $ref: "#/components/responses/Queued" }
+        "400": { $ref: "#/components/responses/Error" }
+
+  /api/s3/buckets/empty:
+    post:
+      tags: [s3]
+      summary: Delete every object of buckets
+      description: "Operation `s3.buckets.empty`, no result. Confirm before calling."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BucketsRequest" }
+      responses:
+        "202": { $ref: "#/components/responses/Queued" }
+        "400": { $ref: "#/components/responses/Error" }
+
+  /api/s3/buckets/public:
+    post:
+      tags: [s3]
+      summary: Make buckets public or private
+      description: "Operation `s3.buckets.public`, no result. Public: every object is readable without credentials."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BucketsRequest" }
+      responses:
+        "202": { $ref: "#/components/responses/Queued" }
+        "400": { $ref: "#/components/responses/Error" }
 
   /api/s3/keys:
     get:
@@ -499,14 +507,26 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/AccessKey" }
         "500": { $ref: "#/components/responses/Error" }
-    delete:
+
+  /api/s3/keys/delete:
+    post:
       tags: [s3]
-      summary: Delete an access key (not the global one)
-      description: "Operation `s3.keys.delete`, no result."
-      parameters:
-        - { name: id, in: path, required: true, schema: { type: string } }
+      summary: Delete access keys
+      description: "Operation `s3.keys.delete`, no result. None is deleted when one of them is the global key."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ids]
+              properties:
+                ids:
+                  type: array
+                  items: { type: string }
       responses:
         "202": { $ref: "#/components/responses/Queued" }
+        "400": { $ref: "#/components/responses/Error" }
 
 components:
   securitySchemes:
@@ -562,6 +582,7 @@ components:
           type: string
           enum: [queued, running, succeeded, failed]
         error: { type: string, description: The error of a failed operation. }
+        reported: { type: boolean, description: The events already report the error and its cleanup. }
         result:
           description: The result of a succeeded operation; its schema depends on `kind`.
         events:
@@ -578,8 +599,10 @@ components:
         operation: { type: string }
         kind:
           type: string
-          enum: [message, step, break]
-          description: A step starts a stage of the operation; a break separates two parts of the output.
+          enum: [message, step, break, output]
+          description: |
+            A step starts a stage of the operation; a break separates two parts of the
+            output; an output is raw output of a program (image build), printed as is.
         level:
           type: string
           enum: [info, success, warning, error]
@@ -781,6 +804,14 @@ components:
         php: { type: string, description: Empty for DEFAULT_PHP_VERSION, not the original version. }
         force_ssl: { type: boolean }
 
+    HostsRequest:
+      type: object
+      required: [domains]
+      properties:
+        domains:
+          type: array
+          items: { type: string }
+
     ArchivedHost:
       type: object
       required: [domain]
@@ -832,13 +863,15 @@ components:
 
     SettingResult:
       type: object
-      required: [key, value, changed, applied]
+      required: [key, value, changed]
       properties:
         key: { type: string }
         value: { type: string }
         changed: { type: boolean }
-        applied: { type: boolean, description: Already applied (optional services). }
-        hint: { type: string, description: How to apply it otherwise. }
+        service:
+          $ref: "#/components/schemas/OptionalResult"
+          description: What happened to the optional service of the setting, applied at once.
+        hint: { type: string, description: How to apply the change otherwise. }
 
     DNSState:
       type: object
@@ -925,11 +958,15 @@ components:
           type: array
           items: { type: string }
 
-    PublicRequest:
+    BucketsRequest:
       type: object
-      required: [public]
+      required: [names]
       properties:
-        public: { type: boolean }
+        names:
+          type: array
+          items: { type: string }
+        force: { type: boolean, description: "delete: empty the buckets with objects first." }
+        public: { type: boolean, description: "public: make them public, or private." }
 
     Grant:
       type: object

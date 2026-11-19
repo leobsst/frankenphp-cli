@@ -43,6 +43,10 @@ func New(backend Backend, token string, port int, version string) *Server {
 	return &Server{Backend: backend, Token: token, Port: port, Version: version, Queue: NewQueue(bus), Bus: bus}
 }
 
+// Handler is the API without the guard of the HTTP access: what the socket
+// serves.
+func (s *Server) Handler() http.Handler { return s.routes() }
+
 // Serve runs the queue and serves the API on the socket listener (CLI, no
 // token) and the HTTP one (dashboard, token and headers checked) until ctx
 // is done. Either listener may be nil.

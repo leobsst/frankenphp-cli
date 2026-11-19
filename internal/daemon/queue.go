@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"sync"
@@ -24,24 +25,45 @@ const (
 // Event is an event of an operation, as the clients receive it.
 type Event struct {
 	Operation string    `json:"operation"`
-	Kind      string    `json:"kind"`  // message, step or break
+	Kind      string    `json:"kind"`  // message, step, break or output
 	Level     string    `json:"level"` // info, success, warning or error
 	Message   string    `json:"message,omitempty"`
 	Time      time.Time `json:"time"`
 }
 
-var kindNames = map[events.Kind]string{events.Message: "message", events.Step: "step", events.Break: "break"}
+var kindNames = map[events.Kind]string{events.Message: "message", events.Step: "step", events.Break: "break",
+	events.Output: "output"}
 
 var levelNames = map[events.Level]string{
 	events.Info: "info", events.Success: "success", events.Warning: "warning", events.Error: "error",
 }
 
+// Core returns e as the services reported it, for a client that prints it
+// like they do.
+func (e Event) Core() events.Event {
+	out := events.Event{Message: e.Message}
+	for k, name := range kindNames {
+		if name == e.Kind {
+			out.Kind = k
+		}
+	}
+	for l, name := range levelNames {
+		if name == e.Level {
+			out.Level = l
+		}
+	}
+	return out
+}
+
 // Operation is an action run by the queue.
 type Operation struct {
-	ID       string     `json:"id"`
-	Kind     string     `json:"kind"` // e.g. "hosts.add"
-	Status   Status     `json:"status"`
-	Error    string     `json:"error,omitempty"`
+	ID     string `json:"id"`
+	Kind   string `json:"kind"` // e.g. "hosts.add"
+	Status Status `json:"status"`
+	Error  string `json:"error,omitempty"`
+	// Reported tells that the events already report the error (and its
+	// cleanup): a client prints them, not the error again
+	Reported bool       `json:"reported,omitempty"`
 	Result   any        `json:"result,omitempty"`
 	Events   []Event    `json:"events"`
 	Created  time.Time  `json:"created"`
@@ -165,7 +187,8 @@ func (q *Queue) run(ctx context.Context, j queued) {
 		t := q.now()
 		op.Finished = &t
 		if err != nil {
-			op.Status, op.Error = Failed, err.Error()
+			var reported *events.ReportedError
+			op.Status, op.Error, op.Reported = Failed, err.Error(), errors.As(err, &reported)
 			return
 		}
 		op.Status, op.Result = Succeeded, result

@@ -82,16 +82,16 @@ func (s *Server) dnsState(w http.ResponseWriter, r *http.Request) {
 
 // applyDNS serves when DNS_SERVER=true, stops otherwise, reading the DNS_*
 // settings again.
-func (s *Server) applyDNS(w http.ResponseWriter, _ *http.Request) {
-	s.submit(w, "dns.apply", func(ctx context.Context, ws *Workspace) (any, error) {
+func (s *Server) applyDNS(w http.ResponseWriter, r *http.Request) {
+	s.submit(w, r, "dns.apply", func(ctx context.Context, ws *Workspace) (any, error) {
 		running, err := ws.Stack.DNS.Apply(ctx)
 		return DNSState{Enabled: dns.Enabled(ws.Env), Running: running}, err
 	})
 }
 
 // stopDNS stops serving until the next start or apply.
-func (s *Server) stopDNS(w http.ResponseWriter, _ *http.Request) {
-	s.submit(w, "dns.stop", func(ctx context.Context, ws *Workspace) (any, error) {
+func (s *Server) stopDNS(w http.ResponseWriter, r *http.Request) {
+	s.submit(w, r, "dns.stop", func(ctx context.Context, ws *Workspace) (any, error) {
 		ws.Stack.DNS.Stop(ctx)
 		return DNSState{Enabled: dns.Enabled(ws.Env)}, nil
 	})
@@ -127,7 +127,7 @@ func (s *Server) setCA(w http.ResponseWriter, r *http.Request) {
 	if req.Port == 0 {
 		req.Port = caserver.DefaultPort
 	}
-	s.submit(w, "ca.set", func(ctx context.Context, ws *Workspace) (any, error) {
+	s.submit(w, r, "ca.set", func(ctx context.Context, ws *Workspace) (any, error) {
 		if !req.Enabled {
 			return caResponse{}, ws.CA.Off()
 		}
@@ -171,8 +171,8 @@ func (s *Server) readS3(w http.ResponseWriter, r *http.Request, fn func(svc *buc
 }
 
 // submitS3 queues an operation on the S3 service.
-func (s *Server) submitS3(w http.ResponseWriter, kind string, fn func(ctx context.Context, svc *buckets.Service) (any, error)) {
-	s.submit(w, kind, func(ctx context.Context, ws *Workspace) (any, error) {
+func (s *Server) submitS3(w http.ResponseWriter, r *http.Request, kind string, fn func(ctx context.Context, svc *buckets.Service) (any, error)) {
+	s.submit(w, r, kind, func(ctx context.Context, ws *Workspace) (any, error) {
 		svc, err := ws.Buckets(ctx)
 		if err != nil {
 			return nil, err
@@ -233,7 +233,7 @@ func (s *Server) createBuckets(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	s.submitS3(w, "s3.buckets.create", func(ctx context.Context, svc *buckets.Service) (any, error) {
+	s.submitS3(w, r, "s3.buckets.create", func(ctx context.Context, svc *buckets.Service) (any, error) {
 		created, err := svc.Create(ctx, req.Names, req.Public)
 		if created == nil {
 			created = []string{}
@@ -242,36 +242,58 @@ func (s *Server) createBuckets(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// deleteBucket deletes a bucket and its keys; ?force=true empties it first.
-func (s *Server) deleteBucket(w http.ResponseWriter, r *http.Request) {
-	name, force := r.PathValue("name"), r.URL.Query().Get("force") == "true"
-	s.submitS3(w, "s3.buckets.delete", func(ctx context.Context, svc *buckets.Service) (any, error) {
-		return nil, svc.Delete(ctx, []string{name}, force)
-	})
-}
-
-func (s *Server) emptyBucket(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	s.submitS3(w, "s3.buckets.empty", func(ctx context.Context, svc *buckets.Service) (any, error) {
-		if err := svc.Check(ctx, []string{name}); err != nil {
-			return nil, err
-		}
-		return nil, svc.Empty(ctx, []string{name})
-	})
-}
-
-type publicRequest struct {
+// bucketsRequest is a request on several buckets.
+type bucketsRequest struct {
+	Names []string `json:"names"`
+	// Force empties non-empty buckets before deleting them
+	Force bool `json:"force"`
+	// Public makes the buckets public, or private
 	Public bool `json:"public"`
 }
 
-func (s *Server) setBucketPublic(w http.ResponseWriter, r *http.Request) {
-	var req publicRequest
+func (s *Server) readBuckets(w http.ResponseWriter, r *http.Request) (bucketsRequest, bool) {
+	var req bucketsRequest
 	if !readJSON(w, r, &req) {
+		return req, false
+	}
+	if len(req.Names) == 0 {
+		writeError(w, http.StatusBadRequest, i18n.Tf("Missing field '%s'.", "names"))
+		return req, false
+	}
+	return req, true
+}
+
+// deleteBuckets deletes buckets and their keys; force empties them first.
+func (s *Server) deleteBuckets(w http.ResponseWriter, r *http.Request) {
+	req, ok := s.readBuckets(w, r)
+	if !ok {
 		return
 	}
-	name := r.PathValue("name")
-	s.submitS3(w, "s3.buckets.public", func(ctx context.Context, svc *buckets.Service) (any, error) {
-		return nil, svc.SetPublic(ctx, []string{name}, req.Public)
+	s.submitS3(w, r, "s3.buckets.delete", func(ctx context.Context, svc *buckets.Service) (any, error) {
+		return nil, svc.Delete(ctx, req.Names, req.Force)
+	})
+}
+
+func (s *Server) emptyBuckets(w http.ResponseWriter, r *http.Request) {
+	req, ok := s.readBuckets(w, r)
+	if !ok {
+		return
+	}
+	s.submitS3(w, r, "s3.buckets.empty", func(ctx context.Context, svc *buckets.Service) (any, error) {
+		if err := svc.Check(ctx, req.Names); err != nil {
+			return nil, err
+		}
+		return nil, svc.Empty(ctx, req.Names)
+	})
+}
+
+func (s *Server) setBucketsPublic(w http.ResponseWriter, r *http.Request) {
+	req, ok := s.readBuckets(w, r)
+	if !ok {
+		return
+	}
+	s.submitS3(w, r, "s3.buckets.public", func(ctx context.Context, svc *buckets.Service) (any, error) {
+		return nil, svc.SetPublic(ctx, req.Names, req.Public)
 	})
 }
 
@@ -334,7 +356,7 @@ func (s *Server) createKey(w http.ResponseWriter, r *http.Request) {
 	if req.Name == "" {
 		req.Name = "app"
 	}
-	s.submitS3(w, "s3.keys.create", func(ctx context.Context, svc *buckets.Service) (any, error) {
+	s.submitS3(w, r, "s3.keys.create", func(ctx context.Context, svc *buckets.Service) (any, error) {
 		k, err := svc.CreateKey(ctx, req.Bucket, req.Name, req.ReadOnly)
 		if err != nil {
 			return nil, err
@@ -354,9 +376,21 @@ func (s *Server) showKey(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) deleteKey(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	s.submitS3(w, "s3.keys.delete", func(ctx context.Context, svc *buckets.Service) (any, error) {
-		return nil, svc.DeleteKeys(ctx, []string{id})
+type keysRequest struct {
+	IDs []string `json:"ids"`
+}
+
+// deleteKeys deletes access keys, none when one of them is the global key.
+func (s *Server) deleteKeys(w http.ResponseWriter, r *http.Request) {
+	var req keysRequest
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if len(req.IDs) == 0 {
+		writeError(w, http.StatusBadRequest, i18n.Tf("Missing field '%s'.", "ids"))
+		return
+	}
+	s.submitS3(w, r, "s3.keys.delete", func(ctx context.Context, svc *buckets.Service) (any, error) {
+		return nil, svc.DeleteKeys(ctx, req.IDs)
 	})
 }

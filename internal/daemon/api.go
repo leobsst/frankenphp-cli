@@ -43,8 +43,12 @@ func (ws *Workspace) Running(ctx context.Context) (bool, error) {
 // the same dependencies as its commands.
 type Backend func(log events.Log) (*Workspace, error)
 
-// errNotRunning is the error of the actions that need the stack running.
-var errNotRunning = i18n.NewError("The server is not running.")
+// The errors of the actions that need the stack running: those that add
+// hosts point to start.
+var (
+	errNotRunning      = i18n.NewError("The server is not running.")
+	errNotRunningStart = i18n.NewError("The server is not running. Use 'start' command instead.")
+)
 
 // route is an endpoint of the API: "METHOD /path" and its handler.
 type route struct {
@@ -65,7 +69,7 @@ func (s *Server) routeTable() []route {
 		{"POST /api/stack/stop", s.stopStack},
 		{"POST /api/stack/restart", s.restartStack},
 		{"POST /api/hosts", s.addHosts},
-		{"DELETE /api/hosts/{name}", s.removeHost},
+		{"POST /api/hosts/remove", s.removeHosts},
 		{"POST /api/hosts/{name}/aliases", s.addAliases},
 		{"PUT /api/hosts/{name}/php", s.switchPHP},
 		{"POST /api/hosts/restore", s.restoreHosts},
@@ -83,13 +87,13 @@ func (s *Server) routeTable() []route {
 		{"GET /api/s3", s.s3Info},
 		{"GET /api/s3/buckets", s.listBuckets},
 		{"POST /api/s3/buckets", s.createBuckets},
-		{"DELETE /api/s3/buckets/{name}", s.deleteBucket},
-		{"POST /api/s3/buckets/{name}/empty", s.emptyBucket},
-		{"PUT /api/s3/buckets/{name}/public", s.setBucketPublic},
+		{"POST /api/s3/buckets/delete", s.deleteBuckets},
+		{"POST /api/s3/buckets/empty", s.emptyBuckets},
+		{"POST /api/s3/buckets/public", s.setBucketsPublic},
 		{"GET /api/s3/keys", s.listKeys},
 		{"POST /api/s3/keys", s.createKey},
 		{"GET /api/s3/keys/{id}", s.showKey},
-		{"DELETE /api/s3/keys/{id}", s.deleteKey},
+		{"POST /api/s3/keys/delete", s.deleteKeys},
 	}
 }
 
@@ -121,26 +125,34 @@ func (s *Server) read(w http.ResponseWriter, fn func(ws *Workspace) (any, error)
 
 // submit queues an operation working on a workspace opened for it, and
 // answers 202 with the operation.
-func (s *Server) submit(w http.ResponseWriter, kind string, fn func(ctx context.Context, ws *Workspace) (any, error)) {
+//
+// With ?verbose=true, the output of the image builds streams as events.
+func (s *Server) submit(w http.ResponseWriter, r *http.Request, kind string,
+	fn func(ctx context.Context, ws *Workspace) (any, error)) {
+	verbose := r.URL.Query().Get("verbose") == "true"
 	op := s.Queue.Submit(kind, func(ctx context.Context, log events.Log) (any, error) {
 		ws, err := s.Backend(log)
 		if err != nil {
 			return nil, err
 		}
 		defer func() { _ = ws.Close() }()
+		if verbose {
+			ws.Stack.Docker.BuildOutput = log.Writer()
+		}
 		return fn(ctx, ws)
 	})
 	writeJSON(w, http.StatusAccepted, op)
 }
 
-// running returns the hosts service once checked that the stack runs.
-func running(ctx context.Context, ws *Workspace) (*domains.Service, error) {
+// running returns the hosts service once checked that the stack runs,
+// notRunning otherwise.
+func running(ctx context.Context, ws *Workspace, notRunning error) (*domains.Service, error) {
 	ok, err := ws.Running(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if !ok {
-		return nil, errNotRunning
+		return nil, notRunning
 	}
 	return ws.Domains(), nil
 }
@@ -312,14 +324,14 @@ func (s *Server) startStack(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &req) {
 		return
 	}
-	s.submit(w, "stack.start", func(ctx context.Context, ws *Workspace) (any, error) {
+	s.submit(w, r, "stack.start", func(ctx context.Context, ws *Workspace) (any, error) {
 		return ws.Stack.Start(ctx, stack.StartOptions{Domains: req.Domains, Path: req.Path, PHP: req.PHP,
 			ForceSSL: req.ForceSSL, Build: req.Build})
 	})
 }
 
-func (s *Server) stopStack(w http.ResponseWriter, _ *http.Request) {
-	s.submit(w, "stack.stop", func(ctx context.Context, ws *Workspace) (any, error) {
+func (s *Server) stopStack(w http.ResponseWriter, r *http.Request) {
+	s.submit(w, r, "stack.stop", func(ctx context.Context, ws *Workspace) (any, error) {
 		return nil, ws.Stack.Stop(ctx)
 	})
 }
@@ -348,7 +360,7 @@ func (s *Server) restartStack(w http.ResponseWriter, r *http.Request) {
 			targets = append(targets, t)
 		}
 	}
-	s.submit(w, "stack.restart", func(ctx context.Context, ws *Workspace) (any, error) {
+	s.submit(w, r, "stack.restart", func(ctx context.Context, ws *Workspace) (any, error) {
 		return nil, ws.Stack.Restart(ctx, targets, req.ForceSSL, req.Build)
 	})
 }
@@ -382,8 +394,8 @@ func (s *Server) addHosts(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, i18n.Tf("Option '%s' requires '%s'.", "spa", "static"))
 		return
 	}
-	s.submit(w, "hosts.add", func(ctx context.Context, ws *Workspace) (any, error) {
-		svc, err := running(ctx, ws)
+	s.submit(w, r, "hosts.add", func(ctx context.Context, ws *Workspace) (any, error) {
+		svc, err := running(ctx, ws, errNotRunningStart)
 		if err != nil {
 			return nil, err
 		}
@@ -397,15 +409,33 @@ func (s *Server) addHosts(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) removeHost(w http.ResponseWriter, r *http.Request) {
-	name := r.PathValue("name")
-	s.submit(w, "hosts.remove", func(ctx context.Context, ws *Workspace) (any, error) {
-		svc, err := running(ctx, ws)
+// removeHosts removes hosts: domains, aliases, proxy and static hosts.
+func (s *Server) removeHosts(w http.ResponseWriter, r *http.Request) {
+	var req namesRequest
+	if !readJSON(w, r, &req) || !req.check(w, "domains") {
+		return
+	}
+	s.submit(w, r, "hosts.remove", func(ctx context.Context, ws *Workspace) (any, error) {
+		svc, err := running(ctx, ws, errNotRunning)
 		if err != nil {
 			return nil, err
 		}
-		return svc.Remove(ctx, []string{name})
+		return svc.Remove(ctx, req.Domains)
 	})
+}
+
+// namesRequest is a request on several hosts.
+type namesRequest struct {
+	Domains []string `json:"domains"`
+}
+
+// check answers 400 when no name is given.
+func (req namesRequest) check(w http.ResponseWriter, field string) bool {
+	if len(req.Domains) == 0 {
+		writeError(w, http.StatusBadRequest, i18n.Tf("Missing field '%s'.", field))
+		return false
+	}
+	return true
 }
 
 type aliasesRequest struct {
@@ -423,8 +453,8 @@ func (s *Server) addAliases(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	target := r.PathValue("name")
-	s.submit(w, "hosts.alias", func(ctx context.Context, ws *Workspace) (any, error) {
-		svc, err := running(ctx, ws)
+	s.submit(w, r, "hosts.alias", func(ctx context.Context, ws *Workspace) (any, error) {
+		svc, err := running(ctx, ws, errNotRunningStart)
 		if err != nil {
 			return nil, err
 		}
@@ -442,12 +472,12 @@ func (s *Server) switchPHP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	domain := r.PathValue("name")
-	s.submit(w, "hosts.php", func(ctx context.Context, ws *Workspace) (any, error) {
+	s.submit(w, r, "hosts.php", func(ctx context.Context, ws *Workspace) (any, error) {
 		php, err := stack.ResolvePHP(req.PHP, ws.Env, ws.Stack.Log)
 		if err != nil {
 			return nil, err
 		}
-		svc, err := running(ctx, ws)
+		svc, err := running(ctx, ws, errNotRunning)
 		if err != nil {
 			return nil, err
 		}
@@ -470,12 +500,12 @@ func (s *Server) restoreHosts(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, i18n.Tf("Missing field '%s'.", "domains"))
 		return
 	}
-	s.submit(w, "hosts.restore", func(ctx context.Context, ws *Workspace) (any, error) {
+	s.submit(w, r, "hosts.restore", func(ctx context.Context, ws *Workspace) (any, error) {
 		php, err := stack.ResolvePHP(req.PHP, ws.Env, ws.Stack.Log)
 		if err != nil {
 			return nil, err
 		}
-		svc, err := running(ctx, ws)
+		svc, err := running(ctx, ws, errNotRunningStart)
 		if err != nil {
 			return nil, err
 		}
@@ -497,7 +527,7 @@ func (s *Server) setService(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, i18n.Tf("Unknown service '%s'. Use %s.", name, strings.Join(stack.OptionalServices, ", ")))
 		return
 	}
-	s.submit(w, "services.set", func(ctx context.Context, ws *Workspace) (any, error) {
+	s.submit(w, r, "services.set", func(ctx context.Context, ws *Workspace) (any, error) {
 		return ws.Stack.SetOptional(ctx, name, req.Enabled)
 	})
 }
@@ -512,10 +542,10 @@ type settingResult struct {
 	Key     string `json:"key"`
 	Value   string `json:"value"`
 	Changed bool   `json:"changed"`
-	// Applied reports a change already applied (optional services);
-	// otherwise Hint tells how to apply it
-	Applied bool   `json:"applied"`
-	Hint    string `json:"hint,omitempty"`
+	// Service is what happened to the optional service of the setting,
+	// applied at once; otherwise Hint tells how to apply the change
+	Service *stack.OptionalResult `json:"service,omitempty"`
+	Hint    string                `json:"hint,omitempty"`
 }
 
 func (s *Server) setSetting(w http.ResponseWriter, r *http.Request) {
@@ -528,17 +558,23 @@ func (s *Server) setSetting(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	s.submit(w, "settings.set", func(ctx context.Context, ws *Workspace) (any, error) {
+	s.submit(w, r, "settings.set", func(ctx context.Context, ws *Workspace) (any, error) {
 		c, err := settings.Set(ws.Env, d, req.Value)
 		if err != nil {
 			return nil, err
 		}
 		res := settingResult{Key: d.Key, Value: c.Shown, Changed: c.Changed(), Hint: d.Apply.Hint()}
-		if c.Changed() && d.Apply == env.ApplyLive {
-			if _, err := ws.Stack.ApplyOptional(ctx, d.Service); err != nil {
+		if !c.Changed() {
+			ws.Stack.Log.Info(i18n.Tf("%s = %s (unchanged)", d.Key, c.Shown))
+			return res, nil
+		}
+		ws.Stack.Log.Success(d.Key + " = " + c.Shown)
+		if d.Apply == env.ApplyLive {
+			o, err := ws.Stack.ApplyOptional(ctx, d.Service)
+			if err != nil {
 				return nil, err
 			}
-			res.Applied, res.Hint = true, ""
+			res.Service, res.Hint = &o, ""
 		}
 		return res, nil
 	})

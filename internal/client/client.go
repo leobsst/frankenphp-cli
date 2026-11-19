@@ -11,6 +11,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -40,6 +41,20 @@ func New(dir string) *Client {
 			return d.DialContext(ctx, "unix", socket)
 		},
 	}}}
+}
+
+// NewInProcess returns a client calling h directly, without socket: the
+// API served by the calling process itself.
+func NewInProcess(h http.Handler) *Client {
+	return &Client{http: &http.Client{Transport: handlerTransport{h}}}
+}
+
+type handlerTransport struct{ h http.Handler }
+
+func (t handlerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	rec := httptest.NewRecorder()
+	t.h.ServeHTTP(rec, r)
+	return rec.Result(), nil
 }
 
 // Error is an error answered by the daemon.
@@ -255,15 +270,40 @@ func (c *Client) waitVersion(ctx context.Context, version string, timeout time.D
 	}
 }
 
+// OperationError is the error of a failed operation. Reported tells that
+// its events already reported it.
+type OperationError struct {
+	Message  string
+	Reported bool
+}
+
+func (e *OperationError) Error() string { return e.Message }
+
 // Run submits an operation (method and path of an action, body as JSON),
 // waits until it finishes, and decodes its result into out (nil: ignored).
-// A failed operation returns its error.
+// A failed operation returns an *OperationError.
 func (c *Client) Run(ctx context.Context, method, path string, body, out any) error {
+	return c.RunWithEvents(ctx, method, path, body, out, nil)
+}
+
+// RunWithEvents is Run, passing each event of the operation to onEvent
+// (nil: ignored) as it comes.
+func (c *Client) RunWithEvents(ctx context.Context, method, path string, body, out any,
+	onEvent func(daemon.Event)) error {
 	var op daemon.Operation
 	if err := c.Do(ctx, method, path, body, &op); err != nil {
 		return err
 	}
-	for op.Status != daemon.Succeeded && op.Status != daemon.Failed {
+	seen := 0
+	for {
+		if onEvent != nil {
+			for ; seen < len(op.Events); seen++ {
+				onEvent(op.Events[seen])
+			}
+		}
+		if op.Status == daemon.Succeeded || op.Status == daemon.Failed {
+			break
+		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -274,7 +314,7 @@ func (c *Client) Run(ctx context.Context, method, path string, body, out any) er
 		}
 	}
 	if op.Status == daemon.Failed {
-		return errors.New(op.Error)
+		return &OperationError{Message: op.Error, Reported: op.Reported}
 	}
 	if out == nil || op.Result == nil {
 		return nil
