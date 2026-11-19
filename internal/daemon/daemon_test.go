@@ -164,3 +164,23 @@ func TestSpecMatchesRoutes(t *testing.T) {
 		t.Errorf("api/openapi.yaml and the routes differ:\nspec:   %v\nroutes: %v", spec, routes)
 	}
 }
+
+// The log lines arrive in pieces: they are cut at line endings, the
+// docker timestamp parsed.
+func TestLineWriter(t *testing.T) {
+	ch := make(chan LogLine, 10)
+	lw := &lineWriter{container: "frankenphp-8.4", lines: ch, ctx: context.Background()}
+	_, _ = lw.Write([]byte("2026-11-19T15:04:05.123456789Z first li"))
+	_, _ = lw.Write([]byte("ne\r\nno timestamp\n2026-11-19T15:04:06Z last"))
+	lw.flush()
+	close(ch)
+	var got []LogLine
+	for l := range ch {
+		got = append(got, l)
+	}
+	if len(got) != 3 || got[0].Line != "first line" || got[0].Time.Second() != 5 ||
+		got[1].Line != "no timestamp" || !got[1].Time.IsZero() || got[2].Line != "last" ||
+		got[2].Container != "frankenphp-8.4" {
+		t.Errorf("lines = %+v", got)
+	}
+}

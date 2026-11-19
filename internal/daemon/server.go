@@ -108,7 +108,7 @@ func (s *Server) shutdown(servers []*http.Server) {
 // file, and FrankenManager runs its own DNS server. The Host and Origin
 // headers must be the local address (no DNS rebinding), and the token is
 // required: in the Authorization header, or the access_token query
-// parameter for the event stream (EventSource sends no header).
+// parameter for the event and log streams (EventSource sends no header).
 func (s *Server) guard(next http.Handler) http.Handler {
 	port := strconv.Itoa(s.Port)
 	hosts := []string{"127.0.0.1:" + port, "localhost:" + port}
@@ -130,7 +130,7 @@ func (s *Server) guard(next http.Handler) http.Handler {
 			return
 		}
 		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if token == "" && r.URL.Path == "/api/events" {
+		if token == "" && (r.URL.Path == "/api/events" || r.URL.Path == "/api/logs") {
 			token = r.URL.Query().Get("access_token")
 		}
 		if subtle.ConstantTimeCompare([]byte(token), []byte(s.Token)) != 1 {

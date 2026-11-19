@@ -78,6 +78,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Actions run one at a time as operations, followed on an event stream (Server-Sent Events)
   - Serves the LAN DNS server and the root CA sharing in its own process
   - The commands that change the server run through it and print its progress; without the passwordless setup, they run in their own process, where `sudo` can ask for the password
+  - For the dashboard: containers of the stack with their state, start/stop/restart of one container, CPU and memory usage, a live log stream of the containers, and the renewal of one host's certificate
   - Run at login by the OS service manager (LaunchAgent `dev.frankenmanager.daemon`, systemd user unit `frankenmanager-daemon.service`) unless `DAEMON_AUTOSTART=false`; `start` installs it, `daemon stop` removes it; a daemon of another version is replaced
   - `on`/`off`/`status` actions, optional `--port` (default `9080`)
   - Serves only the public root certificate, never its private key

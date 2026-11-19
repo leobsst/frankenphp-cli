@@ -6,9 +6,12 @@ import (
 	"strings"
 
 	"github.com/leobsst/frankenphp-cli/internal/core/dns"
+	"github.com/leobsst/frankenphp-cli/internal/core/env"
 	"github.com/leobsst/frankenphp-cli/internal/core/events"
 	"github.com/leobsst/frankenphp-cli/internal/core/phpversions"
 	"github.com/leobsst/frankenphp-cli/internal/core/resources"
+	"github.com/leobsst/frankenphp-cli/internal/core/s3"
+	"github.com/leobsst/frankenphp-cli/internal/core/soketi"
 	"github.com/leobsst/frankenphp-cli/internal/core/stack"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
@@ -412,4 +415,45 @@ func (s *Service) SwitchPHP(ctx context.Context, domain, php string) (SwitchResu
 	}
 	res.Switched = true
 	return res, nil
+}
+
+// RenewCertificate generates the certificate of a registered host again,
+// whatever its age, then restarts what serves it: the PHP container of a
+// domain, and the reverse proxy.
+func (s *Service) RenewCertificate(ctx context.Context, host string) error {
+	php, isDomain, err := s.Store.DomainPHPVersion(host)
+	if err != nil {
+		return err
+	}
+	if !isDomain {
+		taken, err := takenHosts(s.Store)
+		if err != nil {
+			return err
+		}
+		if !slices.Contains(taken, host) && !slices.Contains(services(s.Env), host) {
+			return i18n.Errorf("Domain '%s' is not configured.", host)
+		}
+	}
+	certs, err := s.Certs()
+	if err != nil {
+		return err
+	}
+	s.Log.Step(i18n.T("Generating SSL certificates..."))
+	if err := certs.GenerateAll(ctx, []string{host}, true, s.Env.IsProduction()); err != nil {
+		return err
+	}
+	if isDomain {
+		s.restartVersion(ctx, php)
+	}
+	s.restartProxy(ctx)
+	return nil
+}
+
+// services returns the hosts of the optional services that are on.
+func services(e *env.Env) []string {
+	hosts := soketi.Domains(e)
+	if s3.Enabled(e) {
+		hosts = append(hosts, s3.Domain)
+	}
+	return hosts
 }

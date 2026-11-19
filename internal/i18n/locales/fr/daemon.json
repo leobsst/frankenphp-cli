@@ -32,5 +32,11 @@
   "The daemon started is version %s, not %s.": "Le daemon démarré est en version %s, pas %s.",
   "LAN DNS server started.": "Serveur DNS LAN démarré.",
   "The dashboard daemon did not start: %v": "Le daemon du dashboard n'a pas démarré : %v",
-  "Dashboard: %s": "Dashboard : %s"
+  "Dashboard: %s": "Dashboard : %s",
+  "Container '%s' is not part of the stack.": "Le conteneur '%s' ne fait pas partie de la stack.",
+  "Unknown action '%s'. Use %s.": "Action '%s' inconnue. Utilisez %s.",
+  "Could not start %s.": "Impossible de démarrer %s.",
+  "Could not stop %s.": "Impossible d'arrêter %s.",
+  "Could not restart %s.": "Impossible de redémarrer %s.",
+  "Invalid value '%s' for %s.": "Valeur '%s' invalide pour %s."
 }

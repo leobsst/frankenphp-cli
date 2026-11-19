@@ -156,6 +156,79 @@ paths:
         "202": { $ref: "#/components/responses/Queued" }
         "400": { $ref: "#/components/responses/Error" }
 
+  /api/containers:
+    get:
+      tags: [stack]
+      summary: The containers of the stack and their state
+      responses:
+        "200":
+          description: The containers the configuration runs.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Container" }
+
+  /api/containers/{name}/{action}:
+    post:
+      tags: [stack]
+      summary: Start, stop or restart one container of the stack
+      description: "Operation `containers.<action>`, no result. A stopped container is kept, to start again."
+      parameters:
+        - { name: name, in: path, required: true, schema: { type: string } }
+        - name: action
+          in: path
+          required: true
+          schema: { type: string, enum: [start, stop, restart] }
+      responses:
+        "202": { $ref: "#/components/responses/Queued" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /api/stats:
+    get:
+      tags: [stack]
+      summary: CPU and memory usage of the running containers of the stack
+      description: "A snapshot (`docker stats --no-stream`): poll it for live values."
+      responses:
+        "200":
+          description: The running containers.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Stat" }
+
+  /api/logs:
+    get:
+      tags: [stack]
+      summary: Log stream of the stack (Server-Sent Events)
+      description: |
+        Sends `event: log` with a `LogLine` for each line of the containers, starting
+        with their last `tail` lines, until the client leaves. The lines of several
+        containers interleave as they come. Like `/api/events`, the token may be
+        passed as `access_token`.
+      security:
+        - token: []
+        - tokenQuery: []
+      parameters:
+        - name: container
+          in: query
+          description: A container of the stack, repeated; all of them when absent.
+          schema:
+            type: array
+            items: { type: string }
+          explode: true
+        - name: tail
+          in: query
+          schema: { type: integer, default: 100, minimum: 0 }
+      responses:
+        "200":
+          description: The stream.
+          content:
+            text/event-stream:
+              schema: { type: string }
+        "404": { $ref: "#/components/responses/Error" }
+
   /api/hosts:
     post:
       tags: [hosts]
@@ -190,6 +263,18 @@ paths:
       responses:
         "202": { $ref: "#/components/responses/Queued" }
         "400": { $ref: "#/components/responses/Error" }
+
+  /api/hosts/{name}/certificate:
+    post:
+      tags: [hosts]
+      summary: Generate the certificate of a host again (stack running)
+      description: |
+        Operation `hosts.certificate`, no result. Whatever its age; the PHP container
+        of a domain and the reverse proxy restart to use it.
+      parameters:
+        - { name: name, in: path, required: true, schema: { type: string } }
+      responses:
+        "202": { $ref: "#/components/responses/Queued" }
 
   /api/hosts/{name}/aliases:
     post:
@@ -538,7 +623,7 @@ components:
       type: apiKey
       in: query
       name: access_token
-      description: The token, on `/api/events` only.
+      description: The token, on `/api/events` and `/api/logs` only.
 
   responses:
     Queued:
@@ -608,6 +693,33 @@ components:
           enum: [info, success, warning, error]
         message: { type: string }
         time: { type: string, format: date-time }
+
+    Container:
+      type: object
+      required: [name, state, health]
+      properties:
+        name: { type: string }
+        state: { type: string, description: "`running`, `exited`, `not found`..." }
+        health: { type: string, enum: [healthy, unhealthy, starting, N/A] }
+
+    Stat:
+      type: object
+      required: [name, cpu_percent, mem_percent, mem_usage, net_io, block_io]
+      properties:
+        name: { type: string }
+        cpu_percent: { type: number }
+        mem_percent: { type: number }
+        mem_usage: { type: string, examples: ["52.3MiB / 7.66GiB"] }
+        net_io: { type: string }
+        block_io: { type: string }
+
+    LogLine:
+      type: object
+      required: [container, time, line]
+      properties:
+        container: { type: string }
+        time: { type: string, format: date-time, description: Zero when docker gave none. }
+        line: { type: string }
 
     Host:
       type: object
