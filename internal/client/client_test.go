@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/leobsst/frankenphp-cli/internal/daemon"
 )
@@ -82,9 +83,10 @@ func TestEnsureReplacesAnotherVersion(t *testing.T) {
 	if err != nil || what != Replaced || starts != 1 {
 		t.Fatalf("Ensure = %v, %v after %d starts", what, err, starts)
 	}
+	// It stops answering before Serve returns: its shutdown ends right after
 	select {
 	case <-old:
-	default:
+	case <-time.After(10 * time.Second):
 		t.Error("the old daemon still runs")
 	}
 	if v, _ := c.Version(context.Background()); v != "2.0" {
