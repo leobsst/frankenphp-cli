@@ -175,13 +175,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Static assets (`/css/*`, `/js/*`, `/images/*`, `/fonts/*`, `/favicon.ico`) are cached for a year through a `@static` path matcher; pages get no `Cache-Control` header, so changes show up on reload
 - Per-site configuration files
 - Three-tier directory structure:
-  - `custom/` - Active site configurations
-  - `default/` - Default site configurations
-  - `archive/` - Archived configurations from removed hosts
+  - `php-<version>/` - Site configurations of the domains served by that PHP version
+  - `static/` - Site configurations of the static hosts, served by the reverse proxy
+  - `archive/` - Archived configurations from removed hosts (`archive/static/` for static hosts)
 - Automatic Caddy reload on configuration changes
 - Alternate host (alias) support in the reverse proxy Caddyfile: dedicated TLS block per alias, proxied to its target domain's site with no separate per-site Caddyfile
 - Proxy host support in the reverse proxy Caddyfile: dedicated TLS block per proxy host, forwarding straight to a raw upstream address with no separate per-site Caddyfile
-- Static host support: the reverse proxy imports each static host's site Caddyfile and mounts the project path read-only to serve its files
+- Static host support: the reverse proxy imports each static host's site Caddyfile and mounts the project path read-only to serve its files, compressed with zstd and gzip (the reverse proxy's standard Caddy image has no Brotli encoder: a `br` encoding left in an existing static site Caddyfile is removed on `start`, as Caddy would refuse to start)
 
 #### Developer Experience
 - Color-coded console output and tables, plain when the output is not a terminal
@@ -214,7 +214,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `install.ps1` for Windows: installs `frankenmanager.exe` in `%LOCALAPPDATA%\Programs\FrankenManager` without Administrator rights, adds it to the user `PATH`, and checks the archive against `SHA256SUMS.txt`
 - `install.sh` for macOS and Linux: installs in `/usr/local/lib/frankenmanager` with a `/usr/local/bin/frankenmanager` link and the `/usr/local/bin/fkm` alias, picks the arm64 build on Apple Silicon even from a Rosetta shell, and checks the archive against `SHA256SUMS.txt`
 - Version checking and display
-- Static resource templates (Dockerfile, docker-compose files, Caddyfile templates, base php.ini) embedded in the executable and automatically resynced on update when the installed version changes, leaving generated/live files (Caddyfile, docker-compose-generated.yml, per-domain site configs) untouched
+- Static resource templates (Dockerfile, Caddyfile templates, base php.ini) embedded in the executable and automatically resynced on update when the installed version changes, leaving generated/live files (Caddyfile, docker-compose-generated.yml, per-domain site configs) untouched
 
 ### Technical Details
 - Written in Go, built without cgo: every target cross-compiles from one machine
@@ -235,6 +235,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Windows: `setup` requires an Administrator terminal and edits the hosts file directly; the PowerShell helper script is removed
   - The Python package (wheel, sdist) is no longer published
   - Updating an install older than the bundle layout (a single file in `/usr/local/bin`) in place, the fallback on `docker-compose.yml` / `docker-compose-prod.yml` when the generated compose file is missing, the migration of the legacy `.config` file, the move of site Caddyfiles from the legacy `caddy/sites/custom/` directory to `caddy/sites/php-<version>/` the conversion of TLS site Caddyfiles to HTTP on `start` and the addition of the `php_version` column to a `domains` table without it are removed: start once with 0.1.63 before updating if your install predates them
+  - The legacy `docker-compose.yml` / `docker-compose-prod.yml` templates (single container reading `caddy/sites/custom/`) are no longer shipped: only `docker-compose-generated.yml` is used, and the PHP containers mount `caddy/sites/php-<version>/` directly as their sites directory
 - Fixed since 0.1.x:
   - The hosts helper script could not remove entries on Linux; `setup` replaces an outdated helper
   - Windows: checking whether the CA server or the DNS watcher runs no longer kills it

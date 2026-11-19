@@ -596,7 +596,7 @@ frankenmanager restore-host "app1.test app2.test" --force-ssl
 ```
 
 This will:
-1. Move the Caddyfile from `archive/` back to `custom/`
+1. Move the Caddyfile from `archive/` back to `php-<version>/`
 2. Generate SSL certificates
 3. Add entries to `/etc/hosts`
 4. Restart only the FrankenPHP container
@@ -1030,7 +1030,7 @@ sudo frankenmanager update --force
 
 **Note**: the binary is installed in a system directory (e.g. `/usr/local/lib`), so `frankenmanager update` and `frankenmanager update --force` need to be run with `sudo` (or as an administrator). `frankenmanager update --check` does not modify anything and does not require elevated privileges.
 
-Once the new version is installed, `update` also refreshes the static files of your data directory (`Dockerfile`, `docker-compose*.yml`, `docker/entrypoint.sh`, `caddy/Caddyfile.worker`, `caddy/Caddyfile.template`, `php/php.ini`, `php/php-prod.ini`), as your user even under `sudo`. Generated files (`caddy/Caddyfile`, `docker-compose-generated.yml`, per-site Caddyfiles) and the per-version `php/<version>/php.ini` are left untouched.
+Once the new version is installed, `update` also refreshes the static files of your data directory (`Dockerfile`, `docker/entrypoint.sh`, `caddy/Caddyfile.worker`, `caddy/Caddyfile.template`, `php/php.ini`, `php/php-prod.ini`), as your user even under `sudo`. Generated files (`caddy/Caddyfile`, `docker-compose-generated.yml`, per-site Caddyfiles) and the per-version `php/<version>/php.ini` are left untouched.
 
 When a new version is installed and the server runs, `update` stops it first (`frankenmanager stop`) and starts it again on the new version right after (`frankenmanager start`), both as your user even under `sudo`; a stopped server stays stopped, and nothing is stopped when you are already up to date. If the install fails, the server is started again on the version still installed.
 
@@ -1061,15 +1061,15 @@ You can override this location with the `FRANKENMANAGER_DATA_DIR` environment va
 ~/.frankenmanager/
 ├── db.sqlite               # Configuration (including the database passwords) and server state (domains)
 ├── .db_password_history_*  # Previous database root passwords (used to sync password changes)
-├── docker-compose.yml      # Docker Compose configuration
+├── docker-compose-generated.yml  # Docker Compose configuration (regenerated on start)
 ├── Dockerfile              # Custom FrankenPHP image
 ├── caddy/
 │   ├── Caddyfile           # Main Caddy configuration
 │   ├── Caddyfile.template  # Per-site template
 │   ├── sites/
-│   │   ├── custom/         # Active site configs
-│   │   ├── default/        # Default site configs
-│   │   └── archive/        # Archived site configs (from remove-host)
+│   │   ├── php-<version>/  # Site configs of the domains served by that PHP version
+│   │   ├── static/         # Site configs of the static hosts (served by the reverse proxy)
+│   │   └── archive/        # Archived site configs (from remove-host, static/ for static hosts)
 │   ├── certs/              # SSL certificates
 │   ├── data/               # Caddy data
 │   ├── config/             # Caddy config
@@ -1363,8 +1363,6 @@ frankenphp-cli/
 │   ├── sigv4/                  AWS Signature Version 4 (S3 client and gateway)
 │   └── ui/                     Log lines and tables
 ├── assets.go                   Embeds the resources below into the executable
-├── docker-compose.yml          Docker Compose (dev)
-├── docker-compose-prod.yml     Docker Compose (prod)
 ├── Dockerfile                  Custom FrankenPHP image
 ├── caddy/                      Caddy configuration
 ├── php/                        PHP configuration
