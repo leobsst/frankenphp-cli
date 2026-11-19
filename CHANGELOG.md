@@ -196,6 +196,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Production Features
 - Production mode support (`APP_ENV=prod`)
   - Host networking configuration
+  - MariaDB, MySQL, PostgreSQL, Redis and the S3 gateway listen on their configured port (`DB_PORT`, `MYSQL_PORT`, `POSTGRES_PORT`, `REDIS_PORT`, `S3_PORT`), on `127.0.0.1` unless `EXPOSE_SERVICES=true`: MariaDB and MySQL can run side by side
   - PHP OPCache enabled
   - `expose_php` disabled
   - Output buffering (4096 bytes)

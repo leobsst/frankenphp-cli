@@ -1313,6 +1313,7 @@ Changing a password (`configuration set MARIADB_ROOT_PASSWORD ...`) is applied t
 On such a server, run `frankenmanager configuration set APP_ENV prod` (then `stop`/`start`) to enable:
 
 - Production Docker Compose configuration (host networking, containers run as `UID`:`GID`)
+- MariaDB, MySQL, PostgreSQL, Redis and the S3 gateway listen on their configured port (`DB_PORT`, `MYSQL_PORT`, `POSTGRES_PORT`, `REDIS_PORT`, `S3_PORT`) and, like in development, on `127.0.0.1` only unless `EXPOSE_SERVICES=true` (then on every interface: protect them with a firewall)
 - No phpMyAdmin/pgAdmin, nothing served at `https://localhost`
 - PHP OPCache enabled
 - `expose_php` disabled
