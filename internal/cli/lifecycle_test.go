@@ -256,7 +256,7 @@ func TestRestartSomeContainers(t *testing.T) {
 	}
 	e.docker.ps = running
 	e.docker.calls = nil
-	// The order of restartTargets whatever the command line order; --db is
+	// The order of stack.RestartTargets whatever the command line order; --db is
 	// --database
 	code, out, _ = e.run("restart", "--cache", "--db", "--caddy", "--ws")
 	if code != 0 {

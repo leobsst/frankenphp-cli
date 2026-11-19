@@ -229,7 +229,7 @@ func (s *Service) Remove(ctx context.Context, names []string) (RemoveResult, err
 }
 
 // Restore brings archived domains back with php, a supported version (see
-// ResolvePHP), not their original one. The result is empty when nothing
+// stack.ResolvePHP), not their original one. The result is empty when nothing
 // was restored.
 func (s *Service) Restore(ctx context.Context, names []string, php string, forceSSL bool) (PHPResult, error) {
 	if err := phpversions.Validate(php); err != nil {

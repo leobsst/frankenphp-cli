@@ -7,100 +7,31 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/spf13/cobra"
 
-	"github.com/leobsst/frankenphp-cli/internal/core/dns"
 	"github.com/leobsst/frankenphp-cli/internal/core/env"
-	"github.com/leobsst/frankenphp-cli/internal/core/hosts"
 	"github.com/leobsst/frankenphp-cli/internal/core/s3"
+	"github.com/leobsst/frankenphp-cli/internal/core/stack"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
 	"github.com/leobsst/frankenphp-cli/internal/ui"
 )
 
-// s3ReadyTimeout is how long start waits for the S3 server to answer.
-const s3ReadyTimeout = 90 * time.Second
-
 // --- Lifecycle ---------------------------------------------------------------
 
-// syncS3 prepares the S3 server once its container runs: the node layout
-// on first start, the global key allowed on every bucket, then the hosts
-// entries and DNS records of the bucket hosts.
+// syncS3 prepares the S3 server once its container runs (see
+// stack.Service.SyncS3).
 func (a *app) syncS3(ctx context.Context, dir string, e *env.Env, s *store.Store) error {
-	a.log.Info(i18n.T("Waiting for the S3 server..."))
-	g := s3.NewGarage(e)
-	if err := g.WaitReady(ctx, s3ReadyTimeout); err != nil {
-		return err
-	}
-	if err := g.EnsureLayout(ctx); err != nil {
-		return err
-	}
-	id, err := e.Require(s3.AccessKeyKey)
-	if err != nil {
-		return err
-	}
-	secret, err := e.Require(s3.SecretKeyKey)
-	if err != nil {
-		return err
-	}
-	if err := g.EnsureGlobalKey(ctx, id, secret); err != nil {
-		return err
-	}
-	return a.syncS3Hosts(ctx, dir, e, s, g)
+	return a.stackService(dir, e, nil, s).SyncS3(ctx)
 }
 
 // syncS3Hosts brings the hosts entries of the bucket hosts in line with
-// the buckets of the server, caches the bucket names, and refreshes the
-// DNS records.
+// the buckets of the server (see stack.SyncS3Hosts).
 func (a *app) syncS3Hosts(ctx context.Context, dir string, e *env.Env, s *store.Store, g *s3.Garage) error {
-	names, err := g.BucketNames(ctx)
-	if err != nil {
-		return err
-	}
-	old, err := s.S3Buckets()
-	if err != nil {
-		return err
-	}
-	h := a.deps.Hosts(a.log)
-	for _, b := range old {
-		if !slices.Contains(names, b) {
-			if _, err := h.RemoveEntry(ctx, "127.0.0.1", s3.BucketHost(b)); err != nil {
-				return err
-			}
-		}
-	}
-	for _, b := range names {
-		if _, err := h.AddEntry(ctx, "127.0.0.1", s3.BucketHost(b)); err != nil {
-			return err
-		}
-	}
-	if err := s.SetS3Buckets(names); err != nil {
-		return err
-	}
-	if dns.Enabled(e) {
-		return dns.Sync(dir, e, s)
-	}
-	return nil
-}
-
-// removeS3Hosts removes the hosts entries of the S3 host and of the cached
-// bucket hosts, errors ignored. The cache is kept for the next start.
-func (a *app) removeS3Hosts(ctx context.Context, h *hosts.Manager, s *store.Store) {
-	names := []string{s3.Domain}
-	buckets, _ := s.S3Buckets()
-	for _, b := range buckets {
-		names = append(names, s3.BucketHost(b))
-	}
-	for _, name := range names {
-		if found, err := h.HasEntry("127.0.0.1", name); err == nil && found {
-			_, _ = h.RemoveEntry(ctx, "127.0.0.1", name)
-		}
-	}
+	return stack.SyncS3Hosts(ctx, dir, e, s, a.deps.Hosts(a.log), g)
 }
 
 // logS3Endpoints shows where the S3 server answers.

@@ -6,34 +6,14 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/leobsst/frankenphp-cli/internal/core/compose"
-	"github.com/leobsst/frankenphp-cli/internal/core/dns"
-	"github.com/leobsst/frankenphp-cli/internal/core/docker"
-	"github.com/leobsst/frankenphp-cli/internal/core/env"
-	"github.com/leobsst/frankenphp-cli/internal/core/password"
-	"github.com/leobsst/frankenphp-cli/internal/core/phpversions"
-	"github.com/leobsst/frankenphp-cli/internal/core/s3"
-	"github.com/leobsst/frankenphp-cli/internal/core/soketi"
 	"github.com/leobsst/frankenphp-cli/internal/core/stack"
-	"github.com/leobsst/frankenphp-cli/internal/core/store"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
 )
-
-// restartTargets are the --<target> options of restart, in the order they
-// are processed.
-var restartTargets = []string{"caddy", "database", "cache", "phpmyadmin", "dns", "soketi", "s3"}
-
-// restartContainers maps the static targets to their container.
-var restartContainers = map[string]string{
-	"cache":      compose.RedisContainer,
-	"phpmyadmin": compose.PHPMyAdminContainer,
-	"soketi":     soketi.ContainerName,
-}
 
 func newRestartCmd(a *app) *cobra.Command {
 	var forceSSL, build bool
 	selected := map[string]*bool{}
-	for _, t := range restartTargets {
+	for _, t := range stack.RestartTargets {
 		selected[t] = new(bool)
 	}
 	cmd := &cobra.Command{
@@ -53,7 +33,7 @@ Examples:
 		Args: noArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			var targets []string
-			for _, t := range restartTargets {
+			for _, t := range stack.RestartTargets {
 				if *selected[t] {
 					targets = append(targets, t)
 				}
@@ -97,167 +77,14 @@ func (a *app) restart(ctx context.Context, forceSSL bool, targets []string, buil
 		return err
 	}
 	defer closeStore(s, &err)
-	if running, err := a.isRunning(ctx, d, s); err != nil {
-		return err
-	} else if !running {
-		return i18n.NewError("The server is not running.")
-	}
-	active, err := s.ActivePHPVersions()
-	if err != nil {
+	if err := a.stackService(dir, e, d, s).Restart(ctx, targets, forceSSL, build); err != nil {
 		return err
 	}
-
-	all := len(targets) == 0
-	has := func(t string) bool {
-		for _, x := range targets {
-			if x == t {
-				return true
-			}
-		}
-		return false
-	}
-	if all {
-		a.log.Info(i18n.T("Restarting web server..."))
-	} else {
-		a.log.Info(i18n.Tf("Restarting %s...", strings.Join(targets, ", ")))
-	}
-
-	if all || has("caddy") {
-		domains, err := s.DomainNames()
-		if err != nil {
-			return err
-		}
-		domains = append(domains, soketi.Domains(e)...)
-		if s3.Enabled(e) {
-			domains = append(domains, s3.Domain)
-		}
-		a.con.Println()
-		a.log.Info(i18n.T("Generating SSL certificates..."))
-		// <CADDY_DIR>/certs, like the other commands, not CERTS_DIR
-		certs, err := a.ssl(e.CertsDir(dir))
-		if err != nil {
-			return err
-		}
-		if err := certs.GenerateAll(ctx, domains, forceSSL, e.IsProduction()); err != nil {
-			return err
-		}
-	}
-
-	engines := e.DBEngines()
-	redis, websocket, dnsOn := e.RedisEnabled(), soketi.Enabled(e), dns.Enabled(e)
-
-	if build && len(active) > 0 {
-		customPath, err := stack.ProjectPath(e, s)
-		if err != nil {
-			return err
-		}
-		if customPath == "" {
-			return i18n.NewError("No project path known: set DEFAULT_PROJECT_PATH (frankenmanager configuration set) " +
-				"or use 'stop' then 'start --build --path <path>'.")
-		}
-		if err := stack.BuildImages(ctx, d, e, a.log, customPath, active, true); err != nil {
-			return err
-		}
-		// Recreate the PHP containers on the new images
-		if err := stack.ComposeUp(ctx, d, e, active, customPath); err != nil {
-			return err
-		}
-	} else if build {
-		a.log.Info(i18n.T("No PHP domain registered: no image to build."))
-	}
-
-	if all || has("dns") {
-		if dnsOn {
-			if err := a.refreshDNS(ctx, dir, d, e, s); err != nil {
-				return err
-			}
-		}
-		// Restarts the server process, picking up the DNS_* changes made
-		// since the last start; stops it when DNS_SERVER was turned off
-		w, err := a.deps.Watcher(dir)
-		if err != nil {
-			return err
-		}
-		if _, err := w.Update(ctx, e); err != nil {
-			return err
-		}
-	}
-
-	if all {
-		d.RestartAll(ctx, docker.Containers{
-			PHPVersions: active, DBEngines: engines, Production: e.IsProduction(),
-			Redis: redis, Websocket: websocket, S3: s3.Enabled(e),
-		})
-	} else {
-		for _, t := range targets {
-			switch {
-			case t == "caddy":
-				// Every FrankenPHP container, then the reverse proxy
-				for _, v := range active {
-					d.RestartContainer(ctx, phpversions.ContainerName(v))
-				}
-				d.RestartContainer(ctx, compose.ReverseProxyContainer)
-			case t == "database":
-				for _, engine := range engines {
-					if name, ok := compose.DBContainers[engine]; ok {
-						d.RestartContainer(ctx, name)
-					}
-				}
-			case t == "cache" && !redis:
-				a.log.Warning(i18n.T("Redis is disabled: run 'frankenmanager service enable redis' to use it."))
-			case t == "soketi" && !websocket:
-				a.log.Warning(i18n.T("Soketi is disabled: run 'frankenmanager service enable soketi' to use it."))
-			case t == "s3" && !s3.Enabled(e):
-				a.log.Warning(i18n.T("S3 is disabled: run 'frankenmanager service enable s3' to use it."))
-			case t == "s3":
-				// Garage, then the ACL gateway in front of it
-				d.RestartContainer(ctx, s3.ContainerName)
-				d.RestartContainer(ctx, s3.GatewayContainer)
-			case t == "dns" && !dnsOn:
-				a.log.Warning(i18n.T("The LAN DNS server is disabled: run 'frankenmanager service enable dns'."))
-			case t == "dns":
-				// The background process, restarted above
-			default:
-				d.RestartContainer(ctx, restartContainers[t])
-			}
-		}
-	}
-
-	if all || has("database") {
-		passwords, err := dbPasswords(e, engines)
-		if err != nil {
-			return err
-		}
-		if err := password.New(dir, d, a.log).SyncAll(ctx, engines, passwords); err != nil {
-			return err
-		}
-	}
-
 	a.con.Println()
-	if all {
+	if len(targets) == 0 {
 		a.log.Success(i18n.T("Web server restarted!"))
 	} else {
 		a.log.Success(i18n.Tf("Container(s) restarted: %s", strings.Join(targets, ", ")))
 	}
 	return nil
-}
-
-// refreshDNS rewrites the records with the current LAN IP and removes the
-// DNS container of earlier releases, which would hold port 53.
-func (a *app) refreshDNS(ctx context.Context, dir string, d *docker.Manager, e *env.Env, s *store.Store) error {
-	if err := dns.Sync(dir, e, s); err != nil {
-		return err
-	}
-	removeLegacyDNS(ctx, d)
-	ip, err := dns.ResolveIP(e)
-	if err != nil {
-		return err
-	}
-	a.log.Info(i18n.Tf("LAN DNS server: domains resolve to %s", ip))
-	return nil
-}
-
-// removeLegacyDNS removes the DNS container of earlier releases, if any.
-func removeLegacyDNS(ctx context.Context, d *docker.Manager) {
-	d.RemoveContainer(ctx, compose.DNSContainer)
 }

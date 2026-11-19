@@ -8,8 +8,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/leobsst/frankenphp-cli/internal/core/caddyfile"
-	"github.com/leobsst/frankenphp-cli/internal/core/domains"
 	"github.com/leobsst/frankenphp-cli/internal/core/phpversions"
+	"github.com/leobsst/frankenphp-cli/internal/core/stack"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
 	"github.com/leobsst/frankenphp-cli/internal/ui"
 )
@@ -162,7 +162,7 @@ func (a *app) restoreHost(ctx context.Context, names []string, forceSSL bool, ph
 		return err
 	}
 	// Checked before the server state
-	if php, err = domains.ResolvePHP(php, e, a.events()); err != nil {
+	if php, err = stack.ResolvePHP(php, e, a.events()); err != nil {
 		return err
 	}
 	r, err := a.openRunning(ctx, i18n.T("The server is not running. Use 'start' command instead."))

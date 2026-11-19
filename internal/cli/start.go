@@ -3,25 +3,18 @@ package cli
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
 
-	"github.com/leobsst/frankenphp-cli/internal/core/caddyfile"
 	"github.com/leobsst/frankenphp-cli/internal/core/dns"
 	"github.com/leobsst/frankenphp-cli/internal/core/docker"
 	"github.com/leobsst/frankenphp-cli/internal/core/env"
-	"github.com/leobsst/frankenphp-cli/internal/core/password"
 	"github.com/leobsst/frankenphp-cli/internal/core/phpversions"
-	"github.com/leobsst/frankenphp-cli/internal/core/resources"
 	"github.com/leobsst/frankenphp-cli/internal/core/s3"
 	"github.com/leobsst/frankenphp-cli/internal/core/soketi"
 	"github.com/leobsst/frankenphp-cli/internal/core/stack"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
-	"github.com/leobsst/frankenphp-cli/internal/core/validate"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
 )
 
@@ -82,42 +75,28 @@ Examples:
 	return cmd
 }
 
-// isRunning reports whether the stack of dir runs (DatabaseManager.is_running).
+// isRunning reports whether the stack of dir runs.
 func (a *app) isRunning(ctx context.Context, d *docker.Manager, s *store.Store) (bool, error) {
-	active, err := s.ActivePHPVersions()
+	return stack.IsRunning(ctx, d, s)
+}
+
+// certs returns the certificate generator of certsDir, for the services.
+func (a *app) certs(certsDir string) (stack.Certs, error) {
+	m, err := a.ssl(certsDir)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
-	return docker.IsRunning(d.ContainerStatuses(ctx), active), nil
+	return m, nil
 }
 
-// dbPasswords returns the configured root passwords of the MariaDB and MySQL
-// servers to sync.
-func dbPasswords(e *env.Env, engines []string) (map[string]string, error) {
-	keys := map[string]string{"mariadb": "MARIADB_ROOT_PASSWORD", "mysql": "MYSQL_ROOT_PASSWORD"}
-	passwords := map[string]string{}
-	for _, engine := range engines {
-		if key, ok := keys[engine]; ok {
-			p, err := e.Require(key)
-			if err != nil {
-				return nil, err
-			}
-			passwords[engine] = p
-		}
+// stackService returns the stack service of dir, reporting on the console.
+// e may be nil for Stop.
+func (a *app) stackService(dir string, e *env.Env, d *docker.Manager, s *store.Store) *stack.Service {
+	log := a.events()
+	return &stack.Service{
+		Dir: dir, Env: e, Store: s, Docker: d, Hosts: a.deps.Hosts(log),
+		Certs: a.certs, Watcher: a.deps.Watcher, Log: log,
 	}
-	return passwords, nil
-}
-
-// versionsOf returns the distinct PHP versions of domains, sorted.
-func versionsOf(domains []store.Domain) []string {
-	var versions []string
-	for _, d := range domains {
-		if !slices.Contains(versions, d.PHPVersion) {
-			versions = append(versions, d.PHPVersion)
-		}
-	}
-	slices.Sort(versions)
-	return versions
 }
 
 // start starts the stack. It starts even without any domain: the reverse
@@ -131,30 +110,6 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 	if err != nil {
 		return err
 	}
-
-	php := o.php
-	if php == "" {
-		php = phpversions.ResolveDefault(e.Get("DEFAULT_PHP_VERSION"))
-	}
-	// An invalid --php is an error message
-	if err := phpversions.Validate(php); err != nil {
-		return err
-	}
-	if w := phpversions.DeprecationWarning(php); w != "" {
-		a.log.Warning(w)
-	}
-	for _, key := range []string{"UID", "GID"} {
-		if _, err := e.Require(key); err != nil {
-			a.log.Error(err.Error())
-			a.log.Error(i18n.T("Please set UID and GID: frankenmanager configuration set UID <id>"))
-			return exitError(1)
-		}
-	}
-	customPath := o.path
-	if customPath == "" {
-		customPath = e.Get("DEFAULT_PROJECT_PATH")
-	}
-
 	d := a.docker(dir)
 	s, err := a.openStore(dir)
 	if err != nil {
@@ -162,266 +117,27 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 	}
 	defer closeStore(s, &err)
 
-	// Checked before anything is written to the configuration
-	if running, err := a.isRunning(ctx, d, s); err != nil {
-		return err
-	} else if running {
-		return i18n.NewError("The server is already running.")
-	}
-
-	engines := e.DBEngines()
-	for _, g := range []struct{ engine, key, name string }{
-		{"mariadb", "MARIADB_ROOT_PASSWORD", "MariaDB"},
-		{"mysql", "MYSQL_ROOT_PASSWORD", "MySQL"},
-		{"postgresql", "POSTGRES_PASSWORD", "PostgreSQL"},
-	} {
-		if slices.Contains(engines, g.engine) && e.Get(g.key) == "" {
-			if err := e.Set(g.key, env.GeneratePassword()); err != nil {
-				return err
-			}
-			a.log.Info(i18n.Tf("%s password generated and saved to the configuration", g.name))
-		}
-	}
-	generated, err := soketi.EnsureCredentials(e)
+	res, err := a.stackService(dir, e, d, s).Start(ctx, stack.StartOptions{
+		Domains: domains, Path: o.path, PHP: o.php, ForceSSL: o.forceSSL, Build: o.build,
+	})
 	if err != nil {
-		return err
-	}
-	if len(generated) > 0 {
-		a.log.Info(i18n.Tf("Soketi %s generated and saved to the configuration", strings.Join(generated, ", ")))
-	}
-	if generated, err = s3.EnsureCredentials(e); err != nil {
-		return err
-	}
-	if len(generated) > 0 {
-		a.log.Info(i18n.Tf("S3 %s generated and saved to the configuration", strings.Join(generated, ", ")))
-	}
-
-	caddyDir := e.ResolveDir("CADDY_DIR", "./caddy", dir)
-	databaseDir := e.ResolveDir("DATABASE_DIR", "./database", dir)
-
-	// Registered domains keep their version, new ones take --php
-	registered, err := s.Domains()
-	if err != nil {
-		return err
-	}
-	var names []string
-	for _, r := range registered {
-		names = append(names, r.Name)
-	}
-	merged := slices.Clone(registered)
-	if domains == nil {
-		if len(registered) > 0 {
-			a.log.Info(i18n.Tf("Using registered domains: %s", strings.Join(names, ", ")))
-		} else {
-			a.log.Info(i18n.T("No PHP domain registered: starting without PHP container."))
-			a.log.Info(i18n.T(`Add hosts later with: frankenmanager add-host "myapp.test"`))
-		}
-	} else {
-		var added []string
-		for _, name := range domains {
-			if !slices.Contains(names, name) {
-				added = append(added, name)
-				merged = append(merged, store.Domain{Name: name, PHPVersion: php})
-			}
-		}
-		if len(registered) > 0 {
-			a.log.Info(i18n.Tf("Registered domains: %s", strings.Join(names, ", ")))
-			if len(added) > 0 {
-				a.log.Info(i18n.Tf("New domains (PHP %s): %s", php, strings.Join(added, ", ")))
-			}
-		}
-	}
-
-	statics, err := s.StaticHosts()
-	if err != nil {
-		return err
-	}
-	// The project path is only needed by PHP containers and static hosts
-	if len(merged) > 0 || len(statics) > 0 {
-		if customPath == "" {
-			a.log.Error(i18n.T("No project path specified and DEFAULT_PROJECT_PATH is not set " +
-				"(frankenmanager configuration set DEFAULT_PROJECT_PATH <path>)"))
-			return exitError(1)
-		}
-		if err := validate.Directory(customPath); err != nil {
-			if o.path == "" && !e.IsSet("DEFAULT_PROJECT_PATH") {
-				// The OS default, never chosen: tell how to choose
-				a.log.Error(i18n.Tf("The default projects directory does not exist: %s "+
-					"(create it or run frankenmanager configuration set DEFAULT_PROJECT_PATH <path>)", customPath))
-				return exitError(1)
-			}
-			return err
-		}
-	}
-	for _, m := range merged {
-		if err := validate.Domain(m.Name); err != nil {
-			return err
-		}
-	}
-	// Duplicates removed, order kept
-	var unique []store.Domain
-	var all []string
-	for _, m := range merged {
-		if !slices.Contains(all, m.Name) {
-			unique = append(unique, m)
-			all = append(all, m.Name)
-		}
-	}
-	merged = unique
-	versions := versionsOf(merged)
-
-	res := resources.New(dir, a.log)
-	for _, v := range versions {
-		if err := res.EnsurePHPVersionConfig(v); err != nil {
-			return err
-		}
-	}
-
-	h := a.deps.Hosts(a.log)
-	var hostsAdded []string
-	fail := func(err error) error {
-		a.log.Error(i18n.Tf("An error occurred: %v", err))
-		a.log.Error(i18n.T("Cleaning up..."))
-		for _, domain := range hostsAdded {
-			_, _ = h.RemoveEntry(ctx, "127.0.0.1", domain)
-		}
-		// Registered domains are unrelated to this failure: put them back
-		_ = s.SetDomains(registered)
-		a.log.Error(i18n.T("Cleanup complete. The server did not start."))
-		return exitError(1)
-	}
-
-	aliasEntries, err := s.AliasEntries()
-	if err != nil {
-		return err
-	}
-	proxies, err := s.Proxies()
-	if err != nil {
-		return err
-	}
-	served := slices.Clone(all)
-	for _, al := range aliasEntries {
-		served = append(served, al.Alias)
-	}
-	for _, p := range proxies {
-		served = append(served, p.Domain)
-	}
-	for _, st := range statics {
-		served = append(served, st.Domain)
-	}
-	for _, ws := range soketi.Domains(e) {
-		if !slices.Contains(all, ws) {
-			served = append(served, ws)
-		}
-	}
-	// The bucket hosts get their entries once the S3 server answers
-	if s3.Enabled(e) && !slices.Contains(all, s3.Domain) {
-		served = append(served, s3.Domain)
-	}
-
-	certs, err := a.ssl(filepath.Join(caddyDir, "certs"))
-	if err != nil {
-		return fail(err)
-	}
-	if err := certs.GenerateAll(ctx, served, o.forceSSL, e.IsProduction()); err != nil {
-		return fail(err)
-	}
-	for _, domain := range served {
-		if _, err := h.AddEntry(ctx, "127.0.0.1", domain); err != nil {
-			return fail(err)
-		}
-		hostsAdded = append(hostsAdded, domain)
-	}
-
-	g := caddyfile.New(caddyDir, dir, a.log)
-	if err := g.GenerateAllForVersions(merged); err != nil {
-		return fail(err)
-	}
-	if err := g.GenerateStatic(statics); err != nil {
-		return fail(err)
-	}
-	if err := caddyfile.WriteMain(caddyDir, caddyfile.Main{
-		Domains: merged, Aliases: aliasEntries, Proxies: proxies, Statics: statics,
-		DBAdminTarget: e.DBAdminTarget(), WebsocketTarget: soketi.Target(e),
-		S3Target: s3.ProxyTarget(e),
-	}); err != nil {
-		return fail(err)
-	}
-
-	if err := s.SetDomains(merged); err != nil {
-		return fail(err)
-	}
-	if customPath != "" {
-		if err := s.SetSetting(store.SettingProjectPath, customPath); err != nil {
-			return fail(err)
-		}
-	}
-
-	if err := dns.Sync(dir, e, s); err != nil {
-		return fail(err)
-	}
-	listen, err := dns.ListenAddress(e)
-	if err != nil {
-		return fail(err)
-	}
-
-	// MySQL ignores a world-writable option file
-	cnf := filepath.Join(databaseDir, ".my-healthcheck.cnf")
-	if info, err := os.Stat(cnf); err == nil && info.Mode().Perm()&0o022 != 0 {
-		if err := os.Chmod(cnf, 0o640); err != nil {
-			return fail(err)
-		}
-	}
-
-	if err := stack.BuildImages(ctx, d, e, a.log, customPath, versions, o.build); err != nil {
-		return fail(err)
-	}
-	d.ComposeDown(ctx)
-	if listen != "" {
-		// The DNS container of an earlier release would hold port 53
-		removeLegacyDNS(ctx, d)
-	}
-	if err := stack.ComposeUp(ctx, d, e, versions, customPath); err != nil {
-		return fail(err)
-	}
-
-	passwords, err := dbPasswords(e, engines)
-	if err != nil {
-		return fail(err)
-	}
-	if err := password.New(dir, d, a.log).SyncAll(ctx, engines, passwords); err != nil {
-		return fail(err)
-	}
-
-	if s3.Enabled(e) {
-		if err := a.syncS3(ctx, dir, e, s); err != nil {
-			return fail(err)
-		}
-	}
-
-	w, err := a.deps.Watcher(dir)
-	if err != nil {
-		return fail(err)
-	}
-	watched, err := w.Update(ctx, e)
-	if err != nil {
-		return fail(err)
+		return reported(err)
 	}
 
 	a.con.Println()
 	a.log.Success(i18n.T("Web server started!"))
-	for _, v := range versions {
+	for _, v := range res.Versions {
 		var vd []string
-		for _, m := range merged {
+		for _, m := range res.Domains {
 			if m.PHPVersion == v {
 				vd = append(vd, m.Name)
 			}
 		}
 		a.log.Info(fmt.Sprintf("  PHP %s: %s", v, strings.Join(vd, ", ")))
 	}
-	if len(statics) > 0 {
+	if len(res.Statics) > 0 {
 		var names []string
-		for _, st := range statics {
+		for _, st := range res.Statics {
 			names = append(names, st.Domain)
 		}
 		a.log.Info(i18n.Tf("  Static: %s", strings.Join(names, ", ")))
@@ -432,12 +148,12 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 	if s3.Enabled(e) {
 		a.logS3Endpoints(e)
 	}
-	if listen != "" {
+	if res.DNSListen != "" {
 		ip, err := dns.ResolveIP(e)
 		if err != nil {
 			return err
 		}
-		a.log.Info(i18n.Tf("LAN DNS server listening on %s", listen))
+		a.log.Info(i18n.Tf("LAN DNS server listening on %s", res.DNSListen))
 		addrs, err := dns.ServerAddresses(e)
 		if err != nil {
 			return err
@@ -445,7 +161,7 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) (err 
 		for _, line := range dns.DescribeServerAddresses(addrs, ip) {
 			a.log.Info(line)
 		}
-		if watched {
+		if res.Watched {
 			a.log.Info(i18n.T("  The domains follow this machine's LAN IP when it changes."))
 		}
 		if strings.HasPrefix(ip, "127.") {

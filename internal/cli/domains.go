@@ -80,14 +80,8 @@ func (a *app) domainService(r *server) *domains.Service {
 	return &domains.Service{
 		Dir: r.dir, CaddyDir: r.caddyDir, Env: r.e, Store: r.s, Docker: r.d,
 		Hosts: a.deps.Hosts(log),
-		Certs: func() (domains.Certs, error) {
-			m, err := a.ssl(r.e.CertsDir(r.dir))
-			if err != nil {
-				return nil, err
-			}
-			return m, nil
-		},
-		Log: log,
+		Certs: func() (domains.Certs, error) { return a.certs(r.e.CertsDir(r.dir)) },
+		Log:   log,
 	}
 }
 

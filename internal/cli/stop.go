@@ -5,7 +5,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/leobsst/frankenphp-cli/internal/core/soketi"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
 )
 
@@ -30,52 +29,9 @@ func (a *app) stop(ctx context.Context) (err error) {
 		return err
 	}
 	defer closeStore(s, &err)
-	if running, err := a.isRunning(ctx, d, s); err != nil {
-		return err
-	} else if !running {
-		return i18n.Errorf("The server is already stopped.")
-	}
-
-	a.log.Info(i18n.T("Stopping web server..."))
-	if w, err := a.deps.Watcher(dir); err == nil {
-		w.Stop(ctx)
-	}
-	d.ComposeDown(ctx)
-
-	names, err := s.DomainNames()
-	if err != nil {
+	if err := a.stackService(dir, nil, d, s).Stop(ctx); err != nil {
 		return err
 	}
-	aliases, err := s.Aliases()
-	if err != nil {
-		return err
-	}
-	for _, al := range aliases {
-		names = append(names, al.Alias)
-	}
-	proxies, err := s.Proxies()
-	if err != nil {
-		return err
-	}
-	for _, p := range proxies {
-		names = append(names, p.Domain)
-	}
-	statics, err := s.StaticHostNames()
-	if err != nil {
-		return err
-	}
-	names = append(names, statics...)
-	h := a.deps.Hosts(a.log)
-	for _, name := range names {
-		_, _ = h.RemoveEntry(ctx, "127.0.0.1", name) // errors ignored
-	}
-	// The Soketi host, also when SOKETI_ENABLED was turned off while running
-	if found, err := h.HasEntry("127.0.0.1", soketi.Domain); err == nil && found {
-		_, _ = h.RemoveEntry(ctx, "127.0.0.1", soketi.Domain)
-	}
-	// The S3 hosts, also when S3_ENABLED was turned off while running
-	a.removeS3Hosts(ctx, h, s)
-
 	a.con.Println()
 	a.log.Success(i18n.T("Web server stopped!"))
 	return nil

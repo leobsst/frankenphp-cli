@@ -215,7 +215,7 @@ func (a *app) applyService(ctx context.Context, dir string, e *env.Env, name str
 			if err := dns.Sync(dir, e, s); err != nil {
 				return err
 			}
-			removeLegacyDNS(ctx, d)
+			stack.RemoveLegacyDNS(ctx, d)
 		}
 	case "soketi":
 		h := a.deps.Hosts(a.log)
@@ -256,7 +256,7 @@ func (a *app) applyService(ctx context.Context, dir string, e *env.Env, name str
 				return err
 			}
 		} else {
-			a.removeS3Hosts(ctx, h, s)
+			stack.RemoveS3Hosts(ctx, h, s)
 		}
 		r := &server{dir: dir, e: e, d: d, s: s, caddyDir: e.ResolveDir("CADDY_DIR", "./caddy", dir)}
 		if err := r.writeMain(); err != nil {

@@ -23,6 +23,9 @@ const (
 	// Step starts a stage of an operation ("Generating SSL
 	// certificates..."), always at the Info level.
 	Step
+	// Break separates two parts of the output: the console prints a blank
+	// line, the other clients may ignore it.
+	Break
 )
 
 // Event is one thing a service reports.
@@ -81,6 +84,9 @@ func (l Log) Error(msg string) { l.emit(Message, Error, msg) }
 
 // Step reports the start of a stage of the operation.
 func (l Log) Step(msg string) { l.emit(Step, Info, msg) }
+
+// Break separates two parts of the output.
+func (l Log) Break() { l.emit(Break, Info, "") }
 
 // ReportedError is the failure of an operation whose error and cleanup
 // were already reported as events: the caller must not print it again.

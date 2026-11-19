@@ -35,9 +35,7 @@ var ErrNoProjectPath = i18n.NewError("No project path known: set DEFAULT_PROJECT
 	"or restart the server with --path.")
 
 // Certs generates the site certificates.
-type Certs interface {
-	GenerateAll(ctx context.Context, domains []string, force, production bool) error
-}
+type Certs = stack.Certs
 
 // Service works on the hosts of a running server. The caller checks that
 // the server runs and owns the store.
@@ -127,22 +125,6 @@ func RestartProxy(ctx context.Context, d *docker.Manager, log events.Log) {
 }
 
 func (s *Service) restartProxy(ctx context.Context) { RestartProxy(ctx, s.Docker, s.Log) }
-
-// ResolvePHP resolves a requested PHP version ("" for
-// DEFAULT_PHP_VERSION), validates it and warns when it is deprecated.
-func ResolvePHP(requested string, e *env.Env, log events.Log) (string, error) {
-	v := requested
-	if v == "" {
-		v = phpversions.ResolveDefault(e.Get("DEFAULT_PHP_VERSION"))
-	}
-	if err := phpversions.Validate(v); err != nil {
-		return "", err
-	}
-	if w := phpversions.DeprecationWarning(v); w != "" {
-		log.Warning(w)
-	}
-	return v, nil
-}
 
 // cleanup undoes the hosts entries of a failed operation.
 type cleanup struct {
@@ -280,7 +262,7 @@ func (s *Service) AddPHP(ctx context.Context, domains []string, php, root string
 	if err != nil {
 		return PHPResult{}, err
 	}
-	php, err = ResolvePHP(php, s.Env, s.Log)
+	php, err = stack.ResolvePHP(php, s.Env, s.Log)
 	if err != nil {
 		return PHPResult{}, err
 	}

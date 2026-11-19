@@ -49,8 +49,13 @@ func (l *Logger) Warning(msg string) { fmt.Fprintln(l.w, l.yellow.Render(i18n.Tf
 // Error logs an error.
 func (l *Logger) Error(msg string) { fmt.Fprintln(l.w, l.red.Render(i18n.Tf("ERROR: %s", msg))) }
 
-// Emit prints a service event as a log line: a step is an info line.
+// Emit prints a service event as a log line: a step is an info line, a
+// break a blank line.
 func (l *Logger) Emit(e events.Event) {
+	if e.Kind == events.Break {
+		fmt.Fprintln(l.w)
+		return
+	}
 	switch e.Level {
 	case events.Success:
 		l.Success(e.Message)
