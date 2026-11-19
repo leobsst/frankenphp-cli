@@ -1,0 +1,912 @@
+openapi: 3.1.0
+info:
+  title: FrankenManager daemon API
+  version: 0.1.0
+  description: |
+    The API of `frankenmanager daemon`, the source of the dashboard's TypeScript types.
+
+    Two accesses, one router:
+    - the Unix socket `<data dir>/daemon.sock` (user only, no token), for the CLI;
+    - HTTP on `127.0.0.1:DASHBOARD_PORT` (9081 by default), for the dashboard: the
+      `Host` and `Origin` headers must be the local address, and the token of
+      `<data dir>/daemon.token` is required.
+
+    The actions that change the shared state (database, Caddyfiles, hosts file,
+    Docker) are operations: the request answers `202` with the operation, queued.
+    The operations run one at a time; follow them on `/api/events` or
+    `/api/operations/{id}`. Their `result` is described with each action.
+
+    Messages (errors, events) are in the daemon's language (`CLI_LANGUAGE`).
+servers:
+  - url: http://127.0.0.1:9081
+security:
+  - token: []
+
+tags:
+  - name: daemon
+  - name: stack
+  - name: hosts
+  - name: services
+  - name: settings
+  - name: network
+  - name: s3
+
+paths:
+  /api/health:
+    get:
+      tags: [daemon]
+      summary: Version of the daemon
+      responses:
+        "200":
+          description: The daemon answers.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/status:
+    get:
+      tags: [stack]
+      summary: State of the stack, hosts and optional services
+      responses:
+        "200":
+          description: The current state.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Status" }
+        "500": { $ref: "#/components/responses/Error" }
+
+  /api/events:
+    get:
+      tags: [daemon]
+      summary: Event stream (Server-Sent Events)
+      description: |
+        Sends `event: operation` with an `Operation` when one is queued, starts or
+        finishes, and `event: event` with an `Event` for each step or message of a
+        running operation. Comments (`: ping`) keep the stream open every 25 s.
+        A slow client may miss messages: read the operation again.
+
+        EventSource sends no header: pass the token as `access_token` instead,
+        accepted on this path only.
+      security:
+        - token: []
+        - tokenQuery: []
+      responses:
+        "200":
+          description: The stream, until the client leaves.
+          content:
+            text/event-stream:
+              schema: { type: string }
+
+  /api/operations:
+    get:
+      tags: [daemon]
+      summary: The last 100 operations, the latest first
+      responses:
+        "200":
+          description: The operations.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Operation" }
+
+  /api/operations/{id}:
+    get:
+      tags: [daemon]
+      summary: An operation, with its events and result
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The operation.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Operation" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /api/stack/start:
+    post:
+      tags: [stack]
+      summary: Start the stack
+      description: "Operation `stack.start`, result `StartResult`."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StartRequest" }
+      responses:
+        "202": { $ref: "#/components/responses/Queued" }
+        "400": { $ref: "#/components/responses/Error" }
+
+  /api/stack/stop:
+    post:
+      tags: [stack]
+      summary: Stop the stack and remove the hosts entries
+      description: "Operation `stack.stop`, no result."
+      responses:
+        "202": { $ref: "#/components/responses/Queued" }
+
+  /api/stack/restart:
+    post:
+      tags: [stack]
+      summary: Restart the stack, or some of its parts
+      description: "Operation `stack.restart`, no result."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RestartRequest" }
+      responses:
+        "202": { $ref: "#/components/responses/Queued" }
+        "400": { $ref: "#/components/responses/Error" }
+
+  /api/hosts:
+    post:
+      tags: [hosts]
+      summary: Add PHP, proxy or static hosts (stack running)
+      description: |
+        Operation `hosts.add`. With `target`: proxy hosts, result `ProxyResult`.
+        With `static`: static hosts, result `StaticResult`. Otherwise PHP domains,
+        result `PHPResult`. Hosts already registered are skipped: an empty result
+        means nothing was added.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AddHostsRequest" }
+      responses:
+        "202": { $ref: "#/components/responses/Queued" }
+        "400": { $ref: "#/components/responses/Error" }
+
+  /api/hosts/{name}:
+    delete:
+      tags: [hosts]
+      summary: Remove a host (stack running)
+      description: |
+        Operation `hosts.remove`, result `RemoveResult`. The site files of a PHP
+        domain or static host are archived; the aliases of a removed host are
+        removed too.
+      parameters:
+        - { name: name, in: path, required: true, schema: { type: string } }
+      responses:
+        "202": { $ref: "#/components/responses/Queued" }
+
+  /api/hosts/{name}/aliases:
+    post:
+      tags: [hosts]
+      summary: Add alternate hosts to a domain or proxy host (stack running)
+      description: "Operation `hosts.alias`, result `AliasResult`."
+      parameters:
+        - { name: name, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AliasesRequest" }
+      responses:
+        "202": { $ref: "#/components/responses/Queued" }
+        "400": { $ref: "#/components/responses/Error" }
+
+  /api/hosts/{name}/php:
+    put:
+      tags: [hosts]
+      summary: Switch the PHP version of a domain (stack running)
+      description: "Operation `hosts.php`, result `SwitchResult`. A failure rolls back."
+      parameters:
+        - { name: name, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PHPRequest" }
+      responses:
+        "202": { $ref: "#/components/responses/Queued" }
+        "400": { $ref: "#/components/responses/Error" }
+
+  /api/hosts/restore:
+    post:
+      tags: [hosts]
+      summary: Restore archived domains (stack running)
+      description: "Operation `hosts.restore`, result `PHPResult`, empty when nothing was restored."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RestoreRequest" }
+      responses:
+        "202": { $ref: "#/components/responses/Queued" }
+        "400": { $ref: "#/components/responses/Error" }
+
+  /api/hosts/archived:
+    get:
+      tags: [hosts]
+      summary: The archived hosts, ready to restore
+      responses:
+        "200":
+          description: The archived hosts, by name.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ArchivedHost" }
+
+  /api/services:
+    get:
+      tags: [services]
+      summary: The optional services
+      responses:
+        "200":
+          description: Every optional service.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Service" }
+
+  /api/services/{name}:
+    put:
+      tags: [services]
+      summary: Enable or disable an optional service, live when the stack runs
+      description: "Operation `services.set`, result `OptionalResult`."
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string, enum: [dns, redis, s3, soketi] }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ServiceRequest" }
+      responses:
+        "202": { $ref: "#/components/responses/Queued" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /api/settings:
+    get:
+      tags: [settings]
+      summary: Every setting
+      parameters:
+        - name: show_secrets
+          in: query
+          description: Show the passwords and secrets in clear.
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: The settings, in display order.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Setting" }
+
+  /api/settings/{key}:
+    put:
+      tags: [settings]
+      summary: Change a setting, or reset it with a null value
+      description: |
+        Operation `settings.set`, result `SettingResult`. An optional service is
+        applied at once; the other changes tell how to apply them (`hint`).
+      parameters:
+        - { name: key, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SettingRequest" }
+      responses:
+        "202": { $ref: "#/components/responses/Queued" }
+        "400": { $ref: "#/components/responses/Error" }
+
+  /api/dns/clients:
+    get:
+      tags: [network]
+      summary: The devices using the LAN DNS server
+      parameters:
+        - name: all
+          in: query
+          description: Also the idle devices (last 30 days).
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: The devices; none when the LAN DNS server is disabled.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DNSClients" }
+
+  /api/ca:
+    get:
+      tags: [network]
+      summary: Whether the root CA is shared on the LAN, and where
+      responses:
+        "200":
+          description: The sharing state.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CA" }
+    put:
+      tags: [network]
+      summary: Start or stop sharing the root CA on the LAN
+      description: "Operation `ca.set`, result `CA` (the URL of the QR code)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CARequest" }
+      responses:
+        "202": { $ref: "#/components/responses/Queued" }
+
+  /api/s3:
+    get:
+      tags: [s3]
+      summary: Endpoints and global key of the S3 server
+      responses:
+        "200":
+          description: The S3 settings.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/S3" }
+
+  /api/s3/buckets:
+    get:
+      tags: [s3]
+      summary: The buckets and their usage (S3 running)
+      responses:
+        "200":
+          description: The buckets, by name.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Bucket" }
+        "500": { $ref: "#/components/responses/Error" }
+    post:
+      tags: [s3]
+      summary: Create buckets
+      description: |
+        Operation `s3.buckets.create`, result `CreatedBuckets`: existing buckets
+        are skipped. The global key is allowed on the new buckets.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateBucketsRequest" }
+      responses:
+        "202": { $ref: "#/components/responses/Queued" }
+        "400": { $ref: "#/components/responses/Error" }
+
+  /api/s3/buckets/{name}:
+    delete:
+      tags: [s3]
+      summary: Delete a bucket and its own keys
+      description: "Operation `s3.buckets.delete`, no result. A bucket with objects needs `force`."
+      parameters:
+        - { name: name, in: path, required: true, schema: { type: string } }
+        - name: force
+          in: query
+          description: Empty the bucket first.
+          schema: { type: boolean, default: false }
+      responses:
+        "202": { $ref: "#/components/responses/Queued" }
+
+  /api/s3/buckets/{name}/empty:
+    post:
+      tags: [s3]
+      summary: Delete every object of a bucket
+      description: "Operation `s3.buckets.empty`, no result. Confirm before calling."
+      parameters:
+        - { name: name, in: path, required: true, schema: { type: string } }
+      responses:
+        "202": { $ref: "#/components/responses/Queued" }
+
+  /api/s3/buckets/{name}/public:
+    put:
+      tags: [s3]
+      summary: Make a bucket public or private
+      description: "Operation `s3.buckets.public`, no result. Public: every object is readable without credentials."
+      parameters:
+        - { name: name, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PublicRequest" }
+      responses:
+        "202": { $ref: "#/components/responses/Queued" }
+
+  /api/s3/keys:
+    get:
+      tags: [s3]
+      summary: The access keys, without their secret
+      parameters:
+        - name: bucket
+          in: query
+          description: Only the keys allowed on this bucket.
+          schema: { type: string }
+      responses:
+        "200":
+          description: The access keys.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AccessKey" }
+    post:
+      tags: [s3]
+      summary: Create an access key allowed on one bucket
+      description: "Operation `s3.keys.create`, result `AccessKey` with its secret."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateKeyRequest" }
+      responses:
+        "202": { $ref: "#/components/responses/Queued" }
+        "400": { $ref: "#/components/responses/Error" }
+
+  /api/s3/keys/{id}:
+    get:
+      tags: [s3]
+      summary: An access key, with its secret
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The key.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AccessKey" }
+        "500": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [s3]
+      summary: Delete an access key (not the global one)
+      description: "Operation `s3.keys.delete`, no result."
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "202": { $ref: "#/components/responses/Queued" }
+
+components:
+  securitySchemes:
+    token:
+      type: http
+      scheme: bearer
+      description: The content of `<data dir>/daemon.token`. Not required on the Unix socket.
+    tokenQuery:
+      type: apiKey
+      in: query
+      name: access_token
+      description: The token, on `/api/events` only.
+
+  responses:
+    Queued:
+      description: The operation, queued.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Operation" }
+    Error:
+      description: The request failed.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: Missing or invalid token (401), or forbidden Host or Origin (403).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+
+    Health:
+      type: object
+      required: [version]
+      properties:
+        version: { type: string }
+
+    Operation:
+      type: object
+      required: [id, kind, status, events, created]
+      properties:
+        id: { type: string, examples: [op-12] }
+        kind:
+          type: string
+          description: The action, e.g. `hosts.add`.
+        status:
+          type: string
+          enum: [queued, running, succeeded, failed]
+        error: { type: string, description: The error of a failed operation. }
+        result:
+          description: The result of a succeeded operation; its schema depends on `kind`.
+        events:
+          type: array
+          items: { $ref: "#/components/schemas/Event" }
+        created: { type: string, format: date-time }
+        started: { type: string, format: date-time }
+        finished: { type: string, format: date-time }
+
+    Event:
+      type: object
+      required: [operation, kind, level, time]
+      properties:
+        operation: { type: string }
+        kind:
+          type: string
+          enum: [message, step, break]
+          description: A step starts a stage of the operation; a break separates two parts of the output.
+        level:
+          type: string
+          enum: [info, success, warning, error]
+        message: { type: string }
+        time: { type: string, format: date-time }
+
+    Host:
+      type: object
+      required: [name, kind]
+      properties:
+        name: { type: string }
+        kind:
+          type: string
+          enum: [php, proxy, static, alias]
+        php: { type: string, description: PHP version of a PHP domain. }
+        target: { type: string, description: Upstream of a proxy host, target of an alias. }
+        root: { type: string, description: Directory of a static host, relative to the projects root. }
+        spa: { type: boolean }
+
+    Service:
+      type: object
+      required: [name, setting, enabled, state]
+      properties:
+        name: { type: string, enum: [dns, redis, s3, soketi] }
+        setting: { type: string, description: Its setting, e.g. `REDIS_ENABLED`. }
+        enabled: { type: boolean }
+        state:
+          type: string
+          description: State of its container (`running`, `exited`, empty when absent), or of the LAN DNS process (`running`, `stopped`).
+
+    Status:
+      type: object
+      required: [running, hosts, services]
+      properties:
+        running: { type: boolean }
+        hosts:
+          type: array
+          items: { $ref: "#/components/schemas/Host" }
+        services:
+          type: array
+          items: { $ref: "#/components/schemas/Service" }
+
+    Domain:
+      type: object
+      required: [name, php]
+      properties:
+        name: { type: string }
+        php: { type: string }
+
+    StaticHost:
+      type: object
+      required: [domain, root, spa]
+      properties:
+        domain: { type: string }
+        root: { type: string }
+        spa: { type: boolean }
+
+    StartRequest:
+      type: object
+      properties:
+        domains:
+          type: [array, "null"]
+          items: { type: string }
+          description: Domains added with `php`; null starts the registered ones.
+        path: { type: string, description: Projects root, empty for DEFAULT_PROJECT_PATH. }
+        php: { type: string, description: Version of the new domains, empty for DEFAULT_PHP_VERSION. }
+        force_ssl: { type: boolean }
+        build: { type: boolean, description: Rebuild the PHP images even when up to date. }
+
+    StartResult:
+      type: object
+      required: [domains, versions, statics, dns_listen, watched]
+      properties:
+        domains:
+          type: array
+          items: { $ref: "#/components/schemas/Domain" }
+        versions:
+          type: array
+          items: { type: string }
+        statics:
+          type: array
+          items: { $ref: "#/components/schemas/StaticHost" }
+        dns_listen: { type: string, description: Address of the LAN DNS server, empty when disabled. }
+        watched: { type: boolean, description: The domains follow the LAN IP of the machine. }
+
+    RestartRequest:
+      type: object
+      properties:
+        targets:
+          type: array
+          items:
+            type: string
+            enum: [caddy, database, cache, phpmyadmin, dns, soketi, s3]
+          description: Empty restarts everything.
+        force_ssl: { type: boolean }
+        build: { type: boolean }
+
+    AddHostsRequest:
+      type: object
+      required: [domains]
+      properties:
+        domains:
+          type: array
+          items: { type: string }
+        php: { type: string, description: PHP version, empty for DEFAULT_PHP_VERSION. }
+        root: { type: string, description: Directory served, relative to the projects root; its first directory must exist. }
+        target: { type: string, description: Makes proxy hosts forwarding to this upstream. }
+        static: { type: boolean }
+        spa: { type: boolean, description: Static only; unknown paths fall back to /index.html. }
+        force_ssl: { type: boolean }
+
+    PHPResult:
+      type: object
+      required: [domains, php]
+      properties:
+        domains:
+          type: [array, "null"]
+          items: { type: string }
+        php: { type: string }
+
+    ProxyResult:
+      type: object
+      required: [domains, target]
+      properties:
+        domains:
+          type: [array, "null"]
+          items: { type: string }
+        target: { type: string }
+
+    StaticResult:
+      type: object
+      required: [hosts, project_path, site_dir]
+      properties:
+        hosts:
+          type: [array, "null"]
+          items: { $ref: "#/components/schemas/StaticHost" }
+        project_path: { type: string }
+        site_dir: { type: string, description: Directory of the editable site files. }
+
+    AliasesRequest:
+      type: object
+      required: [aliases]
+      properties:
+        aliases:
+          type: array
+          items: { type: string }
+        force_ssl: { type: boolean }
+
+    AliasResult:
+      type: object
+      required: [aliases, target, serves]
+      properties:
+        aliases:
+          type: [array, "null"]
+          items: { type: string }
+        target: { type: string }
+        serves: { type: string, description: "`PHP 8.4` or `proxy <upstream>`." }
+
+    RemoveResult:
+      type: object
+      required: [domains, aliases, proxies, statics, archive_dir, static_archive_dir]
+      properties:
+        domains:
+          type: [array, "null"]
+          items: { $ref: "#/components/schemas/Domain" }
+        aliases:
+          type: [array, "null"]
+          items: { type: string }
+        proxies:
+          type: [array, "null"]
+          items: { type: string }
+        statics:
+          type: [array, "null"]
+          items: { type: string }
+        archive_dir: { type: string }
+        static_archive_dir: { type: string }
+
+    PHPRequest:
+      type: object
+      properties:
+        php: { type: string, description: Empty for DEFAULT_PHP_VERSION. }
+
+    SwitchResult:
+      type: object
+      required: [domain, from, to, switched]
+      properties:
+        domain: { type: string }
+        from: { type: string }
+        to: { type: string }
+        switched: { type: boolean, description: False when the domain already used this version. }
+
+    RestoreRequest:
+      type: object
+      required: [domains]
+      properties:
+        domains:
+          type: array
+          items: { type: string }
+        php: { type: string, description: Empty for DEFAULT_PHP_VERSION, not the original version. }
+        force_ssl: { type: boolean }
+
+    ArchivedHost:
+      type: object
+      required: [domain]
+      properties:
+        domain: { type: string }
+
+    ServiceRequest:
+      type: object
+      required: [enabled]
+      properties:
+        enabled: { type: boolean }
+
+    OptionalResult:
+      type: object
+      required: [name, enabled, changed, live]
+      properties:
+        name: { type: string }
+        enabled: { type: boolean }
+        changed: { type: boolean, description: False when it was already in that state. }
+        live: { type: boolean, description: Applied to the running stack; otherwise on the next start. }
+
+    Setting:
+      type: object
+      required: [key, value, default, description, custom, secret, apply, applies]
+      properties:
+        key: { type: string }
+        value: { type: string, description: "`********` for a set secret, unless show_secrets." }
+        default: { type: string }
+        description: { type: string }
+        values:
+          type: array
+          items: { type: string }
+          description: The accepted values, absent when free.
+        custom: { type: boolean, description: Set, not the default. }
+        secret: { type: boolean }
+        apply:
+          type: string
+          enum: [now, live, alias, recreate, rebuild, restart_dns, restart_db]
+        applies: { type: string, description: Label of `apply`, in the daemon's language. }
+        hint: { type: string, description: The command that applies a change. }
+
+    SettingRequest:
+      type: object
+      required: [value]
+      properties:
+        value:
+          type: [string, "null"]
+          description: The new value, null to reset the default.
+
+    SettingResult:
+      type: object
+      required: [key, value, changed, applied]
+      properties:
+        key: { type: string }
+        value: { type: string }
+        changed: { type: boolean }
+        applied: { type: boolean, description: Already applied (optional services). }
+        hint: { type: string, description: How to apply it otherwise. }
+
+    DNSClient:
+      type: object
+      required: [ip, name, mac, first_seen, last_seen, queries, status, randomized_mac]
+      properties:
+        ip: { type: string }
+        name: { type: string, description: "Empty when unknown, `this machine` for the host." }
+        mac: { type: string }
+        first_seen: { type: string, format: date-time }
+        last_seen: { type: string, format: date-time }
+        queries: { type: integer, format: int64 }
+        status: { type: string, enum: [connected, idle] }
+        randomized_mac: { type: boolean, description: A private MAC address, which changes per network. }
+
+    DNSClients:
+      type: object
+      required: [enabled, state, connected, devices]
+      properties:
+        enabled: { type: boolean }
+        state: { type: string, description: State of the LAN DNS process, empty when disabled. }
+        connected: { type: integer }
+        devices:
+          type: array
+          items: { $ref: "#/components/schemas/DNSClient" }
+
+    CA:
+      type: object
+      required: [sharing]
+      properties:
+        sharing: { type: boolean }
+        url: { type: string, description: Where the other devices download the root CA (QR code). }
+
+    CARequest:
+      type: object
+      required: [enabled]
+      properties:
+        enabled: { type: boolean }
+        port: { type: integer, description: "0 for the default (9080)." }
+
+    S3:
+      type: object
+      required: [enabled, domain, app_endpoint, region, access_key_id]
+      properties:
+        enabled: { type: boolean }
+        domain: { type: string, description: HTTPS host of the S3 API. }
+        app_endpoint: { type: string, description: Endpoint of the PHP apps. }
+        region: { type: string }
+        access_key_id: { type: string, description: The global key, allowed on every bucket. }
+
+    Bucket:
+      type: object
+      required: [name, public, objects, public_objects, bytes, keys, url]
+      properties:
+        name: { type: string }
+        public: { type: boolean }
+        objects: { type: integer, format: int64 }
+        public_objects: { type: integer, description: "Objects stored public-read, -1 for a public bucket (all)." }
+        bytes: { type: integer, format: int64 }
+        keys: { type: integer, description: Its own keys, without the global one. }
+        url: { type: string }
+
+    CreateBucketsRequest:
+      type: object
+      required: [names]
+      properties:
+        names:
+          type: array
+          items: { type: string }
+        public: { type: boolean }
+
+    CreatedBuckets:
+      type: object
+      required: [created]
+      properties:
+        created:
+          type: array
+          items: { type: string }
+
+    PublicRequest:
+      type: object
+      required: [public]
+      properties:
+        public: { type: boolean }
+
+    Grant:
+      type: object
+      required: [bucket, read, write, owner]
+      properties:
+        bucket: { type: string }
+        read: { type: boolean }
+        write: { type: boolean }
+        owner: { type: boolean }
+
+    AccessKey:
+      type: object
+      required: [id, name, global, grants]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        secret: { type: string, description: Only when created or shown. }
+        global: { type: boolean }
+        grants:
+          type: array
+          items: { $ref: "#/components/schemas/Grant" }
+
+    CreateKeyRequest:
+      type: object
+      required: [bucket]
+      properties:
+        bucket: { type: string }
+        name: { type: string, description: "Stored as `<bucket>/<name>`, `app` when empty." }
+        read_only: { type: boolean }

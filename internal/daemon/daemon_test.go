@@ -7,6 +7,9 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -123,5 +126,41 @@ func TestLoadToken(t *testing.T) {
 	}
 	if again, _ := LoadToken(dir); again != first {
 		t.Error("token changed")
+	}
+}
+
+// api/openapi.yaml is the contract of the dashboard: it must describe
+// every route, and no other.
+func TestSpecMatchesRoutes(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "api", "openapi.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// "  /api/x:" opens a path, "    get:" one of its operations
+	pathLine := regexp.MustCompile(`^  (/api/\S*):\s*$`)
+	methodLine := regexp.MustCompile(`^    (get|post|put|delete|patch):\s*$`)
+	var spec []string
+	inPaths, path := false, ""
+	for _, line := range strings.Split(string(data), "\n") {
+		switch {
+		case line == "paths:":
+			inPaths = true
+		case inPaths && line != "" && !strings.HasPrefix(line, " "):
+			inPaths = false
+		case !inPaths:
+		case pathLine.MatchString(line):
+			path = pathLine.FindStringSubmatch(line)[1]
+		case methodLine.MatchString(line):
+			spec = append(spec, strings.ToUpper(methodLine.FindStringSubmatch(line)[1])+" "+path)
+		}
+	}
+	var routes []string
+	for _, r := range New(nil, "", 0, "").routeTable() {
+		routes = append(routes, r.pattern)
+	}
+	slices.Sort(spec)
+	slices.Sort(routes)
+	if !slices.Equal(spec, routes) {
+		t.Errorf("api/openapi.yaml and the routes differ:\nspec:   %v\nroutes: %v", spec, routes)
 	}
 }
