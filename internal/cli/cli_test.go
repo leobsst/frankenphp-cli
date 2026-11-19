@@ -234,6 +234,9 @@ func (e *testEnv) run(args ...string) (code int, out, errOut string) {
 			return nil, errors.New("no daemon in tests")
 		},
 		DaemonService: e.daemonService,
+		// The operations run in the command's process: the whole path from
+		// the command to the services through the API, without a daemon
+		DaemonInProcess: true,
 		Interactive: func(ctx context.Context, name string, args []string) (int, error) {
 			if e.interactive == nil {
 				e.t.Errorf("unexpected %s %v", name, args)

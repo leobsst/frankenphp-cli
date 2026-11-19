@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/spf13/cobra"
 
@@ -17,20 +18,15 @@ func newStopCmd(a *app) *cobra.Command {
 	}
 }
 
-// stop stops the stack, the DNS watcher, and removes the hosts entries.
-func (a *app) stop(ctx context.Context) (err error) {
+// stop stops the stack and the LAN DNS server, and removes the hosts
+// entries. The daemon goes on.
+func (a *app) stop(ctx context.Context) error {
 	dir, err := a.projectDir()
 	if err != nil {
 		return err
 	}
-	d := a.docker(dir)
-	s, err := a.openStore(dir)
-	if err != nil {
-		return err
-	}
-	defer closeStore(s, &err)
-	if err := a.stackService(dir, nil, d, s).Stop(ctx); err != nil {
-		return err
+	if err := a.runOp(ctx, dir, http.MethodPost, "/api/stack/stop", nil, nil); err != nil {
+		return reported(err)
 	}
 	a.con.Println()
 	a.log.Success(i18n.T("Web server stopped!"))

@@ -4,17 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
 	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
 
-	"github.com/leobsst/frankenphp-cli/internal/core/docker"
+	"github.com/leobsst/frankenphp-cli/internal/client"
 	"github.com/leobsst/frankenphp-cli/internal/core/domains"
 	"github.com/leobsst/frankenphp-cli/internal/core/env"
 	"github.com/leobsst/frankenphp-cli/internal/core/events"
-	"github.com/leobsst/frankenphp-cli/internal/core/stack"
-	"github.com/leobsst/frankenphp-cli/internal/core/store"
 	"github.com/leobsst/frankenphp-cli/internal/core/validate"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
 )
@@ -33,69 +33,15 @@ func rangeArgs(required int, names ...string) cobra.PositionalArgs {
 	}
 }
 
-// server is the context of a command run on a started server.
-type server struct {
-	dir      string
-	e        *env.Env
-	d        *docker.Manager
-	s        *store.Store
-	caddyDir string
-}
-
-// openRunning prepares a command that needs the server started; notRunning
-// (translated) is the error otherwise. The caller closes r.s.
-func (a *app) openRunning(ctx context.Context, notRunning string) (*server, error) {
-	dir, err := a.projectDir()
-	if err != nil {
-		return nil, err
-	}
-	e, err := a.loadEnv(dir)
-	if err != nil {
-		return nil, err
-	}
-	d := a.docker(dir)
-	s, err := a.openStore(dir)
-	if err != nil {
-		return nil, err
-	}
-	if ok, err := a.isRunning(ctx, d, s); err != nil || !ok {
-		_ = s.Close()
-		if err == nil {
-			err = errors.New(notRunning)
-		}
-		return nil, err
-	}
-	return &server{dir: dir, e: e, d: d, s: s, caddyDir: e.ResolveDir("CADDY_DIR", "./caddy", dir)}, nil
-}
-
-// writeMain regenerates the main Caddyfile from the database.
-func (r *server) writeMain() error { return stack.WriteMain(r.caddyDir, r.e, r.s) }
-
 // events returns the console as the event log of the services.
 func (a *app) events() events.Log { return events.NewLog(a.log) }
-
-// domainService returns the hosts service of a running server, reporting
-// on the console.
-func (a *app) domainService(r *server) *domains.Service {
-	log := a.events()
-	return &domains.Service{
-		Dir: r.dir, CaddyDir: r.caddyDir, Env: r.e, Store: r.s, Docker: r.d,
-		Hosts: a.deps.Hosts(log),
-		Certs: func() (domains.Certs, error) { return a.certs(r.e.CertsDir(r.dir)) },
-		Log:   log,
-	}
-}
-
-// restartProxy restarts the reverse proxy, to pick up new routes.
-func (a *app) restartProxy(ctx context.Context, d *docker.Manager) {
-	stack.RestartProxy(ctx, d, a.events())
-}
 
 // reported turns a failure the services already reported (error and
 // cleanup messages) into exit code 1, so that it is not printed twice.
 func reported(err error) error {
 	var r *events.ReportedError
-	if errors.As(err, &r) {
+	var op *client.OperationError
+	if errors.As(err, &r) || errors.As(err, &op) && op.Reported {
 		return exitError(1)
 	}
 	return err
@@ -179,19 +125,40 @@ Examples:
 	return cmd
 }
 
+// prepare returns the data directory and its configuration, reporting a
+// .env migration: what every command does first.
+func (a *app) prepare() (string, *env.Env, error) {
+	dir, err := a.projectDir()
+	if err != nil {
+		return "", nil, err
+	}
+	e, err := a.loadEnv(dir)
+	return dir, e, err
+}
+
+// addHostRequest is the body of POST /api/hosts.
+type addHostRequest struct {
+	Domains  []string `json:"domains"`
+	PHP      string   `json:"php,omitempty"`
+	Root     string   `json:"root,omitempty"`
+	Target   string   `json:"target,omitempty"`
+	Static   bool     `json:"static,omitempty"`
+	SPA      bool     `json:"spa,omitempty"`
+	ForceSSL bool     `json:"force_ssl,omitempty"`
+}
+
 // addHost adds PHP domains, served from root when set, or proxy hosts
 // forwarding to target.
 func (a *app) addHost(ctx context.Context, names []string, forceSSL bool, php, target string, proxy bool,
-	root string) (err error) {
-	r, err := a.openRunning(ctx, i18n.T("The server is not running. Use 'start' command instead."))
+	root string) error {
+	dir, _, err := a.prepare()
 	if err != nil {
 		return err
 	}
-	defer closeStore(r.s, &err)
-
-	svc := a.domainService(r)
 	if proxy {
-		res, err := svc.AddProxy(ctx, names, target, forceSSL)
+		var res domains.ProxyResult
+		err := a.runOp(ctx, dir, http.MethodPost, "/api/hosts",
+			addHostRequest{Domains: names, Target: target, ForceSSL: forceSSL}, &res)
 		if err != nil || len(res.Domains) == 0 {
 			return reported(err)
 		}
@@ -204,7 +171,9 @@ func (a *app) addHost(ctx context.Context, names []string, forceSSL bool, php, t
 		return nil
 	}
 
-	res, err := svc.AddPHP(ctx, names, php, root, forceSSL)
+	var res domains.PHPResult
+	err = a.runOp(ctx, dir, http.MethodPost, "/api/hosts",
+		addHostRequest{Domains: names, PHP: php, Root: root, ForceSSL: forceSSL}, &res)
 	if err != nil || len(res.Domains) == 0 {
 		return reported(err)
 	}
@@ -218,14 +187,14 @@ func (a *app) addHost(ctx context.Context, names []string, forceSSL bool, php, t
 }
 
 // addStaticHosts adds domains whose files the reverse proxy serves.
-func (a *app) addStaticHosts(ctx context.Context, names []string, o staticOptions, forceSSL bool) (err error) {
-	r, err := a.openRunning(ctx, i18n.T("The server is not running. Use 'start' command instead."))
+func (a *app) addStaticHosts(ctx context.Context, names []string, o staticOptions, forceSSL bool) error {
+	dir, _, err := a.prepare()
 	if err != nil {
 		return err
 	}
-	defer closeStore(r.s, &err)
-
-	res, err := a.domainService(r).AddStatic(ctx, names, o.root, o.spa, forceSSL)
+	var res domains.StaticResult
+	err = a.runOp(ctx, dir, http.MethodPost, "/api/hosts",
+		addHostRequest{Domains: names, Root: o.root, Static: true, SPA: o.spa, ForceSSL: forceSSL}, &res)
 	if err != nil || len(res.Hosts) == 0 {
 		return reported(err)
 	}
@@ -273,14 +242,14 @@ Examples:
 
 // addAlias adds alternate hosts forwarding to an existing domain or proxy
 // host.
-func (a *app) addAlias(ctx context.Context, target string, aliases []string, forceSSL bool) (err error) {
-	r, err := a.openRunning(ctx, i18n.T("The server is not running. Use 'start' command instead."))
+func (a *app) addAlias(ctx context.Context, target string, aliases []string, forceSSL bool) error {
+	dir, _, err := a.prepare()
 	if err != nil {
 		return err
 	}
-	defer closeStore(r.s, &err)
-
-	res, err := a.domainService(r).AddAlias(ctx, target, aliases, forceSSL)
+	var res domains.AliasResult
+	err = a.runOp(ctx, dir, http.MethodPost, "/api/hosts/"+url.PathEscape(target)+"/aliases",
+		map[string]any{"aliases": aliases, "force_ssl": forceSSL}, &res)
 	if err != nil || len(res.Aliases) == 0 {
 		return reported(err)
 	}

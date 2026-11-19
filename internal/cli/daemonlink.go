@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/leobsst/frankenphp-cli/internal/client"
 	"github.com/leobsst/frankenphp-cli/internal/core/background"
@@ -10,6 +11,7 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/dns"
 	"github.com/leobsst/frankenphp-cli/internal/core/dnswatcher"
 	"github.com/leobsst/frankenphp-cli/internal/core/env"
+	"github.com/leobsst/frankenphp-cli/internal/core/events"
 	"github.com/leobsst/frankenphp-cli/internal/core/stack"
 	"github.com/leobsst/frankenphp-cli/internal/daemon"
 	"github.com/leobsst/frankenphp-cli/internal/version"
@@ -90,6 +92,51 @@ func (x *inProcessDNS) Apply(context.Context) (bool, error) {
 func (x *inProcessDNS) Stop(context.Context) { x.host.Stop() }
 
 func (x *inProcessDNS) Running(context.Context) bool { return x.host.Running() }
+
+// --- Operations --------------------------------------------------------------
+
+// opClient returns the client the commands that change the shared state
+// submit their operations to, and the function that ends it. They go
+// through the daemon, the only owner of that state; but the daemon has no
+// terminal to ask for a password: without the passwordless setup, they run
+// in this process (same API and services), where sudo can ask.
+func (a *app) opClient(ctx context.Context, dir string) (*client.Client, func(), error) {
+	if a.deps.DaemonInProcess || !a.helperReady(ctx) {
+		ctx, cancel := context.WithCancel(ctx)
+		srv := daemon.New(func(log events.Log) (*daemon.Workspace, error) {
+			return a.workspace(dir, a.dns(dir), &caserver.Host{}, log)
+		}, "", 0, version.Version)
+		go srv.Queue.Run(ctx)
+		return client.NewInProcess(srv.Handler()), cancel, nil
+	}
+	c, _, err := a.ensureDaemon(ctx, dir)
+	return c, func() {}, err
+}
+
+// helperReady reports whether the hosts file can be edited without a
+// terminal: the passwordless helper of setup.
+func (a *app) helperReady(ctx context.Context) bool {
+	return a.deps.Privilege(events.NewLog(nil)).CanUseHelper(ctx)
+}
+
+// runOp runs an operation of the API (method, path, body as JSON), printing
+// its events as they come like the commands always did, and decodes its
+// result into out. With --verbose, the image builds stream their output.
+func (a *app) runOp(ctx context.Context, dir, method, path string, body, out any) error {
+	c, done, err := a.opClient(ctx, dir)
+	if err != nil {
+		return err
+	}
+	defer done()
+	if a.verbose {
+		sep := "?"
+		if strings.Contains(path, "?") {
+			sep = "&"
+		}
+		path += sep + "verbose=true"
+	}
+	return c.RunWithEvents(ctx, method, path, body, out, func(e daemon.Event) { a.log.Emit(e.Core()) })
+}
 
 // --- Daemon service ----------------------------------------------------------
 

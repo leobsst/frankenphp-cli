@@ -3,6 +3,8 @@ package cli
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -101,25 +103,22 @@ func (a *app) stackService(dir string, e *env.Env, d *docker.Manager, s *store.S
 
 // start starts the stack. It starts even without any domain: the reverse
 // proxy and databases come up alone.
-func (a *app) start(ctx context.Context, domains []string, o startOptions) (err error) {
-	dir, err := a.projectDir()
+func (a *app) start(ctx context.Context, domains []string, o startOptions) error {
+	dir, e, err := a.prepare()
 	if err != nil {
 		return err
 	}
-	e, err := a.loadEnv(dir)
-	if err != nil {
-		return err
+	// The daemon has another working directory
+	path := o.path
+	if path != "" {
+		if path, err = filepath.Abs(path); err != nil {
+			return err
+		}
 	}
-	d := a.docker(dir)
-	s, err := a.openStore(dir)
-	if err != nil {
-		return err
-	}
-	defer closeStore(s, &err)
-
-	res, err := a.stackService(dir, e, d, s).Start(ctx, stack.StartOptions{
-		Domains: domains, Path: o.path, PHP: o.php, ForceSSL: o.forceSSL, Build: o.build,
-	})
+	var res stack.StartResult
+	err = a.runOp(ctx, dir, http.MethodPost, "/api/stack/start", stack.StartOptions{
+		Domains: domains, Path: path, PHP: o.php, ForceSSL: o.forceSSL, Build: o.build,
+	}, &res)
 	if err != nil {
 		return reported(err)
 	}

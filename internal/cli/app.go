@@ -77,6 +77,9 @@ type Deps struct {
 	// DNS returns the LAN DNS server of a data directory; nil: the one of
 	// the daemon.
 	DNS func(dataDir string) stack.DNS
+	// DaemonInProcess runs the operations in the command's own process
+	// rather than the daemon (tests).
+	DaemonInProcess bool
 	// Language returns the system language (a locale name, "fr_FR.UTF-8"),
 	// for the CLI_LANGUAGE "auto" setting.
 	Language func() string

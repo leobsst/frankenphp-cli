@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"net/http"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -71,43 +72,28 @@ Examples:
 	}
 }
 
-// optionalService runs fn on the stack service of the data directory: the
-// optional services work on the configuration and the running stack.
-func (a *app) optionalService(dir string, e *env.Env, fn func(*stack.Service) (stack.OptionalResult, error)) (err error) {
-	s, err := a.openStore(dir)
+// setService turns a service on or off in the configuration, then applies
+// it live.
+func (a *app) setService(ctx context.Context, name string, on bool) error {
+	dir, _, err := a.prepare()
 	if err != nil {
 		return err
 	}
-	defer closeStore(s, &err)
-	res, err := fn(a.stackService(dir, e, a.docker(dir), s))
+	var res stack.OptionalResult
+	if err := a.runOp(ctx, dir, http.MethodPut, "/api/services/"+name, map[string]any{"enabled": on}, &res); err != nil {
+		return reported(err)
+	}
+	return a.reportServiceOf(dir, res)
+}
+
+// reportServiceOf tells what happened to an optional service of dir, with
+// the configuration as the operation left it (credentials generated...).
+func (a *app) reportServiceOf(dir string, res stack.OptionalResult) error {
+	e, _, err := env.Open(dir)
 	if err != nil {
 		return err
 	}
 	return a.reportService(e, res)
-}
-
-// setService turns a service on or off in the configuration, then applies
-// it live.
-func (a *app) setService(ctx context.Context, name string, on bool) error {
-	dir, err := a.projectDir()
-	if err != nil {
-		return err
-	}
-	e, err := a.loadEnv(dir)
-	if err != nil {
-		return err
-	}
-	return a.optionalService(dir, e, func(svc *stack.Service) (stack.OptionalResult, error) {
-		return svc.SetOptional(ctx, name, on)
-	})
-}
-
-// applyService brings a service in line with the configuration when the
-// server runs.
-func (a *app) applyService(ctx context.Context, dir string, e *env.Env, name string) error {
-	return a.optionalService(dir, e, func(svc *stack.Service) (stack.OptionalResult, error) {
-		return svc.ApplyOptional(ctx, name)
-	})
 }
 
 // reportService tells what happened to an optional service.

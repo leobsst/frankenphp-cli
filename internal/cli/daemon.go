@@ -190,7 +190,8 @@ func (a *app) runDaemon(ctx context.Context) error {
 		a.log.Info(i18n.T("LAN DNS server started."))
 	}
 
-	srv := daemon.New(func(log events.Log) (*daemon.Workspace, error) { return a.workspace(dir, h, log) },
+	dnsServer := &inProcessDNS{host: h.dns, dir: dir}
+	srv := daemon.New(func(log events.Log) (*daemon.Workspace, error) { return a.workspace(dir, dnsServer, h.ca, log) },
 		token, port, version.Version)
 	err = srv.Serve(ctx, socket, local)
 	a.log.Info(i18n.T("Dashboard API stopped."))
@@ -226,8 +227,9 @@ type daemonHosts struct {
 }
 
 // workspace opens the configuration, the database and the services of dir
-// for the daemon, reporting to log, with the dependencies of the commands.
-func (a *app) workspace(dir string, h *daemonHosts, log events.Log) (*daemon.Workspace, error) {
+// for the daemon, reporting to log, with the dependencies of the commands:
+// dnsServer is its LAN DNS server, ca shares the root CA.
+func (a *app) workspace(dir string, dnsServer stack.DNS, ca *caserver.Host, log events.Log) (*daemon.Workspace, error) {
 	e, _, err := env.Open(dir)
 	if err != nil {
 		return nil, err
@@ -248,7 +250,7 @@ func (a *app) workspace(dir string, h *daemonHosts, log events.Log) (*daemon.Wor
 		return m, nil
 	}
 	st := &stack.Service{Dir: dir, Env: e, Store: s, Docker: d, Hosts: hostsFile, Certs: certs,
-		DNS: &inProcessDNS{host: h.dns, dir: dir}, Log: log}
+		DNS: dnsServer, Log: log}
 	caddyDir := e.ResolveDir("CADDY_DIR", "./caddy", dir)
 	return &daemon.Workspace{
 		Dir: dir, Env: e, Store: s, Stack: st,
@@ -263,7 +265,7 @@ func (a *app) workspace(dir string, h *daemonHosts, log events.Log) (*daemon.Wor
 			}
 			return &buckets.Service{Dir: dir, Env: e, Store: s, Hosts: hostsFile, Garage: g, Log: log}, nil
 		},
-		CA: h.ca.Sharing(dir, func(ctx context.Context) (string, error) {
+		CA: ca.Sharing(dir, func(ctx context.Context) (string, error) {
 			return ssl.RootCAPath(ctx, a.deps.Command)
 		}, a.deps.LANIP),
 		Close: s.Close,

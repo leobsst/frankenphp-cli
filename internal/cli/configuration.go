@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/http"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/alias"
 	"github.com/leobsst/frankenphp-cli/internal/core/env"
 	"github.com/leobsst/frankenphp-cli/internal/core/settings"
+	"github.com/leobsst/frankenphp-cli/internal/core/stack"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
 	"github.com/leobsst/frankenphp-cli/internal/platform"
@@ -171,37 +173,42 @@ func (a *app) configGet(name string) error {
 }
 
 // configSet sets a setting (value) or puts it back to its default (nil),
-// then applies it.
+// then applies it. The CLI alias is applied here, next to the command; the
+// other settings through an operation.
 func (a *app) configSet(ctx context.Context, name string, value *string) error {
 	d, err := checkSetting(name, value)
 	if err != nil {
 		return err
 	}
-	dir, err := a.projectDir()
+	dir, e, err := a.prepare()
 	if err != nil {
 		return err
 	}
-	e, err := a.loadEnv(dir)
-	if err != nil {
-		return err
-	}
-	c, err := settings.Set(e, d, value)
-	if err != nil {
-		return err
-	}
-	if !c.Changed() {
-		a.log.Info(i18n.Tf("%s = %s (unchanged)", d.Key, c.Shown))
-		return nil
-	}
-	a.log.Success(fmt.Sprintf("%s = %s", d.Key, c.Shown))
-
-	switch d.Apply {
-	case env.ApplyLive:
-		return a.applyService(ctx, dir, e, d.Service)
-	case env.ApplyAlias:
+	if d.Apply == env.ApplyAlias {
+		c, err := settings.Set(e, d, value)
+		if err != nil {
+			return err
+		}
+		if !c.Changed() {
+			a.log.Info(i18n.Tf("%s = %s (unchanged)", d.Key, c.Shown))
+			return nil
+		}
+		a.log.Success(fmt.Sprintf("%s = %s", d.Key, c.Shown))
 		return a.syncAlias(c.Old, c.New)
-	case env.ApplyNow:
+	}
+
+	var res struct {
+		Changed bool                  `json:"changed"`
+		Service *stack.OptionalResult `json:"service"`
+	}
+	err = a.runOp(ctx, dir, http.MethodPut, "/api/settings/"+d.Key, map[string]*string{"value": value}, &res)
+	switch {
+	case err != nil:
+		return reported(err)
+	case !res.Changed || d.Apply == env.ApplyNow:
 		return nil
+	case res.Service != nil:
+		return a.reportServiceOf(dir, *res.Service)
 	}
 	running, err := a.serverRunning(ctx, dir)
 	if err != nil {

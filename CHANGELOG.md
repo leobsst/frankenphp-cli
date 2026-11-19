@@ -77,6 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `daemon start|stop|status|run` - The daemon behind the dashboard: one HTTP/JSON API (`api/openapi.yaml`) on a Unix socket for the CLI and on `127.0.0.1:DASHBOARD_PORT` for the dashboard (token of `daemon.token`, `Host` and `Origin` checked against DNS rebinding)
   - Actions run one at a time as operations, followed on an event stream (Server-Sent Events)
   - Serves the LAN DNS server and the root CA sharing in its own process
+  - The commands that change the server run through it and print its progress; without the passwordless setup, they run in their own process, where `sudo` can ask for the password
   - Run at login by the OS service manager (LaunchAgent `dev.frankenmanager.daemon`, systemd user unit `frankenmanager-daemon.service`) unless `DAEMON_AUTOSTART=false`; `start` installs it, `daemon stop` removes it; a daemon of another version is replaced
   - `on`/`off`/`status` actions, optional `--port` (default `9080`)
   - Serves only the public root certificate, never its private key

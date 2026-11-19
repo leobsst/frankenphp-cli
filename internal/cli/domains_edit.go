@@ -3,13 +3,14 @@ package cli
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/leobsst/frankenphp-cli/internal/core/caddyfile"
-	"github.com/leobsst/frankenphp-cli/internal/core/phpversions"
-	"github.com/leobsst/frankenphp-cli/internal/core/stack"
+	"github.com/leobsst/frankenphp-cli/internal/core/domains"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
 	"github.com/leobsst/frankenphp-cli/internal/ui"
 )
@@ -40,14 +41,13 @@ Examples:
 
 // removeHost removes domains, aliases, proxy and static hosts, archiving
 // the site files of the domains and static hosts.
-func (a *app) removeHost(ctx context.Context, names []string) (err error) {
-	r, err := a.openRunning(ctx, i18n.T("The server is not running."))
+func (a *app) removeHost(ctx context.Context, names []string) error {
+	dir, _, err := a.prepare()
 	if err != nil {
 		return err
 	}
-	defer closeStore(r.s, &err)
-
-	res, err := a.domainService(r).Remove(ctx, names)
+	var res domains.RemoveResult
+	err = a.runOp(ctx, dir, http.MethodPost, "/api/hosts/remove", map[string]any{"domains": names}, &res)
 	if err != nil || res.Empty() {
 		return reported(err)
 	}
@@ -152,26 +152,14 @@ func (a *app) listArchived() error {
 
 // restoreHost brings archived domains back, with --php or the default
 // version, not their original one.
-func (a *app) restoreHost(ctx context.Context, names []string, forceSSL bool, php string) (err error) {
-	dir, err := a.projectDir()
+func (a *app) restoreHost(ctx context.Context, names []string, forceSSL bool, php string) error {
+	dir, _, err := a.prepare()
 	if err != nil {
 		return err
 	}
-	e, err := a.loadEnv(dir)
-	if err != nil {
-		return err
-	}
-	// Checked before the server state
-	if php, err = stack.ResolvePHP(php, e, a.events()); err != nil {
-		return err
-	}
-	r, err := a.openRunning(ctx, i18n.T("The server is not running. Use 'start' command instead."))
-	if err != nil {
-		return err
-	}
-	defer closeStore(r.s, &err)
-
-	res, err := a.domainService(r).Restore(ctx, names, php, forceSSL)
+	var res domains.PHPResult
+	err = a.runOp(ctx, dir, http.MethodPost, "/api/hosts/restore",
+		map[string]any{"domains": names, "php": php, "force_ssl": forceSSL}, &res)
 	if err != nil || len(res.Domains) == 0 {
 		return reported(err)
 	}
@@ -209,21 +197,13 @@ Examples:
 }
 
 // switchPHP moves a domain to another PHP version.
-func (a *app) switchPHP(ctx context.Context, domain, php string) (err error) {
-	// Checked before the server state
-	if err := phpversions.Validate(php); err != nil {
-		return err
-	}
-	if w := phpversions.DeprecationWarning(php); w != "" {
-		a.log.Warning(w)
-	}
-	r, err := a.openRunning(ctx, i18n.T("The server is not running."))
+func (a *app) switchPHP(ctx context.Context, domain, php string) error {
+	dir, _, err := a.prepare()
 	if err != nil {
 		return err
 	}
-	defer closeStore(r.s, &err)
-
-	res, err := a.domainService(r).SwitchPHP(ctx, domain, php)
+	var res domains.SwitchResult
+	err = a.runOp(ctx, dir, http.MethodPut, "/api/hosts/"+url.PathEscape(domain)+"/php", map[string]any{"php": php}, &res)
 	if err != nil || !res.Switched {
 		return reported(err)
 	}

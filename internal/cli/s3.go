@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -21,12 +22,6 @@ import (
 )
 
 // --- Lifecycle ---------------------------------------------------------------
-
-// syncS3 prepares the S3 server once its container runs (see
-// stack.Service.SyncS3).
-func (a *app) syncS3(ctx context.Context, dir string, e *env.Env, s *store.Store) error {
-	return a.stackService(dir, e, nil, s).SyncS3(ctx)
-}
 
 // logS3Endpoints shows where the S3 server answers.
 func (a *app) logS3Endpoints(e *env.Env) {
@@ -264,37 +259,36 @@ func (a *app) s3ListBuckets(ctx context.Context) (err error) {
 	return nil
 }
 
-func (a *app) s3CreateBuckets(ctx context.Context, names []string, public bool) (err error) {
+func (a *app) s3CreateBuckets(ctx context.Context, names []string, public bool) error {
 	for _, name := range names {
 		if err := s3.ValidateBucket(name); err != nil {
 			return usageError{err}
 		}
 	}
-	x, err := a.openS3(ctx)
+	dir, _, err := a.prepare()
 	if err != nil {
 		return err
 	}
-	defer closeStore(x.s, &err)
-	_, err = x.svc.Create(ctx, names, public)
-	return err
+	return reported(a.runOp(ctx, dir, http.MethodPost, "/api/s3/buckets", map[string]any{"names": names, "public": public}, nil))
 }
 
-func (a *app) s3DeleteBuckets(ctx context.Context, names []string, force bool) (err error) {
-	x, err := a.openS3(ctx)
+func (a *app) s3DeleteBuckets(ctx context.Context, names []string, force bool) error {
+	dir, _, err := a.prepare()
 	if err != nil {
 		return err
 	}
-	defer closeStore(x.s, &err)
-	return x.svc.Delete(ctx, names, force)
+	return reported(a.runOp(ctx, dir, http.MethodPost, "/api/s3/buckets/delete", map[string]any{"names": names, "force": force}, nil))
 }
 
 func (a *app) s3EmptyBuckets(ctx context.Context, names []string, yes bool) (err error) {
+	// The buckets exist, before asking
 	x, err := a.openS3(ctx)
 	if err != nil {
 		return err
 	}
-	defer closeStore(x.s, &err)
-	if err := x.svc.Check(ctx, names); err != nil {
+	err = x.svc.Check(ctx, names)
+	closeStore(x.s, &err)
+	if err != nil {
 		return err
 	}
 	if !yes {
@@ -312,16 +306,15 @@ func (a *app) s3EmptyBuckets(ctx context.Context, names []string, yes bool) (err
 			return nil
 		}
 	}
-	return x.svc.Empty(ctx, names)
+	return reported(a.runOp(ctx, x.svc.Dir, http.MethodPost, "/api/s3/buckets/empty", map[string]any{"names": names}, nil))
 }
 
-func (a *app) s3SetPublic(ctx context.Context, names []string, public bool) (err error) {
-	x, err := a.openS3(ctx)
+func (a *app) s3SetPublic(ctx context.Context, names []string, public bool) error {
+	dir, _, err := a.prepare()
 	if err != nil {
 		return err
 	}
-	defer closeStore(x.s, &err)
-	return x.svc.SetPublic(ctx, names, public)
+	return reported(a.runOp(ctx, dir, http.MethodPost, "/api/s3/buckets/public", map[string]any{"names": names, "public": public}, nil))
 }
 
 func newS3KeyCmd(a *app) *cobra.Command {
@@ -378,21 +371,34 @@ func newS3KeyCmd(a *app) *cobra.Command {
 	return cmd
 }
 
-func (a *app) s3CreateKey(ctx context.Context, bucket, label string, readOnly bool) (err error) {
+func (a *app) s3CreateKey(ctx context.Context, bucket, label string, readOnly bool) error {
 	label = strings.TrimSpace(label)
 	if label == "" || strings.Contains(label, "/") {
 		return usageError{buckets.ErrKeyName}
 	}
-	x, err := a.openS3(ctx)
+	dir, _, err := a.prepare()
 	if err != nil {
 		return err
 	}
-	defer closeStore(x.s, &err)
-	k, err := x.svc.CreateKey(ctx, bucket, label, readOnly)
-	if err != nil {
-		return err
+	var k struct {
+		ID     string `json:"id"`
+		Name   string `json:"name"`
+		Secret string `json:"secret"`
+		Grants []struct {
+			Read  bool `json:"read"`
+			Write bool `json:"write"`
+			Owner bool `json:"owner"`
+		} `json:"grants"`
 	}
-	a.log.Success(i18n.Tf("Access key created for bucket %s (%s).", bucket, k.Perms))
+	err = a.runOp(ctx, dir, http.MethodPost, "/api/s3/keys", map[string]any{"bucket": bucket, "name": label, "read_only": readOnly}, &k)
+	if err != nil {
+		return reported(err)
+	}
+	var perms s3.Perms
+	if len(k.Grants) > 0 {
+		perms = s3.Perms{Read: k.Grants[0].Read, Write: k.Grants[0].Write, Owner: k.Grants[0].Owner}
+	}
+	a.log.Success(i18n.Tf("Access key created for bucket %s (%s).", bucket, perms))
 	a.printKey(k.ID, k.Name, k.Secret)
 	return nil
 }
@@ -453,13 +459,12 @@ func (a *app) s3ShowKey(ctx context.Context, id string) (err error) {
 	return nil
 }
 
-func (a *app) s3DeleteKeys(ctx context.Context, ids []string) (err error) {
-	x, err := a.openS3(ctx)
+func (a *app) s3DeleteKeys(ctx context.Context, ids []string) error {
+	dir, _, err := a.prepare()
 	if err != nil {
 		return err
 	}
-	defer closeStore(x.s, &err)
-	return x.svc.DeleteKeys(ctx, ids)
+	return reported(a.runOp(ctx, dir, http.MethodPost, "/api/s3/keys/delete", map[string]any{"ids": ids}, nil))
 }
 
 // passthrough reads the arguments of a command without flag parsing:

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"net/http"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -62,23 +63,15 @@ Examples:
 
 // restart restarts the stack or some of its containers. targets is empty to
 // restart everything.
-func (a *app) restart(ctx context.Context, forceSSL bool, targets []string, build bool) (err error) {
-	dir, err := a.projectDir()
+func (a *app) restart(ctx context.Context, forceSSL bool, targets []string, build bool) error {
+	dir, _, err := a.prepare()
 	if err != nil {
 		return err
 	}
-	e, err := a.loadEnv(dir)
+	err = a.runOp(ctx, dir, http.MethodPost, "/api/stack/restart",
+		map[string]any{"targets": targets, "force_ssl": forceSSL, "build": build}, nil)
 	if err != nil {
-		return err
-	}
-	d := a.docker(dir)
-	s, err := a.openStore(dir)
-	if err != nil {
-		return err
-	}
-	defer closeStore(s, &err)
-	if err := a.stackService(dir, e, d, s).Restart(ctx, targets, forceSSL, build); err != nil {
-		return err
+		return reported(err)
 	}
 	a.con.Println()
 	if len(targets) == 0 {
