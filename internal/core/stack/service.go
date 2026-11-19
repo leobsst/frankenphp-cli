@@ -255,13 +255,13 @@ type StartOptions struct {
 
 // StartResult is what Start brought up.
 type StartResult struct {
-	Domains  []store.Domain // the PHP domains served
-	Versions []string       // their PHP versions, sorted
-	Statics  []store.StaticHost
+	Domains  []store.Domain     `json:"domains"`  // the PHP domains served
+	Versions []string           `json:"versions"` // their PHP versions, sorted
+	Statics  []store.StaticHost `json:"statics"`
 	// DNSListen is the address of the LAN DNS server, "" when disabled
-	DNSListen string
+	DNSListen string `json:"dns_listen"`
 	// Watched reports that the domains follow the LAN IP of the machine
-	Watched bool
+	Watched bool `json:"watched"`
 }
 
 // Start starts the stack. It starts even without any domain: the reverse

@@ -18,8 +18,8 @@ import (
 
 // Domain is a domain served by a PHP container.
 type Domain struct {
-	Name       string
-	PHPVersion string
+	Name       string `json:"name"`
+	PHPVersion string `json:"php"`
 }
 
 // Alias is an alternate host reverse-proxying to an existing domain or
@@ -49,9 +49,9 @@ type Proxy struct {
 // StaticHost is a domain whose files the reverse proxy serves itself, with
 // no PHP container: an HTML site or a built single-page app.
 type StaticHost struct {
-	Domain string
-	Root   string // relative to the projects root
-	SPA    bool   // unknown paths fall back to /index.html
+	Domain string `json:"domain"`
+	Root   string `json:"root"` // relative to the projects root
+	SPA    bool   `json:"spa"`  // unknown paths fall back to /index.html
 }
 
 // DNSClient is a device that queried the LAN DNS server.

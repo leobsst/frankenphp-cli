@@ -36,13 +36,13 @@ var serviceContainers = map[string][]string{
 
 // OptionalResult is what SetOptional or ApplyOptional did.
 type OptionalResult struct {
-	Name string
-	On   bool
+	Name string `json:"name"`
+	On   bool   `json:"enabled"`
 	// Changed is false when the service was already in that state
-	Changed bool
+	Changed bool `json:"changed"`
 	// Live reports that the server runs and the change was applied; when
 	// false, it applies on the next start
-	Live bool
+	Live bool `json:"live"`
 }
 
 // SetOptional turns an optional service on or off in the configuration,

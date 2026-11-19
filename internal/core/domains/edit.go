@@ -42,14 +42,14 @@ func (s *Service) stopVersions(ctx context.Context, orphaned, remaining []string
 
 // RemoveResult is what Remove did.
 type RemoveResult struct {
-	Domains []store.Domain // the PHP domains, with their version
+	Domains []store.Domain `json:"domains"` // the PHP domains, with their version
 	// Aliases are the alternate hosts requested and those of the removed
 	// domains and proxy hosts
-	Aliases          []string
-	Proxies          []string
-	Statics          []string
-	ArchiveDir       string // where the site files of the domains went
-	StaticArchiveDir string // where those of the static hosts went
+	Aliases          []string `json:"aliases"`
+	Proxies          []string `json:"proxies"`
+	Statics          []string `json:"statics"`
+	ArchiveDir       string   `json:"archive_dir"`        // where the site files of the domains went
+	StaticArchiveDir string   `json:"static_archive_dir"` // where those of the static hosts went
 }
 
 // Empty reports whether nothing was removed.
@@ -338,9 +338,10 @@ func (s *Service) Restore(ctx context.Context, names []string, php string, force
 
 // SwitchResult is what SwitchPHP did.
 type SwitchResult struct {
-	Domain   string
-	From, To string
-	Switched bool // false when the domain already used To
+	Domain   string `json:"domain"`
+	From     string `json:"from"`
+	To       string `json:"to"`
+	Switched bool   `json:"switched"` // false when the domain already used To
 }
 
 // SwitchPHP moves a domain to php, a supported version, restarting only

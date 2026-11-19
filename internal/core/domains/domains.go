@@ -203,8 +203,8 @@ func (s *Service) newHosts(domains []string) ([]string, error) {
 
 // PHPResult is what an operation on PHP domains did.
 type PHPResult struct {
-	Domains []string // empty when nothing was done
-	PHP     string
+	Domains []string `json:"domains"` // empty when nothing was done
+	PHP     string   `json:"php"`
 }
 
 // AddPHP adds PHP domains with a PHP version ("" for DEFAULT_PHP_VERSION),
@@ -296,8 +296,8 @@ func (s *Service) AddPHP(ctx context.Context, domains []string, php, root string
 
 // ProxyResult is what AddProxy did.
 type ProxyResult struct {
-	Domains []string // empty when nothing was done
-	Target  string
+	Domains []string `json:"domains"` // empty when nothing was done
+	Target  string   `json:"target"`
 }
 
 // AddProxy adds domains forwarding to a raw upstream: certificate, hosts
@@ -352,9 +352,9 @@ func (s *Service) AddProxy(ctx context.Context, domains []string, target string,
 
 // StaticResult is what AddStatic did.
 type StaticResult struct {
-	Hosts       []store.StaticHost // empty when nothing was done
-	ProjectPath string             // projects root the roots are relative to
-	SiteDir     string             // directory of the editable site files
+	Hosts       []store.StaticHost `json:"hosts"`        // empty when nothing was done
+	ProjectPath string             `json:"project_path"` // projects root the roots are relative to
+	SiteDir     string             `json:"site_dir"`     // directory of the editable site files
 }
 
 // AddStatic adds domains whose files the reverse proxy serves from root
@@ -460,11 +460,11 @@ func (s *Service) AddStatic(ctx context.Context, domains []string, root string, 
 
 // AliasResult is what AddAlias did.
 type AliasResult struct {
-	Aliases []string // empty when nothing was done
-	Target  string
+	Aliases []string `json:"aliases"` // empty when nothing was done
+	Target  string   `json:"target"`
 	// Serves is what the aliases forward to: "PHP 8.4" for a domain,
 	// "proxy <upstream>" for a proxy host
-	Serves string
+	Serves string `json:"serves"`
 }
 
 // AddAlias adds alternate hosts forwarding to an existing domain or proxy
