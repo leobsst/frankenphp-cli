@@ -148,6 +148,13 @@ var Services = map[string]string{
 // LanguageKey is the key of the language of the CLI messages.
 const LanguageKey = "CLI_LANGUAGE"
 
+// DashboardPortKey is the key of the port of the dashboard API, read when
+// the daemon starts.
+const DashboardPortKey = "DASHBOARD_PORT"
+
+// DefaultDashboardPort is the default port of the dashboard API.
+const DefaultDashboardPort = "9081"
+
 // AliasKey is the key of the CLI alias.
 const AliasKey = "CLI_ALIAS"
 
@@ -285,6 +292,8 @@ func buildDefinitions() []Definition {
 		{Key: "POSTGRES_PORT", Description: i18n.N("PostgreSQL port"), Default: static("5432"), Validate: validatePort, Apply: ApplyRecreate},
 		{Key: "PMA_PORT", Description: i18n.N("phpMyAdmin port (dev only)"), Default: static("8080"), Validate: validatePort, Apply: ApplyRecreate},
 		{Key: "PGADMIN_PORT", Description: i18n.N("pgAdmin port (dev only)"), Default: static("8081"), Validate: validatePort, Apply: ApplyRecreate},
+		{Key: DashboardPortKey, Description: i18n.N("Port of the dashboard API (frankenmanager daemon), on 127.0.0.1"),
+			Default: static(DefaultDashboardPort), Validate: validatePort, Apply: ApplyNow},
 
 		{Key: "REDIS_ENABLED", Description: i18n.N("Run a Redis cache server"),
 			Default: static("false"), Values: booleans, Apply: ApplyLive, Service: "redis"},

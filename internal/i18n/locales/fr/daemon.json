@@ -1,0 +1,17 @@
+{
+  "Run the API of the dashboard (foreground).": "Lancer l'API du dashboard (au premier plan).",
+  "Run the API of the dashboard, in the foreground until interrupted.\n\nIt is served on a Unix socket of the data directory (daemon.sock, for this\nuser only) and on 127.0.0.1:DASHBOARD_PORT, where the access token of\ndaemon.token is required. The actions run one at a time.": "Lancer l'API du dashboard, au premier plan jusqu'à interruption.\n\nElle est servie sur un socket Unix du dossier de données (daemon.sock, pour cet\nutilisateur seulement) et sur 127.0.0.1:DASHBOARD_PORT, où le jeton d'accès de\ndaemon.token est obligatoire. Les actions s'exécutent une à la fois.",
+  "Dashboard API listening on http://%s (token: %s)": "API du dashboard à l'écoute sur http://%s (jeton : %s)",
+  "CLI socket: %s": "Socket du CLI : %s",
+  "Dashboard API stopped.": "API du dashboard arrêtée.",
+  "A daemon is already running (%s).": "Un daemon est déjà lancé (%s).",
+  "Operation not found.": "Opération introuvable.",
+  "Unknown target '%s'. Use %s.": "Cible '%s' inconnue. Utilisez %s.",
+  "Missing field '%s'.": "Champ '%s' manquant.",
+  "A proxy host has no root and is not static.": "Un hôte proxy n'a pas de dossier servi et n'est pas statique.",
+  "Forbidden host.": "Hôte refusé.",
+  "Forbidden origin.": "Origine refusée.",
+  "Missing or invalid access token.": "Jeton d'accès manquant ou invalide.",
+  "Invalid request body: %v": "Corps de requête invalide : %v",
+  "Streaming is not supported.": "Le streaming n'est pas pris en charge."
+}

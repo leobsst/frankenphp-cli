@@ -91,6 +91,7 @@
   "PostgreSQL port": "Port de PostgreSQL",
   "phpMyAdmin port (dev only)": "Port de phpMyAdmin (dev uniquement)",
   "pgAdmin port (dev only)": "Port de pgAdmin (dev uniquement)",
+  "Port of the dashboard API (frankenmanager daemon), on 127.0.0.1": "Port de l'API du dashboard (frankenmanager daemon), sur 127.0.0.1",
   "Run a Redis cache server": "Lancer un serveur de cache Redis",
   "Redis port": "Port de Redis",
   "Run a Soketi WebSocket server at wss://ws.frankenmanager.test": "Lancer un serveur WebSocket Soketi sur wss://ws.frankenmanager.test",
