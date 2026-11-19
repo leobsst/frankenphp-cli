@@ -142,6 +142,7 @@ func TestRestoreHostFailure(t *testing.T) {
 	if err := e.store().SetSetting(store.SettingProjectPath, ""); err != nil {
 		t.Fatal(err)
 	}
+	e.writeEnv("DEFAULT_PROJECT_PATH=\n")
 	archived := filepath.Join(e.dir, "caddy", "sites", "archive", "old_Caddyfile")
 	writeFile(t, archived, "http://old.test {\n}\n")
 	code, out, _ := e.run("restore-host", "old.test", "--php", "8.5")
@@ -290,6 +291,7 @@ func TestSwitchPHPRollback(t *testing.T) {
 	if err := e.store().SetSetting(store.SettingProjectPath, ""); err != nil {
 		t.Fatal(err)
 	}
+	e.writeEnv("DEFAULT_PROJECT_PATH=\n")
 	writeFile(t, e.site("8.4", "app"), "http://app.test {\n}\n")
 	code, out, _ := e.run("switch-php", "app.test", "--php", "8.5")
 	if code != 1 || !strings.HasSuffix(out, "ERROR: Rolled back version change.\n") {

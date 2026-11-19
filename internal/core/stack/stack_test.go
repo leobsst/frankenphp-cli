@@ -47,7 +47,7 @@ func TestProjectPath(t *testing.T) {
 	t.Cleanup(func() { _ = s.Close() })
 
 	for _, tc := range []struct{ env, setting, want string }{
-		{"", "", ""},
+		{"DEFAULT_PROJECT_PATH=\n", "", ""},
 		{"DEFAULT_PROJECT_PATH=/default\n", "", "/default"},
 		{"DEFAULT_PROJECT_PATH=/default\n", "/stored", "/stored"},
 	} {
