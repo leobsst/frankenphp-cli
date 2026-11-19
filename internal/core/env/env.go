@@ -291,9 +291,11 @@ func (e *Env) CertsDir(projectDir string) string {
 
 // ComposeEnvVars returns every variable the generated compose file expects.
 func (e *Env) ComposeEnvVars(projectDir, customPath string, dbEngines []string) (map[string]string, error) {
-	localhost := "127.0.0.1:"
+	// localhost prefixes the development port bindings; bind is the address
+	// the services listen on in production (host network)
+	localhost, bind := "127.0.0.1:", "127.0.0.1"
 	if e.Get("EXPOSE_SERVICES") == "true" {
-		localhost = ""
+		localhost, bind = "", "0.0.0.0"
 	}
 	uid, err := e.Require("UID")
 	if err != nil {
@@ -308,9 +310,12 @@ func (e *Env) ComposeEnvVars(projectDir, customPath string, dbEngines []string) 
 		"CUSTOM_PATH":              customPath,
 		"UID":                      uid,
 		"GID":                      gid,
+		"BIND_ADDRESS":             bind,
 		"DB_PORT":                  localhost + e.getOr("DB_PORT", "3306") + ":3306",
+		"DB_LISTEN_PORT":           e.getOr("DB_PORT", "3306"),
 		"PMA_PORT":                 localhost + e.getOr("PMA_PORT", "8080") + ":80",
 		"REDIS_PORT":               localhost + e.getOr("REDIS_PORT", "6379") + ":6379",
+		"REDIS_LISTEN_PORT":        e.getOr("REDIS_PORT", "6379"),
 		"WEB_HTTP_PORT":            e.getOr("WEB_HTTP_PORT", "80"),
 		"WEB_HTTPS_PORT":           e.getOr("WEB_HTTPS_PORT", "443"),
 		"MYSQL_MAX_ALLOWED_PACKET": e.getOr("MYSQL_MAX_ALLOWED_PACKET", "512M"),
@@ -355,6 +360,7 @@ func (e *Env) dbEnvVars(dbEngines []string, localhost string) (map[string]string
 		vars["MYSQL_ROOT_PASSWORD"] = password
 		vars["MYSQL_VERSION"] = e.getOr("MYSQL_VERSION", "8.0")
 		vars["MYSQL_PORT"] = localhost + e.getOr("MYSQL_PORT", "3307") + ":3306"
+		vars["MYSQL_LISTEN_PORT"] = e.getOr("MYSQL_PORT", "3307")
 	}
 	if slices.Contains(dbEngines, "postgresql") {
 		password, err := e.Require("POSTGRES_PASSWORD")
@@ -365,6 +371,7 @@ func (e *Env) dbEnvVars(dbEngines []string, localhost string) (map[string]string
 		vars["POSTGRES_USER"] = e.getOr("POSTGRES_USER", "postgres")
 		vars["POSTGRES_VERSION"] = e.getOr("POSTGRES_VERSION", "16")
 		vars["POSTGRES_PORT"] = localhost + e.getOr("POSTGRES_PORT", "5432") + ":5432"
+		vars["POSTGRES_LISTEN_PORT"] = e.getOr("POSTGRES_PORT", "5432")
 		vars["PGADMIN_PORT"] = localhost + e.getOr("PGADMIN_PORT", "8081") + ":80"
 	}
 	return vars, nil

@@ -3,12 +3,14 @@ services:
     container_name: franken_postgresql
     image: postgres:${POSTGRES_VERSION:-16}-alpine
     restart: always
+    command: -c listen_addresses=${BIND_ADDRESS:-127.0.0.1}
     network_mode: host
     volumes:
       - ${DATABASE_DIR:-${PWD}/database}/postgresql:/var/lib/postgresql/data
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGPORT: '${POSTGRES_LISTEN_PORT:-5432}'
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 10s
@@ -20,7 +22,7 @@ services:
     container_name: franken_mysql
     image: mysql:${MYSQL_VERSION:-8.0}
     restart: always
-    command: --max-allowed-packet=${MYSQL_MAX_ALLOWED_PACKET:-512M}
+    command: --max-allowed-packet=${MYSQL_MAX_ALLOWED_PACKET:-512M} --port=${MYSQL_LISTEN_PORT:-3307} --bind-address=${BIND_ADDRESS:-127.0.0.1} --loose-mysqlx-bind-address=127.0.0.1
     network_mode: host
     user: ${UID}:${GID}
     volumes:
@@ -38,7 +40,7 @@ services:
     container_name: franken_mariadb
     image: mariadb:${MARIADB_VERSION:-10.11.9}
     restart: always
-    command: --max-allowed-packet=${MYSQL_MAX_ALLOWED_PACKET:-512M}
+    command: --max-allowed-packet=${MYSQL_MAX_ALLOWED_PACKET:-512M} --port=${DB_LISTEN_PORT:-3306} --bind-address=${BIND_ADDRESS:-127.0.0.1}
     network_mode: host
     user: ${UID}:${GID}
     volumes:
@@ -57,9 +59,9 @@ services:
     image: redis:alpine
     restart: always
     network_mode: host
-    command: redis-server
+    command: redis-server --port ${REDIS_LISTEN_PORT:-6379} --bind ${BIND_ADDRESS:-127.0.0.1}
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-p", "${REDIS_LISTEN_PORT:-6379}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5

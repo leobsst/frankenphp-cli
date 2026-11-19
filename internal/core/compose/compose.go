@@ -176,6 +176,10 @@ func healthcheck(test, startPeriod string) []string {
 	}
 }
 
+// bindAddress is the address the host network services listen on in
+// production: 127.0.0.1, or 0.0.0.0 with EXPOSE_SERVICES.
+const bindAddress = "${BIND_ADDRESS:-127.0.0.1}"
+
 // devNetwork is the network of the services that do not use the host's.
 var devNetwork = []string{"    networks:", "      - franken_network"}
 
@@ -185,6 +189,10 @@ type dbEngine struct {
 	mysqlCmd bool   // --max-allowed-packet and user: ${UID}:${GID}
 	dataDir  string // in the container
 	portVar  string // development port binding, e.g. ${DB_PORT:-...}
+	// prodArgs are appended to the command in production (host network):
+	// the configured port and the bind address
+	prodArgs string
+	prodEnv  []string
 	env      []string
 	test     string
 }
@@ -195,6 +203,7 @@ var dbEngines = map[string]dbEngine{
 		mysqlCmd: true,
 		dataDir:  "/var/lib/mysql",
 		portVar:  "${DB_PORT:-127.0.0.1:3306:3306}",
+		prodArgs: "--port=${DB_LISTEN_PORT:-3306} --bind-address=" + bindAddress,
 		env:      []string{"MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}"},
 		test:     `["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]`,
 	},
@@ -203,13 +212,20 @@ var dbEngines = map[string]dbEngine{
 		mysqlCmd: true,
 		dataDir:  "/var/lib/mysql",
 		portVar:  "${MYSQL_PORT:-127.0.0.1:3307:3306}",
-		env:      []string{"MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}"},
-		test:     `["CMD", "mysqladmin", "ping", "-h", "localhost"]`,
+		// The X Protocol (33060) is not used: kept on the loopback ("loose"
+		// for the versions without it)
+		prodArgs: "--port=${MYSQL_LISTEN_PORT:-3307} --bind-address=" + bindAddress +
+			" --loose-mysqlx-bind-address=127.0.0.1",
+		env:  []string{"MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}"},
+		test: `["CMD", "mysqladmin", "ping", "-h", "localhost"]`,
 	},
 	"postgresql": {
 		image:   "postgres:${POSTGRES_VERSION:-16}-alpine",
 		dataDir: "/var/lib/postgresql/data",
 		portVar: "${POSTGRES_PORT:-127.0.0.1:5432:5432}",
+		// PGPORT is also the port of pg_isready and of the init scripts
+		prodArgs: "-c listen_addresses=" + bindAddress,
+		prodEnv:  []string{"PGPORT: '${POSTGRES_LISTEN_PORT:-5432}'"},
 		env: []string{
 			"POSTGRES_USER: ${POSTGRES_USER:-postgres}",
 			"POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}",
@@ -233,8 +249,15 @@ func dbServices(engines []string, production bool) []string {
 			"    image: "+e.image,
 			"    restart: always",
 		)
+		var args []string
 		if e.mysqlCmd {
-			lines = append(lines, "    command: --max-allowed-packet=${MYSQL_MAX_ALLOWED_PACKET:-512M}")
+			args = append(args, "--max-allowed-packet=${MYSQL_MAX_ALLOWED_PACKET:-512M}")
+		}
+		if production {
+			args = append(args, e.prodArgs)
+		}
+		if len(args) > 0 {
+			lines = append(lines, "    command: "+strings.Join(args, " "))
 		}
 		if production {
 			lines = append(lines, "    network_mode: host")
@@ -252,7 +275,11 @@ func dbServices(engines []string, production bool) []string {
 			lines = append(lines, "    ports:", "      - "+e.portVar)
 		}
 		lines = append(lines, "    environment:")
-		for _, v := range e.env {
+		env := e.env
+		if production {
+			env = append(slices.Clone(env), e.prodEnv...)
+		}
+		for _, v := range env {
 			lines = append(lines, "      "+v)
 		}
 		if !production {
@@ -339,11 +366,13 @@ func redisService(production bool) []string {
 		"    restart: always",
 	}
 	if production {
-		lines = append(lines, "    network_mode: host", "    command: redis-server")
-	} else {
-		lines = append(lines, "    command: redis-server", "    ports:", "      - ${REDIS_PORT:-127.0.0.1:6379:6379}")
-		lines = append(lines, devNetwork...)
+		lines = append(lines, "    network_mode: host",
+			"    command: redis-server --port ${REDIS_LISTEN_PORT:-6379} --bind "+bindAddress)
+		lines = append(lines, healthcheck(`["CMD", "redis-cli", "-p", "${REDIS_LISTEN_PORT:-6379}", "ping"]`, "10s")...)
+		return append(lines, "")
 	}
+	lines = append(lines, "    command: redis-server", "    ports:", "      - ${REDIS_PORT:-127.0.0.1:6379:6379}")
+	lines = append(lines, devNetwork...)
 	lines = append(lines, healthcheck(`["CMD", "redis-cli", "ping"]`, "10s")...)
 	return append(lines, "")
 }

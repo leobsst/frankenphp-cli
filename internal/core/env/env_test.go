@@ -294,9 +294,12 @@ func TestComposeEnvVars(t *testing.T) {
 		"CUSTOM_PATH":               "/projects",
 		"UID":                       "501",
 		"GID":                       "20",
+		"BIND_ADDRESS":              "0.0.0.0",
 		"DB_PORT":                   "3310:3306",
+		"DB_LISTEN_PORT":            "3310",
 		"PMA_PORT":                  "8080:80",
 		"REDIS_PORT":                "6379:6379",
+		"REDIS_LISTEN_PORT":         "6379",
 		"WEB_HTTP_PORT":             "80",
 		"WEB_HTTPS_PORT":            "443",
 		"MYSQL_MAX_ALLOWED_PACKET":  "512M",
@@ -309,6 +312,7 @@ func TestComposeEnvVars(t *testing.T) {
 		"POSTGRES_USER":             "postgres",
 		"POSTGRES_VERSION":          "16",
 		"POSTGRES_PORT":             "5433:5432",
+		"POSTGRES_LISTEN_PORT":      "5433",
 		"PGADMIN_PORT":              "8081:80",
 		"SOKETI_PORT":               "6002",
 		"SOKETI_PUBLISH":            "6002:6001",
@@ -332,6 +336,7 @@ func TestComposeEnvVarsLocalhostAndMissingValues(t *testing.T) {
 		t.Fatal(err)
 	}
 	if got["DB_PORT"] != "127.0.0.1:3306:3306" || got["MYSQL_PORT"] != "127.0.0.1:3307:3306" ||
+		got["MYSQL_LISTEN_PORT"] != "3307" || got["BIND_ADDRESS"] != "127.0.0.1" ||
 		got["MYSQL_VERSION"] != "8.0" {
 		t.Errorf("ports and defaults: %v", got)
 	}

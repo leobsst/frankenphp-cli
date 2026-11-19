@@ -94,7 +94,7 @@ func WriteGatewayContext(sources fs.FS, dataDir string) (string, string, error) 
 
 // gatewayService returns the YAML lines of the gateway compose service:
 // it publishes S3_PORT in development and listens on it in production
-// (host network), Garage's API staying behind it.
+// (host network, on BIND_ADDRESS), Garage's API staying behind it.
 func gatewayService(production bool) []string {
 	dir := "${" + DirKey + ":-./s3}"
 	garage, web, admin := "http://"+ComposeService+":"+DefaultPort, "http://"+ComposeService+":"+DefaultWebPort,
@@ -105,7 +105,7 @@ func gatewayService(production bool) []string {
 		garage = "http://127.0.0.1:${" + GaragePortKey + ":-" + DefaultGaragePort + "}"
 		web = "http://127.0.0.1:${" + WebPortKey + ":-" + DefaultWebPort + "}"
 		admin = "http://127.0.0.1:${" + AdminPortKey + ":-" + DefaultAdminPort + "}"
-		listen = ":${" + PortKey + ":-" + DefaultPort + "}"
+		listen = "${BIND_ADDRESS:-127.0.0.1}:${" + PortKey + ":-" + DefaultPort + "}"
 	}
 	lines := []string{
 		"  " + GatewayService + ":",
