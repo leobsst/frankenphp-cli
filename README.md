@@ -192,7 +192,7 @@ frankenmanager start --build
   - If omitted on a fresh install (nothing registered yet), the server starts without any PHP container: only the reverse proxy, the databases and their admin UIs run. Add hosts afterwards with `add-host`, e.g. proxy hosts (`add-host "app.test" 127.0.0.1:3000`) that never need PHP
   - If provided, merges with registered domains (adds new ones to existing)
 - **--path** (optional): Path to the directory containing your project folders
-  - Uses the `DEFAULT_PROJECT_PATH` setting if not specified
+  - Uses the `DEFAULT_PROJECT_PATH` setting if not specified (by default `~/Sites` on macOS, `~/projects` on Linux, `%USERPROFILE%\Projects` on Windows; the directory must exist)
   - Only required when at least one PHP domain is served
 - **--php** (optional): PHP version for the new domains (`8.2`, `8.3`, `8.4`, `8.5`)
   - Defaults to the `DEFAULT_PHP_VERSION` setting (`8.3`)
@@ -1188,7 +1188,7 @@ frankenmanager completion powershell >> $PROFILE
 | `DEFAULT_PHP_VERSION` | `8.3` | Default PHP version for new domains (`8.2` (deprecated), `8.3`, `8.4`, `8.5`) |
 | `UID` | (current user) | System user ID for file ownership |
 | `GID` | (current group) | System group ID for file ownership |
-| `DEFAULT_PROJECT_PATH` | (empty) | Projects root used when `start` has no `--path` |
+| `DEFAULT_PROJECT_PATH` | `~/Sites` (macOS), `~/projects` (Linux), `%USERPROFILE%\Projects` (Windows) | Projects root used when `start` has no `--path`; it is not created automatically |
 | `CADDY_DIR` | `./caddy` | Caddy files directory, certificates in its `certs/` (relative to the data directory, or absolute) |
 | `DATABASE_DIR` | `./database` | Database data directory |
 | `MARIADB_ROOT_PASSWORD` | (auto-generated) | MariaDB root password |
