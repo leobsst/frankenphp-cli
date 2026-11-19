@@ -7,11 +7,13 @@ package background
 
 import (
 	"context"
+	"maps"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -37,6 +39,9 @@ type Spec struct {
 	Args        []string // the command line after the binary
 	PIDFile     string   // in the data directory
 	LogFile     string   // in the data directory: the error output
+	// Env is the environment of the process under the service manager,
+	// whose own is minimal (launchd: PATH=/usr/bin:/bin:/usr/sbin:/sbin)
+	Env map[string]string
 }
 
 // Service runs a Spec for a data directory.
@@ -264,6 +269,15 @@ func LaunchdPlist(spec Spec, dataDir string, command []string, app string) []byt
 		str("\t\t", MacOSAppBundleID)
 		b.WriteString("\t</array>\n")
 	}
+	if len(spec.Env) > 0 {
+		key("EnvironmentVariables")
+		b.WriteString("\t<dict>\n")
+		for _, k := range slices.Sorted(maps.Keys(spec.Env)) {
+			b.WriteString("\t\t<key>" + plistEscape(k) + "</key>\n")
+			str("\t\t", spec.Env[k])
+		}
+		b.WriteString("\t</dict>\n")
+	}
 	key("KeepAlive")
 	b.WriteString("\t<true/>\n")
 	key("Label")
@@ -309,10 +323,15 @@ func SystemdUnitContent(spec Spec, dataDir string, command []string) string {
 	for i, arg := range command {
 		quoted[i] = systemdQuote(arg)
 	}
+	env := ""
+	for _, k := range slices.Sorted(maps.Keys(spec.Env)) {
+		env += "Environment=" + systemdQuote(k+"="+spec.Env[k]) + "\n"
+	}
 	return "[Unit]\n" +
 		"Description=" + spec.Description + "\n" +
 		"\n" +
 		"[Service]\n" +
+		env +
 		"ExecStart=" + strings.Join(quoted, " ") + "\n" +
 		"WorkingDirectory=" + dataDir + "\n" +
 		"StandardOutput=null\n" +

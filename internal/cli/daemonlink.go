@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/leobsst/frankenphp-cli/internal/client"
@@ -14,6 +15,7 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/events"
 	"github.com/leobsst/frankenphp-cli/internal/core/stack"
 	"github.com/leobsst/frankenphp-cli/internal/daemon"
+	"github.com/leobsst/frankenphp-cli/internal/platform"
 	"github.com/leobsst/frankenphp-cli/internal/version"
 )
 
@@ -141,8 +143,12 @@ func (a *app) runOp(ctx context.Context, dir, method, path string, body, out any
 // --- Daemon service ----------------------------------------------------------
 
 // daemonService returns the background service of the daemon of dir.
+// It runs with the PATH of the command that installs it: the service
+// manager's own lacks mkcert and docker (Homebrew, Docker Desktop).
 func daemonService(dir string) (*background.Service, error) {
-	return background.New(dir, daemon.ServiceSpec)
+	spec := daemon.ServiceSpec
+	spec.Env = map[string]string{"PATH": platform.ToolPath(os.Getenv("PATH"))}
+	return background.New(dir, spec)
 }
 
 // serviceStarter starts the daemon of a data directory: handed to the OS

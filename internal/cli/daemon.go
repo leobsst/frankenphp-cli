@@ -25,6 +25,7 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/stack"
 	"github.com/leobsst/frankenphp-cli/internal/daemon"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
+	"github.com/leobsst/frankenphp-cli/internal/platform"
 	"github.com/leobsst/frankenphp-cli/internal/version"
 )
 
@@ -146,6 +147,9 @@ func (a *app) daemonStatus(ctx context.Context) error {
 
 // runDaemon serves the API until ctx is done.
 func (a *app) runDaemon(ctx context.Context) error {
+	// Started by the service manager or from sudo, the PATH may lack mkcert
+	// and docker
+	_ = os.Setenv("PATH", platform.ToolPath(os.Getenv("PATH")))
 	dir, err := a.projectDir()
 	if err != nil {
 		return err
