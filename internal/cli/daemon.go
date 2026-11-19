@@ -121,7 +121,7 @@ func (a *app) daemonStop(ctx context.Context) error {
 	if svc, err := a.deps.DaemonService(dir); err == nil {
 		stopped = svc.Stop(ctx)
 	}
-	if err := client.New(dir).Stop(ctx); err != nil && !(stopped && errors.Is(err, client.ErrNotRunning)) {
+	if err := client.New(dir).Stop(ctx); err != nil && (!stopped || !errors.Is(err, client.ErrNotRunning)) {
 		return err
 	}
 	a.log.Success(i18n.T("Daemon stopped."))

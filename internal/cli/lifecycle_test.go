@@ -164,6 +164,15 @@ func TestStartErrors(t *testing.T) {
 		"extra arg":      {"", []string{"start", "a.test", "b.test"}, ""},
 	} {
 		t.Run(name, func(t *testing.T) {
+			if name == "bad path" {
+				// start makes --path absolute (the daemon has another working
+				// directory): D:\nonexistent on Windows
+				abs, err := filepath.Abs("/nonexistent")
+				if err != nil {
+					t.Fatal(err)
+				}
+				tc.out = "ERROR: Directory does not exist: " + abs + "\n"
+			}
 			e := newEnv(t)
 			e.initEnv(tc.env)
 			code, out, errOut := e.run(tc.args...)

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -120,9 +121,12 @@ func TestLoadToken(t *testing.T) {
 	if err != nil || len(first) != 64 {
 		t.Fatalf("token %q, %v", first, err)
 	}
-	info, err := os.Stat(filepath.Join(dir, TokenFile))
-	if err != nil || info.Mode().Perm() != 0o600 {
-		t.Errorf("token file mode = %v, %v", info.Mode(), err)
+	// Windows has no Unix permission bits: the profile's ACLs protect it
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(filepath.Join(dir, TokenFile))
+		if err != nil || info.Mode().Perm() != 0o600 {
+			t.Errorf("token file mode = %v, %v", info.Mode(), err)
+		}
 	}
 	if again, _ := LoadToken(dir); again != first {
 		t.Error("token changed")
