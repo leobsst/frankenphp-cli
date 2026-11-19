@@ -62,5 +62,6 @@
   "start the LAN DNS server: %w": "démarrage du serveur DNS du réseau local : %w",
   "LAN DNS server: invalid Corefile, keeping the previous one: %v\n": "Serveur DNS du réseau local : Corefile invalide, le précédent est conservé : %v\n",
   "Creating %s (static)...": "Création de %s (statique)...",
+  "Removing the unsupported br encoding from %s...": "Suppression de l'encodage br non supporté de %s...",
   "%s already exists: its root is kept, --root is ignored.": "%s existe déjà : sa racine est conservée, --root est ignoré."
 }

@@ -388,6 +388,9 @@ func (g *Generator) GenerateStatic(hosts []store.StaticHost) error {
 	for _, h := range hosts {
 		path := filepath.Join(g.StaticDir(), fileName(h.Domain))
 		if exists(path) {
+			if err := g.dropBrotli(path); err != nil {
+				return err
+			}
 			continue
 		}
 		g.Log.Info(i18n.Tf("Creating %s (static)...", fileName(h.Domain)))
@@ -397,6 +400,26 @@ func (g *Generator) GenerateStatic(hosts []store.StaticHost) error {
 	}
 	g.Log.Success(i18n.T("Caddyfile configurations generated"))
 	return nil
+}
+
+// brotliEncoder matches the br format of an encode directive.
+var brotliEncoder = regexp.MustCompile(`(?m)^([ \t]*encode\b[^\n{]*?)[ \t]+br\b`)
+
+// dropBrotli removes the br format from the encode directives of an
+// existing static site file. The reverse proxy runs the standard Caddy
+// image, which has no Brotli encoder: Caddy would refuse to start, and the
+// container would restart forever. Files written by older versions had it.
+func (g *Generator) dropBrotli(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	fixed := brotliEncoder.ReplaceAllString(string(data), "${1}")
+	if fixed == string(data) {
+		return nil
+	}
+	g.Log.Info(i18n.Tf("Removing the unsupported br encoding from %s...", filepath.Base(path)))
+	return os.WriteFile(path, []byte(fixed), fileMode)
 }
 
 // ArchiveStatic moves the site files of static hosts to
@@ -431,7 +454,8 @@ func RootPath(root string) string {
 }
 
 // staticSite is the site file of a static host, served over HTTPS by the
-// reverse proxy. A non-SPA site keeps the fallback commented out.
+// reverse proxy. A non-SPA site keeps the fallback commented out. No br
+// encoding: the reverse proxy's standard Caddy image has no Brotli encoder.
 func staticSite(h store.StaticHost) string {
 	simple := SimpleDomain(h.Domain)
 	lines := []string{
@@ -440,7 +464,7 @@ func staticSite(h store.StaticHost) string {
 		"",
 		"\troot * " + RootPath(h.Root),
 		"",
-		"\tencode br gzip",
+		"\tencode zstd gzip",
 		"",
 		"\tlog {",
 		"\t\toutput file /var/log/caddy/" + simple + "_access.log {",
@@ -455,6 +479,7 @@ func staticSite(h store.StaticHost) string {
 		"\t\tX-Frame-Options \"SAMEORIGIN\"",
 		"\t\tReferrer-Policy \"no-referrer\"",
 		"\t\t-Server",
+		"\t\t-X-Powered-By",
 		"\t}",
 		"",
 	}

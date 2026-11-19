@@ -336,6 +336,29 @@ func TestStaticSite(t *testing.T) {
 	}
 }
 
+// The reverse proxy's standard Caddy image has no Brotli encoder: a static
+// site with "encode br" makes Caddy refuse to start. New files never have
+// it, and existing ones lose it on the next generation, the rest kept.
+func TestStaticSiteWithoutBrotli(t *testing.T) {
+	if site := staticSite(store.StaticHost{Domain: "site.test"}); !strings.Contains(site, "\tencode zstd gzip\n") {
+		t.Errorf("new static site:\n%s", site)
+	}
+
+	dataDir, caddyDir := newCaddyDir(t)
+	g := New(caddyDir, dataDir, &memLog{})
+	path := filepath.Join(g.StaticDir(), "site_Caddyfile")
+	if err := os.MkdirAll(g.StaticDir(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write(t, path, "site.test {\n\troot * /srv/\n\tencode br gzip\n\t# kept: br\n\tfile_server\n}\n")
+	if err := g.GenerateStatic([]store.StaticHost{{Domain: "site.test"}}); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := read(t, path), "site.test {\n\troot * /srv/\n\tencode gzip\n\t# kept: br\n\tfile_server\n}\n"; got != want {
+		t.Errorf("repaired static site:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 // --root replaces the template's root in a new PHP site file only.
 func TestGenerateForVersionRoot(t *testing.T) {
 	dataDir, caddyDir := newCaddyDir(t)
