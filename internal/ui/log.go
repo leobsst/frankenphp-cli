@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/leobsst/frankenphp-cli/internal/core/events"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
 )
 
@@ -47,3 +48,17 @@ func (l *Logger) Warning(msg string) { fmt.Fprintln(l.w, l.yellow.Render(i18n.Tf
 
 // Error logs an error.
 func (l *Logger) Error(msg string) { fmt.Fprintln(l.w, l.red.Render(i18n.Tf("ERROR: %s", msg))) }
+
+// Emit prints a service event as a log line: a step is an info line.
+func (l *Logger) Emit(e events.Event) {
+	switch e.Level {
+	case events.Success:
+		l.Success(e.Message)
+	case events.Warning:
+		l.Warning(e.Message)
+	case events.Error:
+		l.Error(e.Message)
+	default:
+		l.Info(e.Message)
+	}
+}
