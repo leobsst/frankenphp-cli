@@ -13,6 +13,7 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/domains"
 	"github.com/leobsst/frankenphp-cli/internal/core/env"
 	"github.com/leobsst/frankenphp-cli/internal/core/events"
+	"github.com/leobsst/frankenphp-cli/internal/core/stack"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
 	"github.com/leobsst/frankenphp-cli/internal/core/validate"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
@@ -68,7 +69,7 @@ func (a *app) openRunning(ctx context.Context, notRunning string) (*server, erro
 }
 
 // writeMain regenerates the main Caddyfile from the database.
-func (r *server) writeMain() error { return domains.WriteMain(r.caddyDir, r.e, r.s) }
+func (r *server) writeMain() error { return stack.WriteMain(r.caddyDir, r.e, r.s) }
 
 // events returns the console as the event log of the services.
 func (a *app) events() events.Log { return events.NewLog(a.log) }
@@ -87,7 +88,7 @@ func (a *app) domainService(r *server) *domains.Service {
 
 // restartProxy restarts the reverse proxy, to pick up new routes.
 func (a *app) restartProxy(ctx context.Context, d *docker.Manager) {
-	domains.RestartProxy(ctx, d, a.events())
+	stack.RestartProxy(ctx, d, a.events())
 }
 
 // reported turns a failure the services already reported (error and

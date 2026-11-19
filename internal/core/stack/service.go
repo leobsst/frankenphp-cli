@@ -75,6 +75,12 @@ func ResolvePHP(requested string, e *env.Env, log events.Log) (string, error) {
 	return v, nil
 }
 
+// RestartProxy restarts the reverse proxy, to pick up new routes.
+func RestartProxy(ctx context.Context, d *docker.Manager, log events.Log) {
+	log.Step(i18n.T("Restarting reverse proxy..."))
+	d.RestartContainer(ctx, compose.ReverseProxyContainer)
+}
+
 // RemoveLegacyDNS removes the DNS container of earlier releases, if any: it
 // would hold port 53.
 func RemoveLegacyDNS(ctx context.Context, d *docker.Manager) {
@@ -128,6 +134,31 @@ func (s *Service) reportedError(err error, messages ...string) error {
 		s.Log.Error(m)
 	}
 	return &events.ReportedError{Err: err}
+}
+
+// WriteMain regenerates the main Caddyfile of caddyDir from the database.
+func WriteMain(caddyDir string, e *env.Env, s *store.Store) error {
+	domains, err := s.Domains()
+	if err != nil {
+		return err
+	}
+	aliases, err := s.AliasEntries()
+	if err != nil {
+		return err
+	}
+	proxies, err := s.Proxies()
+	if err != nil {
+		return err
+	}
+	statics, err := s.StaticHosts()
+	if err != nil {
+		return err
+	}
+	return caddyfile.WriteMain(caddyDir, caddyfile.Main{
+		Domains: domains, Aliases: aliases, Proxies: proxies, Statics: statics,
+		DBAdminTarget: e.DBAdminTarget(), WebsocketTarget: soketi.Target(e),
+		S3Target: s3.ProxyTarget(e),
+	})
 }
 
 // --- S3 ----------------------------------------------------------------------

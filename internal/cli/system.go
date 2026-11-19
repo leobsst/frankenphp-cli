@@ -13,7 +13,6 @@ import (
 	"github.com/skip2/go-qrcode"
 	"github.com/spf13/cobra"
 
-	"github.com/leobsst/frankenphp-cli/internal/command"
 	"github.com/leobsst/frankenphp-cli/internal/core/caddyfile"
 	"github.com/leobsst/frankenphp-cli/internal/core/caserver"
 	"github.com/leobsst/frankenphp-cli/internal/core/privilege"
@@ -253,21 +252,13 @@ Examples:
 	return cmd
 }
 
-// rootCAPath is mkcert's own rootCA.pem, the CA trusted on this machine,
-// not a copy in caddy/certs.
-func (a *app) rootCAPath(ctx context.Context) (string, error) {
-	mkcert := a.deps.Command.LookPath("mkcert")
-	if mkcert == "" {
-		return "", &ssl.Error{Msg: i18n.T("mkcert not found. Run `sudo frankenmanager setup --install-mkcert` first.")}
+// caSharing returns the root CA sharing of dir.
+func (a *app) caSharing(dir string) caserver.Sharing {
+	return caserver.Sharing{
+		Dir:    dir,
+		RootCA: func(ctx context.Context) (string, error) { return ssl.RootCAPath(ctx, a.deps.Command) },
+		Start:  a.deps.ShareCA, Stop: a.deps.StopCA, State: a.deps.CAState, LANIP: a.deps.LANIP,
 	}
-	res, err := a.deps.Command.Run(ctx, command.Cmd{Name: mkcert, Args: []string{"-CAROOT"}})
-	if err != nil {
-		return "", &ssl.Error{Msg: i18n.Tf("Could not determine mkcert's CA root: %v", err)}
-	}
-	if !res.OK() {
-		return "", &ssl.Error{Msg: i18n.Tf("Could not determine mkcert's CA root: %v", strings.TrimSpace(string(res.Stderr)))}
-	}
-	return filepath.Join(strings.TrimSpace(string(res.Stdout)), "rootCA.pem"), nil
 }
 
 // qrASCII renders data as a QR code in cp437 characters (no-break space,
@@ -303,14 +294,10 @@ func (a *app) trustCAOn(ctx context.Context, port int) error {
 	if err != nil {
 		return err
 	}
-	cert, err := a.rootCAPath(ctx)
+	url, err := a.caSharing(dir).On(ctx, port)
 	if err != nil {
 		return err
 	}
-	if err := a.deps.ShareCA(dir, cert, port); err != nil {
-		return err
-	}
-	url := fmt.Sprintf("http://%s:%d/", a.deps.LANIP(), port)
 	a.log.Success(i18n.Tf("Root CA is now shared at %s", url))
 	qr, err := qrASCII(url)
 	if err != nil {
@@ -334,8 +321,8 @@ func (a *app) trustCAOff() error {
 	if err != nil {
 		return err
 	}
-	if !a.deps.StopCA(dir) {
-		return i18n.Errorf("Root CA sharing is not currently running.")
+	if err := a.caSharing(dir).Off(); err != nil {
+		return err
 	}
 	a.log.Success(i18n.T("Root CA sharing stopped."))
 	return nil
@@ -346,12 +333,12 @@ func (a *app) trustCAStatus() error {
 	if err != nil {
 		return err
 	}
-	_, port, ok := a.deps.CAState(dir)
+	url, ok := a.caSharing(dir).Status()
 	if !ok {
 		a.log.Info(i18n.T("Root CA sharing is currently OFF."))
 		return nil
 	}
-	a.log.Info(i18n.Tf("Root CA sharing is ON at http://%s:%d/", a.deps.LANIP(), port))
+	a.log.Info(i18n.Tf("Root CA sharing is ON at %s", url))
 	return nil
 }
 

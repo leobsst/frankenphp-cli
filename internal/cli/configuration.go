@@ -13,8 +13,8 @@ import (
 
 	"github.com/leobsst/frankenphp-cli/internal/core/alias"
 	"github.com/leobsst/frankenphp-cli/internal/core/env"
+	"github.com/leobsst/frankenphp-cli/internal/core/settings"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
-	"github.com/leobsst/frankenphp-cli/internal/core/validate"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
 	"github.com/leobsst/frankenphp-cli/internal/platform"
 	"github.com/leobsst/frankenphp-cli/internal/ui"
@@ -112,20 +112,18 @@ func completeConfigArgs(withValue bool) cobra.CompletionFunc {
 // lookupSetting returns the definition of name, or a usage error with the
 // closest names.
 func lookupSetting(name string) (env.Definition, error) {
-	if d, ok := env.Lookup(name); ok {
-		return d, nil
+	return checkSetting(name, nil)
+}
+
+// checkSetting returns the definition of name after checking value (nil for
+// a reset); an unknown name is a usage error.
+func checkSetting(name string, value *string) (env.Definition, error) {
+	d, err := settings.Check(name, value)
+	var unknown *settings.UnknownError
+	if errors.As(err, &unknown) {
+		return d, usageError{err}
 	}
-	var close []string
-	upper := strings.ToUpper(name)
-	for _, k := range env.Keys() {
-		if strings.Contains(k, upper) || strings.Contains(upper, k) {
-			close = append(close, k)
-		}
-	}
-	if len(close) > 0 {
-		return env.Definition{}, usageError{i18n.Errorf("Unknown setting '%s'. Did you mean: %s?", name, strings.Join(close, ", "))}
-	}
-	return env.Definition{}, usageError{i18n.Errorf("Unknown setting '%s'. Run 'frankenmanager configuration list' to see them.", name)}
+	return d, err
 }
 
 // configList shows every setting.
@@ -142,15 +140,12 @@ func (a *app) configList(showSecrets bool) error {
 		{Header: i18n.T("Setting"), Color: ui.Cyan}, {Header: i18n.T("Value"), Color: ui.Green},
 		{Header: i18n.T("Source"), Faint: true}, {Header: i18n.T("Applies"), Faint: true},
 	}}
-	for _, d := range env.Definitions() {
-		value, source := e.Get(d.Key), i18n.T("default")
-		if e.IsSet(d.Key) {
+	for _, entry := range settings.List(e, showSecrets) {
+		source := i18n.T("default")
+		if entry.Custom {
 			source = i18n.T("custom")
 		}
-		if d.Secret && value != "" && !showSecrets {
-			value = "********"
-		}
-		t.Rows = append(t.Rows, []string{d.Key, value, source, d.Apply.Label()})
+		t.Rows = append(t.Rows, []string{entry.Key, entry.Value, source, entry.Apply.Label()})
 	}
 	a.con.PrintTable(t)
 	a.log.Info(i18n.T("Change a setting: frankenmanager configuration set <name> <value>"))
@@ -178,19 +173,9 @@ func (a *app) configGet(name string) error {
 // configSet sets a setting (value) or puts it back to its default (nil),
 // then applies it.
 func (a *app) configSet(ctx context.Context, name string, value *string) error {
-	d, err := lookupSetting(name)
+	d, err := checkSetting(name, value)
 	if err != nil {
 		return err
-	}
-	if value != nil {
-		if err := d.Check(*value); err != nil {
-			return err
-		}
-		if d.Key == "DEFAULT_PROJECT_PATH" && *value != "" {
-			if err := validate.Directory(*value); err != nil {
-				return err
-			}
-		}
 	}
 	dir, err := a.projectDir()
 	if err != nil {
@@ -200,32 +185,21 @@ func (a *app) configSet(ctx context.Context, name string, value *string) error {
 	if err != nil {
 		return err
 	}
-
-	old := e.Get(d.Key)
-	if value != nil {
-		err = e.Set(d.Key, *value)
-	} else {
-		err = e.Reset(d.Key)
-	}
+	c, err := settings.Set(e, d, value)
 	if err != nil {
 		return err
 	}
-	now := e.Get(d.Key)
-	shown := now
-	if d.Secret && shown != "" {
-		shown = "********"
-	}
-	if now == old {
-		a.log.Info(i18n.Tf("%s = %s (unchanged)", d.Key, shown))
+	if !c.Changed() {
+		a.log.Info(i18n.Tf("%s = %s (unchanged)", d.Key, c.Shown))
 		return nil
 	}
-	a.log.Success(fmt.Sprintf("%s = %s", d.Key, shown))
+	a.log.Success(fmt.Sprintf("%s = %s", d.Key, c.Shown))
 
 	switch d.Apply {
 	case env.ApplyLive:
 		return a.applyService(ctx, dir, e, d.Service)
 	case env.ApplyAlias:
-		return a.syncAlias(old, now)
+		return a.syncAlias(c.Old, c.New)
 	case env.ApplyNow:
 		return nil
 	}

@@ -55,6 +55,23 @@ func (m *Manager) mkcert() (string, error) {
 	return p, nil
 }
 
+// RootCAPath returns mkcert's own rootCA.pem, the CA trusted on this
+// machine, not a copy in caddy/certs.
+func RootCAPath(ctx context.Context, run command.Runner) (string, error) {
+	mkcert := run.LookPath("mkcert")
+	if mkcert == "" {
+		return "", &Error{Msg: i18n.T("mkcert not found. Run `sudo frankenmanager setup --install-mkcert` first.")}
+	}
+	res, err := run.Run(ctx, command.Cmd{Name: mkcert, Args: []string{"-CAROOT"}})
+	if err != nil {
+		return "", &Error{Msg: i18n.Tf("Could not determine mkcert's CA root: %v", err)}
+	}
+	if !res.OK() {
+		return "", &Error{Msg: i18n.Tf("Could not determine mkcert's CA root: %v", strings.TrimSpace(string(res.Stderr)))}
+	}
+	return filepath.Join(strings.TrimSpace(string(res.Stdout)), "rootCA.pem"), nil
+}
+
 // InstallCA copies the root CA installed by `setup` into the certs
 // directory: the containers trust it on startup, so that PHP calls between
 // local domains validate too.

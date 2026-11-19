@@ -10,7 +10,6 @@ import (
 
 	"github.com/leobsst/frankenphp-cli/internal/core/dns"
 	"github.com/leobsst/frankenphp-cli/internal/core/dnsclients"
-	"github.com/leobsst/frankenphp-cli/internal/core/store"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
 	"github.com/leobsst/frankenphp-cli/internal/ui"
 )
@@ -39,13 +38,6 @@ Examples:
 	return cmd
 }
 
-// dnsClient is a device as --json prints it.
-type dnsClient struct {
-	store.DNSClient
-	Status        string `json:"status"`
-	RandomizedMAC bool   `json:"randomized_mac"`
-}
-
 // dnsClients prints the devices of the LAN DNS server, connected ones only
 // unless all.
 func (a *app) dnsClients(all, asJSON bool, now time.Time) (err error) {
@@ -70,17 +62,7 @@ func (a *app) dnsClients(all, asJSON bool, now time.Time) (err error) {
 		return err
 	}
 
-	clients := []dnsClient{}
-	connected := 0
-	for _, c := range stored {
-		status := dnsclients.Status(c, now)
-		if status == dnsclients.Connected {
-			connected++
-		} else if !all {
-			continue
-		}
-		clients = append(clients, dnsClient{DNSClient: c, Status: status, RandomizedMAC: dnsclients.RandomizedMAC(c.MAC)})
-	}
+	clients, connected := dnsclients.Devices(stored, now, all)
 
 	if asJSON {
 		data, err := json.MarshalIndent(clients, "", "  ")

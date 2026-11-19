@@ -2,15 +2,12 @@ package cli
 
 import (
 	"context"
-	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
 
-	"github.com/leobsst/frankenphp-cli/internal/core/compose"
 	"github.com/leobsst/frankenphp-cli/internal/core/dns"
 	"github.com/leobsst/frankenphp-cli/internal/core/env"
-	"github.com/leobsst/frankenphp-cli/internal/core/s3"
 	"github.com/leobsst/frankenphp-cli/internal/core/soketi"
 	"github.com/leobsst/frankenphp-cli/internal/core/stack"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
@@ -18,25 +15,7 @@ import (
 )
 
 // serviceNames are the optional services, in display order.
-var serviceNames = slices.Sorted(func(yield func(string) bool) {
-	for name := range env.Services {
-		if !yield(name) {
-			return
-		}
-	}
-})
-
-// composeServices maps a containerized optional service to its compose
-// services. The LAN DNS server is the background process, not a container.
-var composeServices = map[string][]string{
-	"redis": {"cache"}, "soketi": {"soketi"}, "s3": {s3.ComposeService, s3.GatewayService},
-}
-
-// serviceContainers maps a containerized optional service to its
-// containers, in stop order.
-var serviceContainers = map[string][]string{
-	"redis": {compose.RedisContainer}, "soketi": {soketi.ContainerName}, "s3": {s3.GatewayContainer, s3.ContainerName},
-}
+var serviceNames = stack.OptionalServices
 
 func newServiceCmd(a *app) *cobra.Command {
 	return &cobra.Command{
@@ -92,6 +71,21 @@ Examples:
 	}
 }
 
+// optionalService runs fn on the stack service of the data directory: the
+// optional services work on the configuration and the running stack.
+func (a *app) optionalService(dir string, e *env.Env, fn func(*stack.Service) (stack.OptionalResult, error)) (err error) {
+	s, err := a.openStore(dir)
+	if err != nil {
+		return err
+	}
+	defer closeStore(s, &err)
+	res, err := fn(a.stackService(dir, e, a.docker(dir), s))
+	if err != nil {
+		return err
+	}
+	return a.reportService(e, res)
+}
+
 // setService turns a service on or off in the configuration, then applies
 // it live.
 func (a *app) setService(ctx context.Context, name string, on bool) error {
@@ -103,23 +97,60 @@ func (a *app) setService(ctx context.Context, name string, on bool) error {
 	if err != nil {
 		return err
 	}
-	key := env.Services[name]
-	value := "false"
-	if on {
-		value = "true"
-	}
-	if e.Get(key) == value {
-		if on {
-			a.log.Info(i18n.Tf("Service %s is already enabled.", name))
-		} else {
-			a.log.Info(i18n.Tf("Service %s is already disabled.", name))
-		}
+	return a.optionalService(dir, e, func(svc *stack.Service) (stack.OptionalResult, error) {
+		return svc.SetOptional(ctx, name, on)
+	})
+}
+
+// applyService brings a service in line with the configuration when the
+// server runs.
+func (a *app) applyService(ctx context.Context, dir string, e *env.Env, name string) error {
+	return a.optionalService(dir, e, func(svc *stack.Service) (stack.OptionalResult, error) {
+		return svc.ApplyOptional(ctx, name)
+	})
+}
+
+// reportService tells what happened to an optional service.
+func (a *app) reportService(e *env.Env, res stack.OptionalResult) error {
+	name := res.Name
+	switch {
+	case !res.Changed && res.On:
+		a.log.Info(i18n.Tf("Service %s is already enabled.", name))
+		return nil
+	case !res.Changed:
+		a.log.Info(i18n.Tf("Service %s is already disabled.", name))
+		return nil
+	case !res.Live && res.On:
+		a.log.Success(i18n.Tf("Service %s enabled. It applies on the next start.", name))
+		return nil
+	case !res.Live:
+		a.log.Success(i18n.Tf("Service %s disabled. It applies on the next start.", name))
+		return nil
+	case res.On:
+		a.log.Success(i18n.Tf("Service %s enabled.", name))
+	default:
+		a.log.Success(i18n.Tf("Service %s disabled.", name))
 		return nil
 	}
-	if err := e.Set(key, value); err != nil {
-		return err
+	switch name {
+	case "dns":
+		ip, err := dns.ResolveIP(e)
+		if err != nil {
+			return err
+		}
+		listen, err := dns.ListenAddress(e)
+		if err != nil {
+			return err
+		}
+		a.log.Info(i18n.Tf("LAN DNS server listening on %s (domains resolve to %s)", listen, ip))
+	case "soketi":
+		a.log.Info(i18n.Tf("Soketi WebSocket server: wss://%s (apps: 127.0.0.1:%s)", soketi.Domain, soketi.Port(e)))
+	case "s3":
+		a.logS3Endpoints(e)
+	case "redis":
+		a.log.Info(i18n.Tf("Redis listening on 127.0.0.1:%s", e.Get("REDIS_PORT")))
 	}
-	return a.applyService(ctx, dir, e, name)
+	return nil
 }
 
 // serviceStatus shows whether the services are enabled and running.
@@ -132,214 +163,19 @@ func (a *app) serviceStatus(ctx context.Context, only string) error {
 	if err != nil {
 		return err
 	}
-	statuses := a.docker(dir).ContainerStatuses(ctx)
 	t := ui.Table{Title: i18n.T("Optional services"), Columns: []ui.Column{
 		{Header: i18n.T("Service"), Color: ui.Cyan}, {Header: i18n.T("Enabled")}, {Header: i18n.T("State")},
 		{Header: i18n.T("Setting"), Faint: true},
 	}}
-	for _, name := range serviceNames {
-		if only != "" && name != only {
-			continue
-		}
-		key := env.Services[name]
-		var state string
-		if name == "dns" {
-			state = a.dnsProcessState(dir)
-		} else {
-			// The front container: the S3 gateway is unhealthy without Garage
-			state = statuses.Get(serviceContainers[name][0]).State
-		}
-		t.Rows = append(t.Rows, []string{name, yesNo(e.Get(key) == "true"), state, key})
+	for _, st := range a.stackService(dir, e, a.docker(dir), nil).OptionalStatuses(ctx, only) {
+		t.Rows = append(t.Rows, []string{st.Name, yesNo(st.Enabled), st.State, st.Key})
 	}
 	a.con.PrintTable(t)
-	return nil
-}
-
-// applyService brings a service in line with the configuration when the
-// server runs: started or stopped, with what depends on it (certificate,
-// hosts entry, reverse proxy route, DNS records and watcher).
-func (a *app) applyService(ctx context.Context, dir string, e *env.Env, name string) (err error) {
-	on := e.Get(env.Services[name]) == "true"
-
-	d := a.docker(dir)
-	s, err := a.openStore(dir)
-	if err != nil {
-		return err
-	}
-	defer closeStore(s, &err)
-	running, err := a.isRunning(ctx, d, s)
-	if err != nil {
-		return err
-	}
-	if !running {
-		if on {
-			a.log.Success(i18n.Tf("Service %s enabled. It applies on the next start.", name))
-		} else {
-			a.log.Success(i18n.Tf("Service %s disabled. It applies on the next start.", name))
-		}
-		return nil
-	}
-
-	if name == "soketi" && on {
-		if _, err := soketi.EnsureCredentials(e); err != nil {
-			return err
-		}
-	}
-	if name == "s3" && on {
-		if _, err := s3.EnsureCredentials(e); err != nil {
-			return err
-		}
-	}
-	// The compose file and its variables, for the containerized services
-	var vars map[string]string
-	if name != "dns" {
-		active, err := s.ActivePHPVersions()
-		if err != nil {
-			return err
-		}
-		if err := stack.GenerateCompose(dir, e, active); err != nil {
-			return err
-		}
-		customPath, err := stack.ProjectPath(e, s)
-		if err != nil {
-			return err
-		}
-		if vars, err = e.ComposeEnvVars(dir, customPath, e.DBEngines()); err != nil {
-			return err
-		}
-	}
-
-	switch name {
-	case "dns":
-		if on {
-			if err := dns.Sync(dir, e, s); err != nil {
-				return err
-			}
-			stack.RemoveLegacyDNS(ctx, d)
-		}
-	case "soketi":
-		h := a.deps.Hosts(a.log)
-		if on {
-			certs, err := a.ssl(e.CertsDir(dir))
-			if err != nil {
-				return err
-			}
-			if err := certs.GenerateAll(ctx, []string{soketi.Domain}, false, e.IsProduction()); err != nil {
-				return err
-			}
-			if _, err := h.AddEntry(ctx, "127.0.0.1", soketi.Domain); err != nil {
-				return err
-			}
-		} else if _, err := h.RemoveEntry(ctx, "127.0.0.1", soketi.Domain); err != nil {
-			return err
-		}
-		r := &server{dir: dir, e: e, d: d, s: s, caddyDir: e.ResolveDir("CADDY_DIR", "./caddy", dir)}
-		if err := r.writeMain(); err != nil {
-			return err
-		}
-		if dns.Enabled(e) {
-			if err := dns.Sync(dir, e, s); err != nil {
-				return err
-			}
-		}
-	case "s3":
-		h := a.deps.Hosts(a.log)
-		if on {
-			certs, err := a.ssl(e.CertsDir(dir))
-			if err != nil {
-				return err
-			}
-			if err := certs.GenerateAll(ctx, []string{s3.Domain}, false, e.IsProduction()); err != nil {
-				return err
-			}
-			if _, err := h.AddEntry(ctx, "127.0.0.1", s3.Domain); err != nil {
-				return err
-			}
-		} else {
-			stack.RemoveS3Hosts(ctx, h, s)
-		}
-		r := &server{dir: dir, e: e, d: d, s: s, caddyDir: e.ResolveDir("CADDY_DIR", "./caddy", dir)}
-		if err := r.writeMain(); err != nil {
-			return err
-		}
-		if dns.Enabled(e) {
-			if err := dns.Sync(dir, e, s); err != nil {
-				return err
-			}
-		}
-	}
-
-	switch {
-	case name == "dns" && on:
-		// The background process, started or stopped below
-		a.log.Info(i18n.Tf("Starting %s...", name))
-	case name == "dns":
-		a.log.Info(i18n.Tf("Stopping %s...", name))
-	case on:
-		a.log.Info(i18n.Tf("Starting %s...", name))
-		if name == "s3" {
-			if err := stack.BuildS3Gateway(ctx, d); err != nil {
-				return err
-			}
-		}
-		if err := d.ComposeUp(ctx, vars, composeServices[name]...); err != nil {
-			return err
-		}
-	default:
-		a.log.Info(i18n.Tf("Stopping %s...", name))
-		for _, c := range serviceContainers[name] {
-			d.StopContainer(ctx, c)
-		}
-	}
-	if name == "soketi" || name == "s3" {
-		a.restartProxy(ctx, d)
-	}
-	if name == "s3" && on {
-		if err := a.syncS3(ctx, dir, e, s); err != nil {
-			return err
-		}
-	}
-	if name == "dns" {
-		w, err := a.deps.Watcher(dir)
-		if err != nil {
-			return err
-		}
-		if _, err := w.Update(ctx, e); err != nil {
-			return err
-		}
-	}
-
-	if on {
-		a.log.Success(i18n.Tf("Service %s enabled.", name))
-	} else {
-		a.log.Success(i18n.Tf("Service %s disabled.", name))
-	}
-	switch {
-	case on && name == "dns":
-		ip, err := dns.ResolveIP(e)
-		if err != nil {
-			return err
-		}
-		listen, err := dns.ListenAddress(e)
-		if err != nil {
-			return err
-		}
-		a.log.Info(i18n.Tf("LAN DNS server listening on %s (domains resolve to %s)", listen, ip))
-	case on && name == "soketi":
-		a.log.Info(i18n.Tf("Soketi WebSocket server: wss://%s (apps: 127.0.0.1:%s)", soketi.Domain, soketi.Port(e)))
-	case on && name == "s3":
-		a.logS3Endpoints(e)
-	case on && name == "redis":
-		a.log.Info(i18n.Tf("Redis listening on 127.0.0.1:%s", e.Get("REDIS_PORT")))
-	}
 	return nil
 }
 
 // dnsProcessState is the state of the LAN DNS server process: "running" or
 // "stopped".
 func (a *app) dnsProcessState(dir string) string {
-	if w, err := a.deps.Watcher(dir); err == nil && w.RunningPID() != 0 {
-		return "running"
-	}
-	return "stopped"
+	return a.stackService(dir, nil, nil, nil).DNSProcessState()
 }

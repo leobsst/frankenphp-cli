@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/leobsst/frankenphp-cli/internal/core/caddyfile"
-	"github.com/leobsst/frankenphp-cli/internal/core/compose"
 	"github.com/leobsst/frankenphp-cli/internal/core/dns"
 	"github.com/leobsst/frankenphp-cli/internal/core/docker"
 	"github.com/leobsst/frankenphp-cli/internal/core/env"
@@ -21,8 +20,6 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/hosts"
 	"github.com/leobsst/frankenphp-cli/internal/core/phpversions"
 	"github.com/leobsst/frankenphp-cli/internal/core/resources"
-	"github.com/leobsst/frankenphp-cli/internal/core/s3"
-	"github.com/leobsst/frankenphp-cli/internal/core/soketi"
 	"github.com/leobsst/frankenphp-cli/internal/core/stack"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
 	"github.com/leobsst/frankenphp-cli/internal/core/validate"
@@ -56,32 +53,7 @@ func (s *Service) generator(log caddyfile.Logger) *caddyfile.Generator {
 	return caddyfile.New(s.CaddyDir, s.Dir, log)
 }
 
-// WriteMain regenerates the main Caddyfile from the database.
-func WriteMain(caddyDir string, e *env.Env, s *store.Store) error {
-	domains, err := s.Domains()
-	if err != nil {
-		return err
-	}
-	aliases, err := s.AliasEntries()
-	if err != nil {
-		return err
-	}
-	proxies, err := s.Proxies()
-	if err != nil {
-		return err
-	}
-	statics, err := s.StaticHosts()
-	if err != nil {
-		return err
-	}
-	return caddyfile.WriteMain(caddyDir, caddyfile.Main{
-		Domains: domains, Aliases: aliases, Proxies: proxies, Statics: statics,
-		DBAdminTarget: e.DBAdminTarget(), WebsocketTarget: soketi.Target(e),
-		S3Target: s3.ProxyTarget(e),
-	})
-}
-
-func (s *Service) writeMain() error { return WriteMain(s.CaddyDir, s.Env, s.Store) }
+func (s *Service) writeMain() error { return stack.WriteMain(s.CaddyDir, s.Env, s.Store) }
 
 // projectPath returns the projects root the server runs with,
 // ErrNoProjectPath when none is known.
@@ -118,13 +90,7 @@ func (s *Service) restartVersion(ctx context.Context, phpVersion string) {
 	s.Docker.RestartContainer(ctx, name)
 }
 
-// RestartProxy restarts the reverse proxy, to pick up new routes.
-func RestartProxy(ctx context.Context, d *docker.Manager, log events.Log) {
-	log.Step(i18n.T("Restarting reverse proxy..."))
-	d.RestartContainer(ctx, compose.ReverseProxyContainer)
-}
-
-func (s *Service) restartProxy(ctx context.Context) { RestartProxy(ctx, s.Docker, s.Log) }
+func (s *Service) restartProxy(ctx context.Context) { stack.RestartProxy(ctx, s.Docker, s.Log) }
 
 // cleanup undoes the hosts entries of a failed operation.
 type cleanup struct {
