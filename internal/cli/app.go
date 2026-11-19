@@ -284,14 +284,6 @@ func (a *app) ssl(certsDir string) (*ssl.Manager, error) {
 	return m, nil
 }
 
-// quietLogger drops the messages of a cleanup step.
-type quietLogger struct{}
-
-func (quietLogger) Info(string)    {}
-func (quietLogger) Success(string) {}
-func (quietLogger) Warning(string) {}
-func (quietLogger) Error(string)   {}
-
 // shareCA starts the detached root CA server, from the running binary.
 func shareCA(dataDir, certFile string, port int) error {
 	exe, err := platform.Executable()

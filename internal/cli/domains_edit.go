@@ -3,45 +3,16 @@ package cli
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/leobsst/frankenphp-cli/internal/core/caddyfile"
-	"github.com/leobsst/frankenphp-cli/internal/core/dns"
+	"github.com/leobsst/frankenphp-cli/internal/core/domains"
 	"github.com/leobsst/frankenphp-cli/internal/core/phpversions"
-	"github.com/leobsst/frankenphp-cli/internal/core/resources"
-	"github.com/leobsst/frankenphp-cli/internal/core/stack"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
 	"github.com/leobsst/frankenphp-cli/internal/ui"
 )
-
-// without returns the versions of before missing from after, sorted.
-func without(before, after []string) []string {
-	var out []string
-	for _, v := range before {
-		if !slices.Contains(after, v) {
-			out = append(out, v)
-		}
-	}
-	slices.Sort(out)
-	return out
-}
-
-// stopVersions stops and removes the containers of versions left without
-// domains, then regenerates the compose file without them.
-func (a *app) stopVersions(ctx context.Context, r *server, orphaned, remaining []string) error {
-	for _, v := range orphaned {
-		name := phpversions.ContainerName(v)
-		a.log.Info(i18n.Tf("Stopping %s (no more domains)...", name))
-		r.d.StopContainer(ctx, name)
-	}
-	if len(orphaned) == 0 {
-		return nil
-	}
-	return stack.GenerateCompose(r.dir, r.e, remaining)
-}
 
 // --- remove-host -------------------------------------------------------------
 
@@ -76,194 +47,37 @@ func (a *app) removeHost(ctx context.Context, names []string) (err error) {
 	}
 	defer closeStore(r.s, &err)
 
-	existing, err := r.s.Domains()
-	if err != nil {
-		return err
+	res, err := a.domainService(r).Remove(ctx, names)
+	if err != nil || res.Empty() {
+		return reported(err)
 	}
-	versionOf := map[string]string{}
-	for _, d := range existing {
-		versionOf[d.Name] = d.PHPVersion
-	}
-	aliasList, err := r.s.Aliases()
-	if err != nil {
-		return err
-	}
-	proxyList, err := r.s.Proxies()
-	if err != nil {
-		return err
-	}
-	isAlias := map[string]bool{}
-	for _, al := range aliasList {
-		isAlias[al.Alias] = true
-	}
-	isProxy := map[string]bool{}
-	for _, p := range proxyList {
-		isProxy[p.Domain] = true
-	}
-	staticList, err := r.s.StaticHostNames()
-	if err != nil {
-		return err
-	}
-
-	var domains, aliases, proxies, statics []string
-	pick := func(list *[]string, name string) {
-		if slices.Contains(*list, name) {
-			a.log.Info(i18n.Tf("Domain '%s' is duplicated in input, skipping.", name))
-		} else {
-			*list = append(*list, name)
-		}
-	}
-	for _, name := range names {
-		switch {
-		case versionOf[name] != "":
-			pick(&domains, name)
-		case isAlias[name]:
-			pick(&aliases, name)
-		case isProxy[name]:
-			pick(&proxies, name)
-		case slices.Contains(staticList, name):
-			pick(&statics, name)
-		default:
-			a.log.Warning(i18n.Tf("Domain '%s' is not configured, skipping.", name))
-		}
-	}
-	if len(domains)+len(aliases)+len(proxies)+len(statics) == 0 {
-		a.log.Info(i18n.T("No domains to remove."))
-		return nil
-	}
-
-	h := a.deps.Hosts(a.log)
-	removeEntry := func(name string) {
-		if _, err := h.RemoveEntry(ctx, "127.0.0.1", name); err != nil {
-			a.log.Warning(i18n.Tf("Failed to remove hosts entry for %s: %v", name, err))
-		}
-	}
-	g := r.generator(a.log)
-	before, err := r.s.ActivePHPVersions()
-	if err != nil {
-		return err
-	}
-	var touched []string // versions losing a domain
-	for _, d := range domains {
-		if !slices.Contains(touched, versionOf[d]) {
-			touched = append(touched, versionOf[d])
-		}
-	}
-
-	var removedAliases []string
-	err = func() error {
-		a.log.Info(i18n.Tf("Removing %d domain(s), %d alternate host(s), %d proxy host(s), and %d static host(s)...",
-			len(domains), len(aliases), len(proxies), len(statics)))
-		a.log.Info(i18n.T("Removing hosts entries..."))
-		for _, d := range domains {
-			removeEntry(d)
-		}
-		if len(domains) > 0 {
-			a.log.Info(i18n.T("Archiving Caddyfiles..."))
-			if err := g.Archive(domains); err != nil {
-				return err
-			}
-		}
-		if err := r.s.RemoveDomains(domains); err != nil {
-			return err
-		}
-		// The requested aliases, then those of the removed domains and
-		// proxy hosts
-		if err := r.s.RemoveAliases(aliases); err != nil {
-			return err
-		}
-		cascaded, err := r.s.RemoveAliasesForTargets(append(slices.Clone(domains), proxies...))
-		if err != nil {
-			return err
-		}
-		removedAliases = append(slices.Clone(aliases), cascaded...)
-		if len(cascaded) > 0 {
-			a.log.Info(i18n.Tf("Also removing alternate host(s) pointing to removed host(s): %s", strings.Join(cascaded, ", ")))
-		}
-		for _, al := range removedAliases {
-			removeEntry(al)
-		}
-		if err := r.s.RemoveProxies(proxies); err != nil {
-			return err
-		}
-		for _, p := range proxies {
-			removeEntry(p)
-		}
-		if len(statics) > 0 {
-			a.log.Info(i18n.T("Archiving Caddyfiles..."))
-			if err := g.ArchiveStatic(statics); err != nil {
-				return err
-			}
-		}
-		if err := r.s.RemoveStaticHosts(statics); err != nil {
-			return err
-		}
-		for _, st := range statics {
-			removeEntry(st)
-		}
-
-		after, err := r.s.ActivePHPVersions()
-		if err != nil {
-			return err
-		}
-		orphaned := without(before, after)
-		for _, v := range orphaned {
-			name := phpversions.ContainerName(v)
-			a.log.Info(i18n.Tf("Stopping %s (no more domains)...", name))
-			r.d.StopContainer(ctx, name)
-		}
-		slices.Sort(touched)
-		for _, v := range touched {
-			if slices.Contains(after, v) {
-				a.restartVersion(ctx, r.d, v)
-			}
-		}
-		if len(orphaned) > 0 {
-			if err := stack.GenerateCompose(r.dir, r.e, after); err != nil {
-				return err
-			}
-		}
-		if err := r.writeMain(); err != nil {
-			return err
-		}
-		if err := dns.Sync(r.dir, r.e, r.s); err != nil {
-			return err
-		}
-		a.restartProxy(ctx, r.d)
-		return nil
-	}()
-	if err != nil {
-		a.log.Error(i18n.Tf("An error occurred: %v", err))
-		return exitError(1)
-	}
-
 	a.con.Println()
 	a.log.Success(i18n.T("Host(s) removed successfully!"))
-	if len(domains) > 0 {
+	if len(res.Domains) > 0 {
 		a.log.Info(i18n.T("Removed domains:"))
-		for _, d := range domains {
-			a.log.Info(fmt.Sprintf("  - %s (PHP %s)", d, versionOf[d]))
+		for _, d := range res.Domains {
+			a.log.Info(fmt.Sprintf("  - %s (PHP %s)", d.Name, d.PHPVersion))
 		}
-		a.log.Info(i18n.Tf("\nCaddyfiles archived to: %s", g.ArchiveDir()))
+		a.log.Info(i18n.Tf("\nCaddyfiles archived to: %s", res.ArchiveDir))
 	}
-	if len(removedAliases) > 0 {
+	if len(res.Aliases) > 0 {
 		a.log.Info(i18n.T("Removed alternate hosts:"))
-		for _, al := range removedAliases {
+		for _, al := range res.Aliases {
 			a.log.Info("  - " + al)
 		}
 	}
-	if len(proxies) > 0 {
+	if len(res.Proxies) > 0 {
 		a.log.Info(i18n.T("Removed proxy hosts:"))
-		for _, p := range proxies {
+		for _, p := range res.Proxies {
 			a.log.Info("  - " + p)
 		}
 	}
-	if len(statics) > 0 {
+	if len(res.Statics) > 0 {
 		a.log.Info(i18n.T("Removed static hosts:"))
-		for _, st := range statics {
+		for _, st := range res.Statics {
 			a.log.Info("  - " + st)
 		}
-		a.log.Info(i18n.Tf("\nCaddyfiles archived to: %s", g.StaticArchiveDir()))
+		a.log.Info(i18n.Tf("\nCaddyfiles archived to: %s", res.StaticArchiveDir))
 	}
 	return nil
 }
@@ -348,7 +162,7 @@ func (a *app) restoreHost(ctx context.Context, names []string, forceSSL bool, ph
 		return err
 	}
 	// Checked before the server state
-	if php, err = a.phpVersion(php, e); err != nil {
+	if php, err = domains.ResolvePHP(php, e, a.events()); err != nil {
 		return err
 	}
 	r, err := a.openRunning(ctx, i18n.T("The server is not running. Use 'start' command instead."))
@@ -357,110 +171,15 @@ func (a *app) restoreHost(ctx context.Context, names []string, forceSSL bool, ph
 	}
 	defer closeStore(r.s, &err)
 
-	existing, err := r.s.DomainNames()
-	if err != nil {
-		return err
+	res, err := a.domainService(r).Restore(ctx, names, php, forceSSL)
+	if err != nil || len(res.Domains) == 0 {
+		return reported(err)
 	}
-	statics, err := r.s.StaticHostNames()
-	if err != nil {
-		return err
-	}
-	existing = append(existing, statics...)
-	// The names are compared without their TLD: app.test is active when
-	// app.dev is registered
-	short := func(d string) string {
-		if i := strings.LastIndex(d, "."); i >= 0 {
-			return d[:i]
-		}
-		return d
-	}
-	var restore []string
-	for _, name := range names {
-		active := slices.ContainsFunc(existing, func(d string) bool { return short(d) == short(name) })
-		switch {
-		case active:
-			a.log.Info(i18n.Tf("Domain '%s' is already active, skipping.", name))
-		case slices.Contains(restore, name):
-			a.log.Info(i18n.Tf("Domain '%s' is duplicated in input, skipping.", name))
-		default:
-			restore = append(restore, name)
-		}
-	}
-	if len(restore) == 0 {
-		a.log.Info(i18n.T("No domains to restore."))
-		return nil
-	}
-
-	active, err := r.s.ActivePHPVersions()
-	if err != nil {
-		return err
-	}
-	if err := resources.New(r.dir, a.log).EnsurePHPVersionConfig(php); err != nil {
-		return err
-	}
-	certs, err := a.ssl(r.e.CertsDir(r.dir))
-	if err != nil {
-		return err
-	}
-	c := &cleanup{a: a, h: a.deps.Hosts(a.log)}
-	var restored []string
-	err = func() error {
-		a.log.Info(i18n.Tf("Restoring %d domain(s) with PHP %s...", len(restore), php))
-		a.log.Info(i18n.T("Restoring Caddyfiles..."))
-		var err error
-		if restored, err = r.generator(a.log).RestoreToVersion(restore, php); err != nil {
-			return err
-		}
-		if len(restored) == 0 {
-			return nil
-		}
-		a.log.Info(i18n.T("Generating SSL certificates..."))
-		if err := certs.GenerateAll(ctx, restored, forceSSL, r.e.IsProduction()); err != nil {
-			return err
-		}
-		a.log.Info(i18n.T("Adding hosts entries..."))
-		for _, domain := range restored {
-			if err := c.add(ctx, domain); err != nil {
-				return err
-			}
-		}
-		if err := r.s.AddDomains(restored, php); err != nil {
-			return err
-		}
-		if err := dns.Sync(r.dir, r.e, r.s); err != nil {
-			return err
-		}
-		if !slices.Contains(active, php) {
-			if err := a.startVersion(ctx, r, php, active); err != nil {
-				return err
-			}
-		} else {
-			a.restartVersion(ctx, r.d, php)
-		}
-		if err := r.writeMain(); err != nil {
-			return err
-		}
-		a.restartProxy(ctx, r.d)
-		return nil
-	}()
-	if err != nil {
-		// The domains leave the database and their site files go back
-		// to the archive, ready for another restore-host
-		return c.fail(ctx, err, i18n.T("The host(s) were not restored."), func() {
-			_ = r.s.RemoveDomains(restored)
-			_ = r.generator(quietLogger{}).Archive(restored)
-		})
-	}
-	if len(restored) == 0 {
-		a.log.Info(i18n.T("No Caddyfiles were restored."))
-		return nil
-	}
-
 	a.con.Println()
 	a.log.Success(i18n.T("Host(s) restored successfully!"))
 	a.log.Info(i18n.T("Restored domains:"))
-	for _, domain := range restored {
-		a.log.Info(fmt.Sprintf("  - https://%s (PHP %s)", domain, php))
+	for _, domain := range res.Domains {
+		a.log.Info(fmt.Sprintf("  - https://%s (PHP %s)", domain, res.PHP))
 	}
 	return nil
 }
@@ -491,6 +210,7 @@ Examples:
 
 // switchPHP moves a domain to another PHP version.
 func (a *app) switchPHP(ctx context.Context, domain, php string) (err error) {
+	// Checked before the server state
 	if err := phpversions.Validate(php); err != nil {
 		return err
 	}
@@ -503,67 +223,10 @@ func (a *app) switchPHP(ctx context.Context, domain, php string) (err error) {
 	}
 	defer closeStore(r.s, &err)
 
-	current, found, err := r.s.DomainPHPVersion(domain)
-	if err != nil {
-		return err
+	res, err := a.domainService(r).SwitchPHP(ctx, domain, php)
+	if err != nil || !res.Switched {
+		return reported(err)
 	}
-	if !found {
-		// An unknown domain is an error: exit code 1
-		return i18n.Errorf("Domain '%s' is not configured.", domain)
-	}
-	if current == php {
-		a.log.Info(i18n.Tf("Domain '%s' is already using PHP %s.", domain, php))
-		return nil
-	}
-	a.log.Info(i18n.Tf("Switching '%s' from PHP %s to PHP %s...", domain, current, php))
-	if err := resources.New(r.dir, a.log).EnsurePHPVersionConfig(php); err != nil {
-		return err
-	}
-	g := r.generator(a.log)
-	before, err := r.s.ActivePHPVersions()
-	if err != nil {
-		return err
-	}
-	if err := g.MoveToVersion(domain, current, php); err != nil {
-		return err
-	}
-	if _, err := r.s.UpdateDomainPHPVersion(domain, php); err != nil {
-		return err
-	}
-	after, err := r.s.ActivePHPVersions()
-	if err != nil {
-		return err
-	}
-
-	err = func() error {
-		if !slices.Contains(before, php) {
-			if err := a.startVersion(ctx, r, php, after); err != nil {
-				return err
-			}
-		} else {
-			a.restartVersion(ctx, r.d, php)
-		}
-		// The old version lost a site
-		if slices.Contains(after, current) {
-			a.restartVersion(ctx, r.d, current)
-		}
-		if err := a.stopVersions(ctx, r, without(before, after), after); err != nil {
-			return err
-		}
-		if err := r.writeMain(); err != nil {
-			return err
-		}
-		a.restartProxy(ctx, r.d)
-		return nil
-	}()
-	if err != nil {
-		a.log.Error(i18n.Tf("An error occurred: %v", err))
-		_ = g.MoveToVersion(domain, php, current)
-		_, _ = r.s.UpdateDomainPHPVersion(domain, current)
-		a.log.Error(i18n.T("Rolled back version change."))
-		return exitError(1)
-	}
-
 	a.con.Println()
 	a.log.Success(i18n.Tf("Switched '%s' to PHP %s!", domain, php))
 	return nil

@@ -4,25 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
 
-	"github.com/leobsst/frankenphp-cli/internal/core/caddyfile"
-	"github.com/leobsst/frankenphp-cli/internal/core/compose"
-	"github.com/leobsst/frankenphp-cli/internal/core/dns"
 	"github.com/leobsst/frankenphp-cli/internal/core/docker"
+	"github.com/leobsst/frankenphp-cli/internal/core/domains"
 	"github.com/leobsst/frankenphp-cli/internal/core/env"
-	"github.com/leobsst/frankenphp-cli/internal/core/hosts"
-	"github.com/leobsst/frankenphp-cli/internal/core/phpversions"
-	"github.com/leobsst/frankenphp-cli/internal/core/resources"
-	"github.com/leobsst/frankenphp-cli/internal/core/s3"
-	"github.com/leobsst/frankenphp-cli/internal/core/soketi"
-	"github.com/leobsst/frankenphp-cli/internal/core/stack"
+	"github.com/leobsst/frankenphp-cli/internal/core/events"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
 	"github.com/leobsst/frankenphp-cli/internal/core/validate"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
@@ -41,11 +31,6 @@ func rangeArgs(required int, names ...string) cobra.PositionalArgs {
 		return nil
 	}
 }
-
-// errNoProjectPath is raised when a new PHP container needs the projects
-// root and none is known.
-var errNoProjectPath = i18n.NewError("No project path known: set DEFAULT_PROJECT_PATH (frankenmanager configuration set) " +
-	"or restart the server with --path.")
 
 // server is the context of a command run on a started server.
 type server struct {
@@ -82,116 +67,43 @@ func (a *app) openRunning(ctx context.Context, notRunning string) (*server, erro
 	return &server{dir: dir, e: e, d: d, s: s, caddyDir: e.ResolveDir("CADDY_DIR", "./caddy", dir)}, nil
 }
 
-func (r *server) generator(log caddyfile.Logger) *caddyfile.Generator {
-	return caddyfile.New(r.caddyDir, r.dir, log)
-}
-
 // writeMain regenerates the main Caddyfile from the database.
-func (r *server) writeMain() error {
-	domains, err := r.s.Domains()
-	if err != nil {
-		return err
-	}
-	aliases, err := r.s.AliasEntries()
-	if err != nil {
-		return err
-	}
-	proxies, err := r.s.Proxies()
-	if err != nil {
-		return err
-	}
-	statics, err := r.s.StaticHosts()
-	if err != nil {
-		return err
-	}
-	return caddyfile.WriteMain(r.caddyDir, caddyfile.Main{
-		Domains: domains, Aliases: aliases, Proxies: proxies, Statics: statics,
-		DBAdminTarget: r.e.DBAdminTarget(), WebsocketTarget: soketi.Target(r.e),
-		S3Target: s3.ProxyTarget(r.e),
-	})
-}
+func (r *server) writeMain() error { return domains.WriteMain(r.caddyDir, r.e, r.s) }
 
-// startVersion builds the image of a PHP version not running yet, then
-// brings it up with the others (active plus phpVersion).
-func (a *app) startVersion(ctx context.Context, r *server, phpVersion string, active []string) error {
-	customPath, err := stack.ProjectPath(r.e, r.s)
-	if err != nil {
-		return err
-	}
-	if customPath == "" {
-		return errNoProjectPath
-	}
-	if _, err := stack.BuildImage(ctx, r.d, r.e, a.log, customPath, phpVersion, false); err != nil {
-		return err
-	}
-	a.log.Info(i18n.Tf("Starting PHP %s container...", phpVersion))
-	versions := active
-	if !slices.Contains(versions, phpVersion) {
-		versions = append(slices.Clone(active), phpVersion)
-	}
-	return stack.ComposeUp(ctx, r.d, r.e, versions, customPath)
-}
+// events returns the console as the event log of the services.
+func (a *app) events() events.Log { return events.NewLog(a.log) }
 
-// restartVersion restarts the container of a PHP version.
-func (a *app) restartVersion(ctx context.Context, d *docker.Manager, phpVersion string) {
-	name := phpversions.ContainerName(phpVersion)
-	a.log.Info(i18n.Tf("Restarting %s...", name))
-	d.RestartContainer(ctx, name)
+// domainService returns the hosts service of a running server, reporting
+// on the console.
+func (a *app) domainService(r *server) *domains.Service {
+	log := a.events()
+	return &domains.Service{
+		Dir: r.dir, CaddyDir: r.caddyDir, Env: r.e, Store: r.s, Docker: r.d,
+		Hosts: a.deps.Hosts(log),
+		Certs: func() (domains.Certs, error) {
+			m, err := a.ssl(r.e.CertsDir(r.dir))
+			if err != nil {
+				return nil, err
+			}
+			return m, nil
+		},
+		Log: log,
+	}
 }
 
 // restartProxy restarts the reverse proxy, to pick up new routes.
 func (a *app) restartProxy(ctx context.Context, d *docker.Manager) {
-	a.log.Info(i18n.T("Restarting reverse proxy..."))
-	d.RestartContainer(ctx, compose.ReverseProxyContainer)
+	domains.RestartProxy(ctx, d, a.events())
 }
 
-// phpVersion resolves --php (flag, then DEFAULT_PHP_VERSION), validates it
-// and warns when deprecated.
-func (a *app) phpVersion(flag string, e *env.Env) (string, error) {
-	v := flag
-	if v == "" {
-		v = phpversions.ResolveDefault(e.Get("DEFAULT_PHP_VERSION"))
+// reported turns a failure the services already reported (error and
+// cleanup messages) into exit code 1, so that it is not printed twice.
+func reported(err error) error {
+	var r *events.ReportedError
+	if errors.As(err, &r) {
+		return exitError(1)
 	}
-	if err := phpversions.Validate(v); err != nil {
-		return "", err
-	}
-	if w := phpversions.DeprecationWarning(v); w != "" {
-		a.log.Warning(w)
-	}
-	return v, nil
-}
-
-// cleanup undoes the hosts entries of a failed command. Its failure report
-// is the error, then the cleanup messages, then exit code 1: the error is
-// printed only once.
-type cleanup struct {
-	a     *app
-	h     *hosts.Manager
-	added []string
-}
-
-func (c *cleanup) add(ctx context.Context, domain string) error {
-	if _, err := c.h.AddEntry(ctx, "127.0.0.1", domain); err != nil {
-		return err
-	}
-	c.added = append(c.added, domain)
-	return nil
-}
-
-// fail logs err, removes the hosts entries added, runs undo, and returns
-// exit code 1 with the final message, translated ("The host(s) were not
-// added.").
-func (c *cleanup) fail(ctx context.Context, err error, done string, undo func()) error {
-	c.a.log.Error(i18n.Tf("An error occurred: %v", err))
-	c.a.log.Error(i18n.T("Cleaning up..."))
-	for _, domain := range c.added {
-		_, _ = c.h.RemoveEntry(ctx, "127.0.0.1", domain)
-	}
-	if undo != nil {
-		undo()
-	}
-	c.a.log.Error(i18n.Tf("Cleanup complete. %s", done))
-	return exitError(1)
+	return err
 }
 
 // --- add-host ----------------------------------------------------------------
@@ -201,37 +113,6 @@ type staticOptions struct {
 	enabled bool
 	root    string // relative to the projects root, "" for <domain without TLD>
 	spa     bool
-}
-
-// cleanRoot normalizes a valid --root: slashes, no trailing one.
-func cleanRoot(root string) string {
-	return path.Clean(strings.ReplaceAll(root, `\`, "/"))
-}
-
-// checkProjectDir checks that the project directory of a --root, its first
-// segment, exists in the projects root: the deeper directories may not be
-// built yet (dist/).
-func checkProjectDir(customPath, root string) error {
-	first, _, _ := strings.Cut(cleanRoot(root), "/")
-	if first == "." {
-		return nil
-	}
-	dir := filepath.Join(customPath, first)
-	if !isDir(dir) {
-		return &validate.Error{Msg: i18n.Tf("Project directory does not exist: %s (first directory of --root, in the project path %s)",
-			dir, customPath)}
-	}
-	return nil
-}
-
-// projectPath returns the projects root of a running server, an error when
-// none is known.
-func projectPath(r *server) (string, error) {
-	customPath, err := stack.ProjectPath(r.e, r.s)
-	if err == nil && customPath == "" {
-		err = errNoProjectPath
-	}
-	return customPath, err
 }
 
 func newAddHostCmd(a *app) *cobra.Command {
@@ -303,61 +184,9 @@ Examples:
 	return cmd
 }
 
-// takenHosts returns every registered host name: domains, aliases, proxy
-// and static hosts.
-func takenHosts(s *store.Store) ([]string, error) {
-	taken, err := s.DomainNames()
-	if err != nil {
-		return nil, err
-	}
-	aliases, err := s.Aliases()
-	if err != nil {
-		return nil, err
-	}
-	for _, al := range aliases {
-		taken = append(taken, al.Alias)
-	}
-	proxies, err := s.Proxies()
-	if err != nil {
-		return nil, err
-	}
-	for _, p := range proxies {
-		taken = append(taken, p.Domain)
-	}
-	statics, err := s.StaticHostNames()
-	if err != nil {
-		return nil, err
-	}
-	return append(taken, statics...), nil
-}
-
-// newHosts validates domains and returns those not registered yet,
-// without duplicates.
-func (a *app) newHosts(s *store.Store, domains []string) ([]string, error) {
-	taken, err := takenHosts(s)
-	if err != nil {
-		return nil, err
-	}
-	var added []string
-	for _, domain := range domains {
-		if err := validate.Domain(domain); err != nil {
-			return nil, err
-		}
-		switch {
-		case slices.Contains(taken, domain):
-			a.log.Info(i18n.Tf("Domain '%s' is already configured, skipping.", domain))
-		case slices.Contains(added, domain):
-			a.log.Info(i18n.Tf("Domain '%s' is duplicated in input, skipping.", domain))
-		default:
-			added = append(added, domain)
-		}
-	}
-	return added, nil
-}
-
 // addHost adds PHP domains, served from root when set, or proxy hosts
 // forwarding to target.
-func (a *app) addHost(ctx context.Context, domains []string, forceSSL bool, php, target string, proxy bool,
+func (a *app) addHost(ctx context.Context, names []string, forceSSL bool, php, target string, proxy bool,
 	root string) (err error) {
 	r, err := a.openRunning(ctx, i18n.T("The server is not running. Use 'start' command instead."))
 	if err != nil {
@@ -365,255 +194,58 @@ func (a *app) addHost(ctx context.Context, domains []string, forceSSL bool, php,
 	}
 	defer closeStore(r.s, &err)
 
-	added, err := a.newHosts(r.s, domains)
-	if err != nil {
-		return err
-	}
-	if len(added) == 0 {
-		a.log.Info(i18n.T("No new domains to add."))
-		return nil
-	}
-
-	certs, err := a.ssl(r.e.CertsDir(r.dir))
-	if err != nil {
-		return err
-	}
-	c := &cleanup{a: a, h: a.deps.Hosts(a.log)}
+	svc := a.domainService(r)
 	if proxy {
-		return a.addProxyHosts(ctx, r, c, certs.GenerateAll, added, target, forceSSL)
-	}
-
-	php, err = a.phpVersion(php, r.e)
-	if err != nil {
-		return err
-	}
-	if root != "" {
-		customPath, err := projectPath(r)
-		if err != nil {
-			return err
+		res, err := svc.AddProxy(ctx, names, target, forceSSL)
+		if err != nil || len(res.Domains) == 0 {
+			return reported(err)
 		}
-		if err := checkProjectDir(customPath, root); err != nil {
-			return err
+		a.con.Println()
+		a.log.Success(i18n.T("New proxy host(s) added successfully!"))
+		a.log.Info(i18n.T("Added domains:"))
+		for _, domain := range res.Domains {
+			a.log.Info(fmt.Sprintf("  - https://%s -> %s", domain, res.Target))
 		}
-		root = cleanRoot(root)
-	}
-	active, err := r.s.ActivePHPVersions()
-	if err != nil {
-		return err
-	}
-	if err := resources.New(r.dir, a.log).EnsurePHPVersionConfig(php); err != nil {
-		return err
-	}
-
-	err = func() error {
-		a.log.Info(i18n.Tf("Adding %d new domain(s) with PHP %s...", len(added), php))
-		a.log.Info(i18n.T("Generating SSL certificates..."))
-		if err := certs.GenerateAll(ctx, added, forceSSL, r.e.IsProduction()); err != nil {
-			return err
-		}
-		a.log.Info(i18n.T("Adding hosts entries..."))
-		for _, domain := range added {
-			if err := c.add(ctx, domain); err != nil {
-				return err
-			}
-		}
-		a.log.Info(i18n.T("Generating Caddyfiles..."))
-		if err := r.generator(a.log).GenerateForVersionRoot(added, php, root); err != nil {
-			return err
-		}
-		if err := r.s.AddDomains(added, php); err != nil {
-			return err
-		}
-		if err := r.writeMain(); err != nil {
-			return err
-		}
-		if err := dns.Sync(r.dir, r.e, r.s); err != nil {
-			return err
-		}
-		if !slices.Contains(active, php) {
-			if err := a.startVersion(ctx, r, php, active); err != nil {
-				return err
-			}
-		} else {
-			a.restartVersion(ctx, r.d, php)
-		}
-		a.restartProxy(ctx, r.d)
 		return nil
-	}()
-	if err != nil {
-		// The domains are removed from the database too
-		return c.fail(ctx, err, i18n.T("The host(s) were not added."), func() { _ = r.s.RemoveDomains(added) })
 	}
 
+	res, err := svc.AddPHP(ctx, names, php, root, forceSSL)
+	if err != nil || len(res.Domains) == 0 {
+		return reported(err)
+	}
 	a.con.Println()
 	a.log.Success(i18n.T("New host(s) added successfully!"))
 	a.log.Info(i18n.T("Added domains:"))
-	for _, domain := range added {
-		a.log.Info(fmt.Sprintf("  - https://%s (PHP %s)", domain, php))
+	for _, domain := range res.Domains {
+		a.log.Info(fmt.Sprintf("  - https://%s (PHP %s)", domain, res.PHP))
 	}
 	return nil
 }
 
-// addProxyHosts adds domains forwarding to a raw upstream: certificate,
-// hosts entry and main Caddyfile only, no PHP container.
-func (a *app) addProxyHosts(ctx context.Context, r *server, c *cleanup,
-	generate func(context.Context, []string, bool, bool) error, added []string, target string, forceSSL bool) error {
-	if err := validate.ProxyTarget(target); err != nil {
-		return err
-	}
-	err := func() error {
-		a.log.Info(i18n.Tf("Adding %d new proxy host(s) -> %s...", len(added), target))
-		a.log.Info(i18n.T("Generating SSL certificates..."))
-		if err := generate(ctx, added, forceSSL, r.e.IsProduction()); err != nil {
-			return err
-		}
-		a.log.Info(i18n.T("Adding hosts entries..."))
-		for _, domain := range added {
-			if err := c.add(ctx, domain); err != nil {
-				return err
-			}
-		}
-		if err := r.s.AddProxies(added, target); err != nil {
-			return err
-		}
-		if err := r.writeMain(); err != nil {
-			return err
-		}
-		if err := dns.Sync(r.dir, r.e, r.s); err != nil {
-			return err
-		}
-		a.restartProxy(ctx, r.d)
-		return nil
-	}()
-	if err != nil {
-		return c.fail(ctx, err, i18n.T("The proxy host(s) were not added."), func() { _ = r.s.RemoveProxies(added) })
-	}
-
-	a.con.Println()
-	a.log.Success(i18n.T("New proxy host(s) added successfully!"))
-	a.log.Info(i18n.T("Added domains:"))
-	for _, domain := range added {
-		a.log.Info(fmt.Sprintf("  - https://%s -> %s", domain, target))
-	}
-	return nil
-}
-
-// addStaticHosts adds domains whose files the reverse proxy serves:
-// certificate, hosts entry, site file and main Caddyfile, no PHP container.
-func (a *app) addStaticHosts(ctx context.Context, domains []string, o staticOptions, forceSSL bool) (err error) {
+// addStaticHosts adds domains whose files the reverse proxy serves.
+func (a *app) addStaticHosts(ctx context.Context, names []string, o staticOptions, forceSSL bool) (err error) {
 	r, err := a.openRunning(ctx, i18n.T("The server is not running. Use 'start' command instead."))
 	if err != nil {
 		return err
 	}
 	defer closeStore(r.s, &err)
 
-	added, err := a.newHosts(r.s, domains)
-	if err != nil {
-		return err
+	res, err := a.domainService(r).AddStatic(ctx, names, o.root, o.spa, forceSSL)
+	if err != nil || len(res.Hosts) == 0 {
+		return reported(err)
 	}
-	if len(added) == 0 {
-		a.log.Info(i18n.T("No new domains to add."))
-		return nil
-	}
-	// The reverse proxy mounts the projects root to serve the files
-	customPath, err := projectPath(r)
-	if err != nil {
-		return err
-	}
-	if o.root != "" {
-		if err := checkProjectDir(customPath, o.root); err != nil {
-			return err
-		}
-	}
-	hosts := make([]store.StaticHost, 0, len(added))
-	for _, domain := range added {
-		root := o.root
-		if root == "" {
-			root = caddyfile.SimpleDomain(domain)
-		}
-		hosts = append(hosts, store.StaticHost{Domain: domain, Root: cleanRoot(root), SPA: o.spa})
-	}
-	warned := map[string]bool{}
-	for _, h := range hosts {
-		if dir := filepath.Join(customPath, filepath.FromSlash(h.Root)); !warned[dir] && !isDir(dir) {
-			warned[dir] = true
-			a.log.Warning(i18n.Tf("Directory %s does not exist yet: build or create it before browsing.", dir))
-		}
-	}
-
-	certs, err := a.ssl(r.e.CertsDir(r.dir))
-	if err != nil {
-		return err
-	}
-	active, err := r.s.ActivePHPVersions()
-	if err != nil {
-		return err
-	}
-	// Mounted by the reverse proxy since an earlier static host
-	mounted := caddyfile.HasStaticSites(r.caddyDir)
-	c := &cleanup{a: a, h: a.deps.Hosts(a.log)}
-	g := r.generator(a.log)
-	err = func() error {
-		a.log.Info(i18n.Tf("Adding %d new static host(s)...", len(added)))
-		a.log.Info(i18n.T("Generating SSL certificates..."))
-		if err := certs.GenerateAll(ctx, added, forceSSL, r.e.IsProduction()); err != nil {
-			return err
-		}
-		a.log.Info(i18n.T("Adding hosts entries..."))
-		for _, domain := range added {
-			if err := c.add(ctx, domain); err != nil {
-				return err
-			}
-		}
-		a.log.Info(i18n.T("Generating Caddyfiles..."))
-		if err := g.GenerateStatic(hosts); err != nil {
-			return err
-		}
-		if err := r.s.AddStaticHosts(hosts); err != nil {
-			return err
-		}
-		if err := r.writeMain(); err != nil {
-			return err
-		}
-		if err := dns.Sync(r.dir, r.e, r.s); err != nil {
-			return err
-		}
-		if !mounted {
-			// The reverse proxy is recreated with the static mounts
-			a.log.Info(i18n.T("Mounting the static sites in the reverse proxy..."))
-			if err := stack.ComposeUp(ctx, r.d, r.e, active, customPath); err != nil {
-				return err
-			}
-		}
-		a.restartProxy(ctx, r.d)
-		return nil
-	}()
-	if err != nil {
-		return c.fail(ctx, err, i18n.T("The static host(s) were not added."), func() {
-			_ = r.s.RemoveStaticHosts(added)
-			_ = r.generator(quietLogger{}).ArchiveStatic(added)
-			_ = r.writeMain()
-		})
-	}
-
 	a.con.Println()
 	a.log.Success(i18n.T("New static host(s) added successfully!"))
 	a.log.Info(i18n.T("Added domains:"))
-	for _, h := range hosts {
+	for _, h := range res.Hosts {
 		spa := ""
 		if h.SPA {
 			spa = ", SPA"
 		}
-		a.log.Info(fmt.Sprintf("  - https://%s -> %s%s", h.Domain, filepath.Join(customPath, filepath.FromSlash(h.Root)), spa))
+		a.log.Info(fmt.Sprintf("  - https://%s -> %s%s", h.Domain, filepath.Join(res.ProjectPath, filepath.FromSlash(h.Root)), spa))
 	}
-	a.log.Info(i18n.Tf("\nSite files (editable): %s", g.StaticDir()))
+	a.log.Info(i18n.Tf("\nSite files (editable): %s", res.SiteDir))
 	return nil
-}
-
-// isDir reports whether p is an existing directory.
-func isDir(p string) bool {
-	info, err := os.Stat(p)
-	return err == nil && info.IsDir()
 }
 
 // --- add-alias ---------------------------------------------------------------
@@ -653,109 +285,15 @@ func (a *app) addAlias(ctx context.Context, target string, aliases []string, for
 	}
 	defer closeStore(r.s, &err)
 
-	domains, err := r.s.DomainNames()
-	if err != nil {
-		return err
+	res, err := a.domainService(r).AddAlias(ctx, target, aliases, forceSSL)
+	if err != nil || len(res.Aliases) == 0 {
+		return reported(err)
 	}
-	proxies, err := r.s.Proxies()
-	if err != nil {
-		return err
-	}
-	isProxy := func(d string) bool {
-		return slices.ContainsFunc(proxies, func(p store.Proxy) bool { return p.Domain == d })
-	}
-	statics, err := r.s.StaticHostNames()
-	if err != nil {
-		return err
-	}
-	if slices.Contains(statics, target) {
-		return &validate.Error{Msg: i18n.Tf("'%s' is a static host: it cannot have alternate hosts. "+
-			"Add another static host with the same --root instead.", target)}
-	}
-	// serves is what the aliases forward to, for the summary
-	var serves string
-	if slices.Contains(domains, target) {
-		php, _, err := r.s.DomainPHPVersion(target)
-		if err != nil {
-			return err
-		}
-		serves = "PHP " + php
-	} else if upstream, ok, err := r.s.ProxyTarget(target); err != nil {
-		return err
-	} else if ok {
-		serves = "proxy " + upstream
-	} else {
-		return &validate.Error{Msg: i18n.Tf("Domain '%s' is not configured. Add it first with 'add-host'.", target)}
-	}
-	existing, err := r.s.Aliases()
-	if err != nil {
-		return err
-	}
-	isAlias := func(d string) bool {
-		return slices.ContainsFunc(existing, func(al store.Alias) bool { return al.Alias == d })
-	}
-
-	var added []string
-	for _, domain := range aliases {
-		if err := validate.Domain(domain); err != nil {
-			return err
-		}
-		switch {
-		case domain == target:
-			a.log.Info(i18n.Tf("'%s' is the target domain itself, skipping.", domain))
-		case slices.Contains(domains, domain), isProxy(domain), slices.Contains(statics, domain):
-			a.log.Info(i18n.Tf("Domain '%s' is already a registered host, skipping.", domain))
-		case isAlias(domain):
-			a.log.Info(i18n.Tf("'%s' is already configured as an alias, skipping.", domain))
-		case slices.Contains(added, domain):
-			a.log.Info(i18n.Tf("'%s' is duplicated in input, skipping.", domain))
-		default:
-			added = append(added, domain)
-		}
-	}
-	if len(added) == 0 {
-		a.log.Info(i18n.T("No new alternate hosts to add."))
-		return nil
-	}
-
-	certs, err := a.ssl(r.e.CertsDir(r.dir))
-	if err != nil {
-		return err
-	}
-	c := &cleanup{a: a, h: a.deps.Hosts(a.log)}
-	err = func() error {
-		a.log.Info(i18n.Tf("Adding %d alternate host(s) for '%s'...", len(added), target))
-		a.log.Info(i18n.T("Generating SSL certificates..."))
-		if err := certs.GenerateAll(ctx, added, forceSSL, r.e.IsProduction()); err != nil {
-			return err
-		}
-		a.log.Info(i18n.T("Adding hosts entries..."))
-		for _, domain := range added {
-			if err := c.add(ctx, domain); err != nil {
-				return err
-			}
-		}
-		if err := r.s.AddAliases(added, target); err != nil {
-			return err
-		}
-		if err := r.writeMain(); err != nil {
-			return err
-		}
-		if err := dns.Sync(r.dir, r.e, r.s); err != nil {
-			return err
-		}
-		a.restartProxy(ctx, r.d)
-		return nil
-	}()
-	if err != nil {
-		return c.fail(ctx, err, i18n.T("The alternate host(s) were not added."), func() { _ = r.s.RemoveAliases(added) })
-	}
-
 	a.con.Println()
 	a.log.Success(i18n.T("Alternate host(s) added successfully!"))
 	a.log.Info(i18n.T("Added aliases:"))
-	for _, domain := range added {
-		a.log.Info(fmt.Sprintf("  - https://%s -> %s (%s)", domain, target, serves))
+	for _, domain := range res.Aliases {
+		a.log.Info(fmt.Sprintf("  - https://%s -> %s (%s)", domain, res.Target, res.Serves))
 	}
 	return nil
 }
