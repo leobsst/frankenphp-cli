@@ -74,6 +74,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Stops a running server before installing and starts it again on the new version (as the real user under `sudo`); a stopped server stays stopped, a failed install restarts the previous version
   - Linux: grants port 53 again to the new binary, or tells to rerun `sudo frankenmanager setup`
 - `trust-ca` - Share the local mkcert root CA over the LAN (off by default)
+- `daemon start|stop|status|run` - The daemon behind the dashboard: one HTTP/JSON API (`api/openapi.yaml`) on a Unix socket for the CLI and on `127.0.0.1:DASHBOARD_PORT` for the dashboard (token of `daemon.token`, `Host` and `Origin` checked against DNS rebinding)
+  - Actions run one at a time as operations, followed on an event stream (Server-Sent Events)
+  - Serves the LAN DNS server and the root CA sharing in its own process
+  - Run at login by the OS service manager (LaunchAgent `dev.frankenmanager.daemon`, systemd user unit `frankenmanager-daemon.service`) unless `DAEMON_AUTOSTART=false`; `start` installs it, `daemon stop` removes it; a daemon of another version is replaced
   - `on`/`off`/`status` actions, optional `--port` (default `9080`)
   - Serves only the public root certificate, never its private key
   - Lets other devices on the network trust locally-issued `.test` domains without an MDM/GPO push
@@ -224,7 +228,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - SQLite for state management (pure Go driver)
 
 ### Upgrading from 0.1.x
-- `sudo frankenmanager update` from 0.1.x installs 1.0.0 by itself, at the same place. The data directory (`~/.frankenmanager`), privilege setup, hosts entries, certificates, PHP images and the LAN DNS watcher service are picked up as they are: nothing to redo.
+- `sudo frankenmanager update` from 0.1.x installs 1.0.0 by itself, at the same place. The data directory (`~/.frankenmanager`), privilege setup, hosts entries, certificates and PHP images are picked up as they are: nothing to redo. The LAN DNS watcher service gives way to the daemon on the first `start`.
 - To go back, reinstall 0.1.63 (`VERSION=0.1.63 install.sh`): the data directory stays compatible both ways.
 - The `.env` file of the data directory is imported into `db.sqlite` by the first command (values left empty or equal to the default are skipped), then renamed `.env.migrated` as a backup; unknown keys and invalid values (e.g. `APP_ENV=staging`) are listed and left out, their default applies. Change the settings with `frankenmanager configuration set` from then on.
 - What changes:

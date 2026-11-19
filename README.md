@@ -164,6 +164,7 @@ frankenmanager setup --status
 | `frankenmanager s3 garage <args>` | Run Garage's own CLI in the S3 container |
 | `frankenmanager completion bash\|zsh\|fish\|powershell` | Generate the shell completion script |
 | `frankenmanager trust-ca on \| off \| status [--port <port>]` | Share the local mkcert root CA over the LAN so other devices can trust your `.test` domains (off by default) |
+| `frankenmanager daemon start\|stop\|status\|run` | Start, stop or check the daemon: dashboard API, LAN DNS server, root CA sharing (see [Daemon](#daemon)) |
 | `frankenmanager --help` | Show help for all commands |
 
 ## Usage
@@ -428,7 +429,7 @@ frankenmanager restart --build
 | `--database` | `--db` | franken_mariadb | MariaDB database server |
 | `--cache` | - | franken_redis | Redis cache server (when `REDIS_ENABLED=true`) |
 | `--phpmyadmin` | `--pma` | franken_phpmyadmin | phpMyAdmin database UI |
-| `--dns` | - | (background process) | LAN DNS server (when `DNS_SERVER=true`) |
+| `--dns` | - | (daemon) | LAN DNS server (when `DNS_SERVER=true`) |
 | `--soketi` | `--ws` | franken_soketi | Soketi WebSocket server (when `SOKETI_ENABLED=true`) |
 | `--s3` | - | franken_s3, franken_s3_gateway | Garage S3 server and its ACL gateway (when `S3_ENABLED=true`) |
 
@@ -673,7 +674,7 @@ frankenmanager trust-ca status
 frankenmanager trust-ca off
 ```
 
-`trust-ca on` prints a URL such as `http://192.168.1.42:9080/` - open it in a browser on the other device to download `rootCA.pem`, then install it as a trusted root certificate (Keychain Access on macOS, Certificate Manager on Windows; for iOS and Android, see [iOS and Android devices](#ios-and-android-devices)). Turn sharing back off once the other device has installed it.
+The [daemon](#daemon) serves it: it stops when the daemon does. `trust-ca on` prints a URL such as `http://192.168.1.42:9080/` - open it in a browser on the other device to download `rootCA.pem`, then install it as a trusted root certificate (Keychain Access on macOS, Certificate Manager on Windows; for iOS and Android, see [iOS and Android devices](#ios-and-android-devices)). Turn sharing back off once the other device has installed it.
 
 ### WebSocket server (Soketi)
 
@@ -835,9 +836,9 @@ Domains added or removed with `add-host`, `add-alias`, `remove-host` or `restore
 | `DNS_UPSTREAM` | `1.1.1.1 8.8.8.8` | Space-separated resolvers for every other query. Use your router's or company's DNS if public resolvers are blocked |
 
 **Notes:**
-- The server is not a container: it runs in a FrankenManager background process on your machine, so that it sees the real address of each device (behind Docker's VM on macOS and Windows, a container only sees the VM). `status` shows whether it runs ("Server") and how many devices are connected; `frankenmanager restart --dns` restarts it. Releases before it ran a `franken_dns` container: `start`, `restart --dns` and `service enable dns` remove it so that it frees port 53.
-- The domains follow your machine's LAN IP: the same process checks it every few seconds and, when it changes (Wi-Fi to Ethernet, new DHCP lease...), updates the records, which the server reloads on its own. Nothing to restart. `status` shows "Follows LAN IP changes"; it is off when `DNS_IP` is set, since the IP is then fixed. Changing a `DNS_*` setting is picked up within a few seconds too.
-- That process doesn't depend on your terminal: on macOS it runs as a LaunchAgent (`~/Library/LaunchAgents/dev.frankenmanager.dns-watcher.plist`), on Linux as a systemd user unit (`frankenmanager-dns-watcher.service`). It comes back on its own after a reboot or a new login, like the containers, and is relaunched if it crashes; `stop` removes it. macOS may notify you that a background item was added: it is listed as "FrankenManager" in System Settings > General > Login Items, through the `FrankenManager.app` shipped in the install directory (`/usr/local/lib/frankenmanager/`). On Windows, or on Linux without a systemd user instance (e.g. WSL), it is a plain background process: run `frankenmanager restart --dns` after a reboot. Its log is `.dns_watcher.log` in the FrankenManager directory.
+- The server is not a container: it runs in the FrankenManager [daemon](#daemon) on your machine, so that it sees the real address of each device (behind Docker's VM on macOS and Windows, a container only sees the VM). `status` shows whether it runs ("Server") and how many devices are connected; `frankenmanager restart --dns` restarts it. Releases before it ran a `franken_dns` container: `start`, `restart --dns` and `service enable dns` remove it so that it frees port 53.
+- The domains follow your machine's LAN IP: the daemon checks it every few seconds and, when it changes (Wi-Fi to Ethernet, new DHCP lease...), updates the records, which the server reloads on its own. Nothing to restart. `status` shows "Follows LAN IP changes"; it is off when `DNS_IP` is set, since the IP is then fixed. Changing a `DNS_*` setting is picked up within a few seconds too.
+- It doesn't depend on your terminal: the daemon runs at login and is relaunched if it crashes (see [Daemon](#daemon)); `stop` stops the server, the next `start` serves again. When the server fails (port refused...), the daemon tries again after 5 seconds, then up to every minute, and logs why in `daemon.log` in the FrankenManager directory. Releases before ran it in a process of its own (`dev.frankenmanager.dns-watcher` LaunchAgent, `frankenmanager-dns-watcher.service` systemd unit): the daemon removes it.
 - On Linux, port 53 is reserved to root: `sudo frankenmanager setup` lets the FrankenManager binary use it (`setcap cap_net_bind_service`, needs `libcap2-bin` on Debian/Ubuntu or `libcap` on Fedora/Arch); `update` grants it again to the new binary. Without it, the server can't start and its log tells you so. macOS and Windows need nothing.
 - On macOS, if the firewall is on, macOS may ask once whether to allow incoming connections for `frankenmanager`: allow them, or the other devices can't reach the server.
 - The other devices still reach the DNS server through the IP you gave them: if your machine's IP changes, they lose it too. Reserve a fixed IP for your machine in your router's DHCP settings (one per network interface, e.g. Wi-Fi and Ethernet) to avoid reconfiguring them.
@@ -944,6 +945,30 @@ adb push "$(mkcert -CAROOT)/rootCA.pem" /sdcard/Download/
 ```
 
 The same app limitation applies: use the network security config above for your own app.
+
+### Daemon
+
+The daemon is the FrankenManager process that keeps running in the background. It serves the API of the dashboard, the [LAN DNS server](#lan-dns-server) and the [root CA sharing](#share-the-root-ca-over-your-lan), and runs the actions that change the shared state (database, Caddyfiles, hosts file, Docker) one at a time.
+
+```bash
+frankenmanager daemon start    # Start it in the background (or replace one of another version)
+frankenmanager daemon status   # Whether it runs, and its version
+frankenmanager daemon stop     # Stop it, and remove it from the login items
+frankenmanager daemon run      # Run it in the foreground (what the service manager runs)
+```
+
+`start` starts it too, and the commands that need it (LAN DNS server, `trust-ca`) start it when it doesn't run. A daemon of another version, e.g. after `update`, is replaced on its own.
+
+- With `DAEMON_AUTOSTART=true` (the default), it is handed to the OS service manager, which runs it at login and relaunches it if it crashes: on macOS a LaunchAgent (`~/Library/LaunchAgents/dev.frankenmanager.daemon.plist`), listed as "FrankenManager" in System Settings > General > Login Items through the `FrankenManager.app` of the install directory; on Linux a systemd user unit (`frankenmanager-daemon.service`). On Windows, or on Linux without a systemd user instance (e.g. WSL), and with `DAEMON_AUTOSTART=false`, it is a plain background process, started again by the next command that needs it.
+- `stop` stops the containers and the LAN DNS server, not the daemon: the dashboard can start the server again.
+- Its log is `daemon.log` in the FrankenManager directory.
+- Run at login, it has no terminal to ask for your password: the actions that edit the hosts file (adding a host from the dashboard...) need the passwordless setup of `sudo frankenmanager setup`.
+
+**API.** The daemon serves one HTTP/JSON API, described in [`api/openapi.yaml`](api/openapi.yaml):
+- on the Unix socket `daemon.sock` of the FrankenManager directory, readable by your user only, for the CLI;
+- on `http://127.0.0.1:9081` (`DASHBOARD_PORT`), for the dashboard: every request needs the token of `daemon.token` (`Authorization: Bearer <token>`), and requests whose `Host` or `Origin` is not this local address are refused (DNS rebinding). It is not reachable from the network.
+
+The actions answer at once with an operation, run in turn; their steps and result stream on `/api/events` (Server-Sent Events).
 
 ### Show version
 
@@ -1184,6 +1209,8 @@ frankenmanager completion powershell >> $PROFILE
 |---------|---------|-------------|
 | `CLI_ALIAS` | `fkm` | Short alias of the command, see [CLI alias](#cli-alias) (empty: none) |
 | `CLI_LANGUAGE` | `auto` | Language of the messages: `auto`, `en` or `fr`, see [Language](#language) |
+| `DASHBOARD_PORT` | `9081` | Port of the dashboard API, on 127.0.0.1, see [Daemon](#daemon) |
+| `DAEMON_AUTOSTART` | `true` | Run the daemon at login through the OS service manager; `false`: started on demand only |
 | `APP_ENV` | `dev` | `dev` for local development (always the case on a workstation), `prod`/`production` only to run FrankenManager on a public/cloud server, see [Production Mode](#production-mode) |
 | `DEFAULT_PHP_VERSION` | `8.3` | Default PHP version for new domains (`8.2` (deprecated), `8.3`, `8.4`, `8.5`) |
 | `UID` | (current user) | System user ID for file ownership |
@@ -1333,14 +1360,19 @@ frankenphp-cli/
 │   ├── release/                Builds the release archives
 │   └── s3gateway/              S3 ACL gateway in front of Garage (built in its own image)
 ├── internal/
-│   ├── cli/                    Commands (cobra)
-│   ├── core/                   Everything the commands rely on
+│   ├── cli/                    Commands (cobra), on top of the core services
+│   ├── client/                 Client of the daemon (Unix socket)
+│   ├── core/                   The services: everything the commands and the daemon rely on
 │   │   ├── caddyfile/          Caddyfile generation
 │   │   ├── caserver/           Root CA sharing (trust-ca)
 │   │   ├── compose/            docker-compose-generated.yml
 │   │   ├── dns/                LAN DNS server (CoreDNS) config
 │   │   ├── dnsclients/         Devices of the LAN DNS server
-│   │   ├── dnswatcher/         LAN DNS server process (LaunchAgent, systemd unit)
+│   │   ├── background/         Background services (LaunchAgent, systemd unit, detached)
+│   │   ├── buckets/            S3 buckets and keys
+│   │   ├── domains/            Hosts: PHP, proxy, static, aliases
+│   │   ├── dnswatcher/         LAN DNS server (in the daemon)
+│   │   ├── events/             Events reported by the services (steps, messages)
 │   │   ├── embeddns/           Embedded CoreDNS
 │   │   ├── docker/             docker CLI wrapper, image builds
 │   │   ├── alias/              CLI alias (fkm) next to the command
@@ -1352,17 +1384,20 @@ frankenphp-cli/
 │   │   ├── privilege/          Passwordless hosts helper (sudoers)
 │   │   ├── resources/          Data directory and embedded resources
 │   │   ├── s3/                 Garage S3 server (config, admin API, objects)
+│   │   ├── settings/           Settings list and changes
 │   │   ├── soketi/             Soketi WebSocket server
 │   │   ├── ssl/                Site certificates
-│   │   ├── stack/              Compose helpers shared by the commands
+│   │   ├── stack/              Stack: start, stop, restart, optional services
 │   │   ├── store/              SQLite state (db.sqlite)
 │   │   ├── updater/            Self-update
 │   │   └── validate/           Input validation
+│   ├── daemon/                 Daemon: HTTP API, operation queue, event stream
 │   ├── i18n/                   Translations: language selection, locales/<lang>/*.json
 │   ├── platform/               OS-specific code (paths, elevation, processes)
 │   ├── release/                Release archives and checksums
 │   ├── sigv4/                  AWS Signature Version 4 (S3 client and gateway)
 │   └── ui/                     Log lines and tables
+├── api/openapi.yaml            Contract of the daemon API
 ├── assets.go                   Embeds the resources below into the executable
 ├── Dockerfile                  Custom FrankenPHP image
 ├── caddy/                      Caddy configuration
@@ -1493,7 +1528,7 @@ This is expected: mkcert's root CA is only trusted on the machine that installed
 
 ### Another device can't resolve the domains
 
-The domains are only in your machine's `/etc/hosts`. Turn on the [LAN DNS server](#lan-dns-server) and set it as that device's DNS server (see [iOS and Android devices](#ios-and-android-devices) for phones and emulators). If it still fails, check that `frankenmanager status` shows the LAN DNS server running (otherwise read `.dns_watcher.log`), that `frankenmanager dns-clients` lists the device (if not, its queries don't reach your machine) and that your firewall allows incoming traffic on port 53 (UDP and TCP). If your machine's IP changed (new network, Wi-Fi to Ethernet), the records follow it on their own, but update the DNS server set on the device. If `status` shows "Server: not running", run `frankenmanager restart --dns`.
+The domains are only in your machine's `/etc/hosts`. Turn on the [LAN DNS server](#lan-dns-server) and set it as that device's DNS server (see [iOS and Android devices](#ios-and-android-devices) for phones and emulators). If it still fails, check that `frankenmanager status` shows the LAN DNS server running (otherwise read `daemon.log`), that `frankenmanager dns-clients` lists the device (if not, its queries don't reach your machine) and that your firewall allows incoming traffic on port 53 (UDP and TCP). If your machine's IP changed (new network, Wi-Fi to Ethernet), the records follow it on their own, but update the DNS server set on the device. If `status` shows "Server: not running", run `frankenmanager restart --dns`.
 
 ### mkcert not found
 
