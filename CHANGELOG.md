@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Automatic Caddyfile generation and container restart
   - Optional raw upstream target (e.g. `add-host domain.test 127.0.0.1:8006`) registers the domain(s) as proxy host(s) that reverse-proxy straight to that address instead of getting a PHP container of their own — `--php` is ignored in this mode
   - Dedicated SSL certificate and `/etc/hosts` entry per proxy host
+  - Proxy hosts forward the WebSocket connections; `--no-websocket` refuses them (403)
   - Shown in their own table in `frankenmanager list`
   - `--root` sets the directory served, relative to the project path (default `<domain without TLD>/public`); its first directory (the project) must exist
   - `--static` registers the domain(s) as static hosts (HTML site, built front-end app) served by the reverse proxy itself, with no PHP container: `--root` sets the directory served, relative to the project path (default: the domain without its TLD), and `--spa` falls back to `/index.html` for client-side routing
@@ -45,13 +46,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Multiple alias support and optional `--force-ssl` flag
 - `remove-host` - Remove domains and archive their Caddyfiles
   - Multiple domain support
-  - Caddyfiles moved to archive directory (not deleted)
+  - Caddyfiles moved to archive directory (not deleted): `archive/php-<version>/` for a PHP domain, `archive/static/` for a static host
   - Automatic `/etc/hosts` cleanup
   - Also removes alternate hosts (aliases) that target a removed domain or proxy host
   - Can remove an alternate host (alias) directly by name, leaving its target untouched
   - Can remove a proxy host directly by name
-- `restore-host` - Restore archived domains
-  - `--list` option to view all archived hosts
+- `restore-host` - Restore archived domains and static hosts
+  - `--php <version>` restores PHP domains with that version, `--static` restores static hosts with the root and fallback of their Caddyfile: one of them is required
+  - `--list` option to view all archived hosts, with their type and the PHP version they were served with
+  - The Caddyfiles archived at the root of `archive/` by earlier releases are left alone, neither listed nor restored
   - Multiple domain support
   - Optional `--force-ssl` flag
 - `reset` - Reset configuration and/or Caddyfiles to default state
@@ -79,9 +82,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Actions run one at a time as operations, followed on an event stream (Server-Sent Events)
   - Serves the LAN DNS server and the root CA sharing in its own process
   - The commands that change the server run through it and print its progress; without the passwordless setup, they run in their own process, where `sudo` can ask for the password
-  - For the dashboard: containers of the stack with their state, start/stop/restart of one container, CPU and memory usage, a live log stream of the containers, and the renewal of one host's certificate
+  - For the dashboard: containers of the stack with their state (also pushed on the event stream when Docker reports a change), start/stop/restart of one container, CPU and memory usage, a live log stream of the containers, and the renewal of one host's certificate; stats, logs and container states come from the Docker Engine API (no `docker` process per call), the `docker` command staying the fallback
+  - Site Caddyfiles: read, check with the Caddy of the container serving them (`adapt`), save, back to the template
+  - Redis cache: stats, keys (SCAN), delete keys, flush, straight on its port
+  - Databases and users of MariaDB, MySQL and PostgreSQL: list, create, delete (the passwords and queries never on a command line)
+  - S3 objects: list one folder deep, upload, download, public or private, public URL or temporary presigned link
+  - Proxy hosts: allow or refuse the WebSocket connections
+  - The API is versioned under `/api/v1` (`/api/health` and `/api/daemon/stop` stay unversioned)
+  - Remote access (`DASHBOARD_ACCESS=lan` or `internet`): HTTPS on `DASHBOARD_REMOTE_PORT`, with a mkcert certificate or `DASHBOARD_TLS_CERT`/`DASHBOARD_TLS_KEY`; requires `DASHBOARD_PASSWORD` (stored hashed, set with `daemon password`), optionally restricted to `DASHBOARD_ALLOWED_IPS` (IPv4, IPv6, CIDR); revocable sessions per device, a connection log, the destructive actions confirmed by the password again, an address locked after five wrong passwords; `DASHBOARD_LOCAL_AUTH=true` requires the password on the host too
   - Runs with the PATH of the command that installs it, plus the usual tool directories (Homebrew, `/usr/local/bin`): the service manager's own lacks `mkcert` and `docker`
-  - Run at login by the OS service manager (LaunchAgent `dev.frankenmanager.daemon`, systemd user unit `frankenmanager-daemon.service`) unless `DAEMON_AUTOSTART=false`; `start` installs it, `daemon stop` removes it; a daemon of another version is replaced
+  - Run at login by the OS service manager (LaunchAgent `dev.frankenmanager.daemon`, systemd user unit `frankenmanager-daemon.service`, the `HKCU\...\Run` key on Windows) unless `DAEMON_AUTOSTART=false`; `start` installs it, `daemon stop` removes it; a daemon of another version is replaced
   - `on`/`off`/`status` actions, optional `--port` (default `9080`)
   - Serves only the public root certificate, never its private key
   - Lets other devices on the network trust locally-issued `.test` domains without an MDM/GPO push
@@ -185,7 +195,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Three-tier directory structure:
   - `php-<version>/` - Site configurations of the domains served by that PHP version
   - `static/` - Site configurations of the static hosts, served by the reverse proxy
-  - `archive/` - Archived configurations from removed hosts (`archive/static/` for static hosts)
+  - `archive/` - Archived configurations from removed hosts: `archive/php-<version>/` and `archive/static/`
 - Automatic Caddy reload on configuration changes
 - Alternate host (alias) support in the reverse proxy Caddyfile: dedicated TLS block per alias, proxied to its target domain's site with no separate per-site Caddyfile
 - Proxy host support in the reverse proxy Caddyfile: dedicated TLS block per proxy host, forwarding straight to a raw upstream address with no separate per-site Caddyfile
@@ -214,7 +224,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Caddy access logs with automatic rotation (10MB per file, 5 backups, 30 days retention)
 - PHP error logs in `caddy/log/php/php_errors.log`
 - Logrotate configuration for host-level log management
-- Container-specific logs accessible via Docker
+- Container-specific logs accessible via Docker, bounded to 3 files of 10 MB per container (`json-file` driver)
 
 #### Distribution
 - Release archives for 7 targets (`frankenmanager-<platform>.tar.gz`), each holding a `frankenmanager/` directory with the executable (plus `FrankenManager.app` on macOS), bare executables, and `SHA256SUMS.txt`

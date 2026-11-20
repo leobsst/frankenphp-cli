@@ -144,11 +144,11 @@ frankenmanager setup --status
 | `frankenmanager list` | List all registered domains with their PHP versions |
 | `frankenmanager dns-clients [--all] [--json]` | List the devices using the LAN DNS server (connected in the last 5 minutes, or all) |
 | `frankenmanager add-host <domains> [--php <version>] [--root <dir>]` | Add new domains while server is running |
-| `frankenmanager add-host <domain> <target>` | Add domain(s) that reverse-proxy to a raw upstream address (e.g. `127.0.0.1:8006`) |
+| `frankenmanager add-host <domain> <target> [--no-websocket]` | Add domain(s) that reverse-proxy to a raw upstream address (e.g. `127.0.0.1:8006`) |
 | `frankenmanager add-host <domains> --static [--root <dir>] [--spa]` | Add static host(s) (HTML, built front-end app) served without PHP |
 | `frankenmanager add-alias <target> <aliases>` | Add alternate host(s) that reverse-proxy to an existing domain or proxy host |
 | `frankenmanager remove-host <domains>` | Remove domains (or alternate hosts) while server is running |
-| `frankenmanager restore-host [domains] [--php <version>]` | Restore archived domains |
+| `frankenmanager restore-host [domains] --php <version> \| --static` | Restore archived PHP domains or static hosts |
 | `frankenmanager switch-php <domain> --php <version>` | Switch the PHP version for a domain (live, no downtime for other domains) |
 | `frankenmanager exec <domain\|version> <command>` | Run a command with a PHP version (or the domain's), from the current directory |
 | `frankenmanager reset --db \| --caddyfiles` | Reset configuration and/or Caddyfiles (requires stopped server) |
@@ -165,6 +165,7 @@ frankenmanager setup --status
 | `frankenmanager completion bash\|zsh\|fish\|powershell` | Generate the shell completion script |
 | `frankenmanager trust-ca on \| off \| status [--port <port>]` | Share the local mkcert root CA over the LAN so other devices can trust your `.test` domains (off by default) |
 | `frankenmanager daemon start\|stop\|status\|run` | Start, stop or check the daemon: dashboard API, LAN DNS server, root CA sharing (see [Daemon](#daemon)) |
+| `frankenmanager daemon password` | Set the password of the dashboard, required for its [remote access](#remote-access-to-the-dashboard) |
 | `frankenmanager --help` | Show help for all commands |
 
 ## Usage
@@ -369,7 +370,9 @@ Per-site Caddyfiles are stored in version-specific subdirectories:
 │   └── blog_Caddyfile
 ├── php-8.4/
 │   └── api_Caddyfile
-└── archive/            # Caddyfiles of removed domains (see restore-host)
+└── archive/            # Caddyfiles of removed hosts (see restore-host)
+    ├── php-8.4/        #   PHP domains, by the version they were served with
+    └── static/         #   static hosts
 ```
 
 ### Stop the server
@@ -491,7 +494,12 @@ frankenmanager add-host "proxy.test" http://127.0.0.1:8006
 
 # Force SSL certificate regeneration
 frankenmanager add-host "proxy.test" 127.0.0.1:8006 --force-ssl
+
+# Refuse the WebSocket connections
+frankenmanager add-host "proxy.test" 127.0.0.1:8006 --no-websocket
 ```
+
+WebSocket connections are forwarded to the upstream (Vite's hot reload, Reverb...). With `--no-websocket`, the reverse proxy answers them `403` instead; the dashboard can switch it later (`PUT /api/v1/hosts/<domain>/websocket`).
 
 This will:
 1. Validate the domain name(s) and the upstream target
@@ -575,7 +583,7 @@ frankenmanager remove-host "proxy.test"
 
 This will:
 1. Remove entries from `/etc/hosts`
-2. Archive the Caddyfile to `caddy/sites/archive/` (not deleted) — skipped for aliases and proxy hosts, which have no Caddyfile of their own
+2. Archive the Caddyfile (not deleted) to `caddy/sites/archive/php-<version>/` for a PHP domain, `caddy/sites/archive/static/` for a static host — skipped for aliases and proxy hosts, which have no Caddyfile of their own
 3. Restart only the FrankenPHP container
 
 Removing a domain or a proxy host also removes any alternate hosts (aliases) pointing to it, since they'd otherwise be left proxying to a host that no longer exists.
@@ -586,21 +594,25 @@ Removing a domain or a proxy host also removes any alternate hosts (aliases) poi
 # List all archived hosts
 frankenmanager restore-host --list
 
-# Restore a single domain
-frankenmanager restore-host "myapp.test"
-
-# Restore on a specific PHP version
+# Restore a PHP domain, served with PHP 8.4
 frankenmanager restore-host "myapp.test" --php 8.4
 
 # Restore multiple domains with SSL regeneration
-frankenmanager restore-host "app1.test app2.test" --force-ssl
+frankenmanager restore-host "app1.test app2.test" --php 8.4 --force-ssl
+
+# Restore a static host
+frankenmanager restore-host "front.test" --static
 ```
 
+Say what you restore: `--php <version>` for PHP domains (any supported version, not necessarily the one they were archived from), `--static` for static hosts (their root and single-page fallback are read back from their Caddyfile). `--list` shows the type of each archive and, for a PHP domain, the version it was served with.
+
 This will:
-1. Move the Caddyfile from `archive/` back to `php-<version>/`
+1. Move the Caddyfile from `archive/php-<version>/` back to `php-<version>/` (`archive/static/` back to `static/` for a static host)
 2. Generate SSL certificates
 3. Add entries to `/etc/hosts`
-4. Restart only the FrankenPHP container
+4. Restart only the FrankenPHP container (the reverse proxy for a static host)
+
+Caddyfiles archived by releases before 0.11.0 sit at the root of `archive/`: they are no longer listed nor restored. Move one into `archive/php-<version>/` or `archive/static/` to restore it.
 
 ### Caddyfile Customization
 
@@ -959,16 +971,37 @@ frankenmanager daemon run      # Run it in the foreground (what the service mana
 
 `start` starts it too, and the commands that need it (LAN DNS server, `trust-ca`) start it when it doesn't run. A daemon of another version, e.g. after `update`, is replaced on its own.
 
-- With `DAEMON_AUTOSTART=true` (the default), it is handed to the OS service manager, which runs it at login and relaunches it if it crashes: on macOS a LaunchAgent (`~/Library/LaunchAgents/dev.frankenmanager.daemon.plist`), listed as "FrankenManager" in System Settings > General > Login Items through the `FrankenManager.app` of the install directory; on Linux a systemd user unit (`frankenmanager-daemon.service`). On Windows, or on Linux without a systemd user instance (e.g. WSL), and with `DAEMON_AUTOSTART=false`, it is a plain background process, started again by the next command that needs it.
+- With `DAEMON_AUTOSTART=true` (the default), it is started at login: on macOS by a LaunchAgent (`~/Library/LaunchAgents/dev.frankenmanager.daemon.plist`), listed as "FrankenManager" in System Settings > General > Login Items through the `FrankenManager.app` of the install directory; on Linux by a systemd user unit (`frankenmanager-daemon.service`). Both relaunch it if it crashes. On Windows, the `FrankenManager` value of the `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` key runs `frankenmanager daemon start` at login (no Administrator rights; a console window shows for a moment), and nothing relaunches it: the next command that needs it does. On Linux without a systemd user instance (e.g. WSL), and with `DAEMON_AUTOSTART=false`, it is a plain background process, started again by the next command that needs it.
+- The service keeps the `PATH` of the command that installed it, plus the usual tool directories (Homebrew, `/usr/local/bin`): the service manager's own lacks `mkcert` and `docker`.
 - `stop` stops the containers and the LAN DNS server, not the daemon: the dashboard can start the server again.
 - Its log is `daemon.log` in the FrankenManager directory.
 - The commands that change the server (`start`, `stop`, `restart`, `add-host`, `add-alias`, `remove-host`, `restore-host`, `switch-php`, `service`, `configuration set`, the S3 bucket and key changes) run through it, one at a time, and print its progress as they always did. Run at login, it has no terminal to ask for your password: without the passwordless setup of `sudo frankenmanager setup`, these commands run in their own process instead, where `sudo` can ask; the actions of the dashboard that edit the hosts file need that setup.
 
-**API.** The daemon serves one HTTP/JSON API, described in [`api/openapi.yaml`](api/openapi.yaml):
+**API.** The daemon serves one HTTP/JSON API, versioned under `/api/v1` and described in [`api/openapi.yaml`](api/openapi.yaml):
 - on the Unix socket `daemon.sock` of the FrankenManager directory, readable by your user only, for the CLI;
-- on `http://127.0.0.1:9081` (`DASHBOARD_PORT`), for the dashboard: every request needs the token of `daemon.token` (`Authorization: Bearer <token>`), and requests whose `Host` or `Origin` is not this local address are refused (DNS rebinding). It is not reachable from the network.
+- on `http://127.0.0.1:9081` (`DASHBOARD_PORT`), for the dashboard on this machine: every request needs the token of `daemon.token` (`Authorization: Bearer <token>`), and requests whose `Host` or `Origin` is not this local address are refused (DNS rebinding);
+- on `https://<this machine>:9443` (`DASHBOARD_REMOTE_PORT`) when the [remote access](#remote-access-to-the-dashboard) is on.
 
-The actions answer at once with an operation, run in turn; their steps and result stream on `/api/events` (Server-Sent Events).
+The actions answer at once with an operation, run in turn; their steps and result stream on `/api/v1/events` (Server-Sent Events), with the state of the containers whenever Docker reports a change. Besides what the CLI does, the API offers what the dashboard needs: the containers one by one, their CPU and memory usage and a live log stream (read from the Docker Engine API, no `docker` process per call), the certificate of one host, the site Caddyfiles (read, check with Caddy, save, back to the template), the Redis cache (stats, keys, flush), the databases and users of MariaDB, MySQL and PostgreSQL, and the objects of the S3 buckets (list, upload, download, public or private, public URL or temporary link).
+
+#### Remote access to the dashboard
+
+The dashboard answers on this machine only by default (`DASHBOARD_ACCESS=local`). To reach it from another device:
+
+```bash
+frankenmanager daemon password                        # Set the password (asked twice, not shown)
+frankenmanager configuration set DASHBOARD_ACCESS lan # Or internet
+frankenmanager trust-ca on                            # Then install the root CA on the device
+```
+
+- `lan` accepts the local networks only (private addresses, IPv6 ULA, link-local, Tailscale's 100.64.0.0/10); `internet` accepts any address, e.g. through a router port forward or a tunnel.
+- The remote access is HTTPS only, on `DASHBOARD_REMOTE_PORT` (9443), with a certificate made with mkcert for this machine (its LAN address, its name, `localhost`), renewed when the address changes; set `DASHBOARD_TLS_CERT` and `DASHBOARD_TLS_KEY` to use your own (a public name, a tunnel's).
+- A password is required: without `DASHBOARD_PASSWORD`, the remote access stays off. It is stored hashed (PBKDF2-SHA256), never in clear. On this machine it is optional: `DASHBOARD_LOCAL_AUTH=true` requires it too.
+- `DASHBOARD_ALLOWED_IPS` restricts the remote access to some addresses and networks: IPv4, IPv6 and CIDR, comma-separated (`192.168.1.0/24, 2001:db8::/32`).
+- Each device signs in with the password and gets a session, valid 30 days after its last use; the dashboard lists them and can sign any of them out. Changing the password signs every device out. The sign-ins, failures and refused addresses are logged (the last 1,000).
+- The destructive actions (stop the stack or a container, remove a host, reset a Caddyfile, delete buckets, objects, keys, databases or users, flush Redis, change a `DASHBOARD_*` setting) stay available remotely, but ask for the password again.
+- Five wrong passwords from an address lock it for 15 minutes.
+- The settings apply within 30 seconds, without restarting anything.
 
 ### Show version
 
@@ -1094,7 +1127,7 @@ You can override this location with the `FRANKENMANAGER_DATA_DIR` environment va
 │   ├── sites/
 │   │   ├── php-<version>/  # Site configs of the domains served by that PHP version
 │   │   ├── static/         # Site configs of the static hosts (served by the reverse proxy)
-│   │   └── archive/        # Archived site configs (from remove-host, static/ for static hosts)
+│   │   └── archive/        # Archived site configs (from remove-host): php-<version>/ and static/
 │   ├── certs/              # SSL certificates
 │   ├── data/               # Caddy data
 │   ├── config/             # Caddy config
@@ -1211,6 +1244,12 @@ frankenmanager completion powershell >> $PROFILE
 | `CLI_LANGUAGE` | `auto` | Language of the messages: `auto`, `en` or `fr`, see [Language](#language) |
 | `DASHBOARD_PORT` | `9081` | Port of the dashboard API, on 127.0.0.1, see [Daemon](#daemon) |
 | `DAEMON_AUTOSTART` | `true` | Run the daemon at login through the OS service manager; `false`: started on demand only |
+| `DASHBOARD_ACCESS` | `local` | Who reaches the dashboard: `local` (this machine), `lan` (also the local networks) or `internet` (any address), see [Remote access](#remote-access-to-the-dashboard) |
+| `DASHBOARD_REMOTE_PORT` | `9443` | HTTPS port of the remote access |
+| `DASHBOARD_PASSWORD` | | Password of the dashboard, stored hashed; required for the remote access (set it with `frankenmanager daemon password`) |
+| `DASHBOARD_ALLOWED_IPS` | | Addresses allowed remotely (IPv4, IPv6, CIDR, comma-separated); empty allows every address the mode allows |
+| `DASHBOARD_LOCAL_AUTH` | `false` | Require the password on this machine too |
+| `DASHBOARD_TLS_CERT` / `DASHBOARD_TLS_KEY` | | Certificate of the remote access (PEM files); generated with mkcert when empty |
 | `APP_ENV` | `dev` | `dev` for local development (always the case on a workstation), `prod`/`production` only to run FrankenManager on a public/cloud server, see [Production Mode](#production-mode) |
 | `DEFAULT_PHP_VERSION` | `8.3` | Default PHP version for new domains (`8.2` (deprecated), `8.3`, `8.4`, `8.5`) |
 | `UID` | (current user) | System user ID for file ownership |
@@ -1368,8 +1407,10 @@ frankenphp-cli/
 │   │   ├── compose/            docker-compose-generated.yml
 │   │   ├── dns/                LAN DNS server (CoreDNS) config
 │   │   ├── dnsclients/         Devices of the LAN DNS server
+│   │   ├── access/             Remote access rules: password hash, allowed addresses
 │   │   ├── background/         Background services (LaunchAgent, systemd unit, detached)
-│   │   ├── buckets/            S3 buckets and keys
+│   │   ├── buckets/            S3 buckets, keys and objects
+│   │   ├── databases/          Databases and users of MariaDB, MySQL, PostgreSQL
 │   │   ├── domains/            Hosts: PHP, proxy, static, aliases
 │   │   ├── dnswatcher/         LAN DNS server (in the daemon)
 │   │   ├── events/             Events reported by the services (steps, messages)
@@ -1384,6 +1425,7 @@ frankenphp-cli/
 │   │   ├── privilege/          Passwordless hosts helper (sudoers)
 │   │   ├── resources/          Data directory and embedded resources
 │   │   ├── s3/                 Garage S3 server (config, admin API, objects)
+│   │   ├── redis/              Redis cache (RESP client)
 │   │   ├── settings/           Settings list and changes
 │   │   ├── soketi/             Soketi WebSocket server
 │   │   ├── ssl/                Site certificates
@@ -1391,7 +1433,7 @@ frankenphp-cli/
 │   │   ├── store/              SQLite state (db.sqlite)
 │   │   ├── updater/            Self-update
 │   │   └── validate/           Input validation
-│   ├── daemon/                 Daemon: HTTP API, operation queue, event stream
+│   ├── daemon/                 Daemon: HTTP API, operation queue, event stream, remote access
 │   ├── i18n/                   Translations: language selection, locales/<lang>/*.json
 │   ├── platform/               OS-specific code (paths, elevation, processes)
 │   ├── release/                Release archives and checksums
@@ -1581,6 +1623,10 @@ sudo sed -i "s|INSTALL_PATH|$HOME/.frankenmanager|g" /etc/logrotate.d/frankenman
 ### Caddy Access Logs
 
 Caddy logs are automatically rotated (10MB per file, 5 backups, 30 days retention).
+
+### Container Logs
+
+Docker keeps the logs of each container in 3 files of 10 MB at most (`json-file` driver), applied when the containers are created (`stop` then `start` for existing ones). The dashboard reads them from Docker: FrankenManager keeps no copy of its own.
 
 ## Uninstall
 
