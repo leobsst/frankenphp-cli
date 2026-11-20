@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/leobsst/frankenphp-cli/internal/core/buckets"
 	"github.com/leobsst/frankenphp-cli/internal/core/caserver"
@@ -43,6 +44,9 @@ func (ws *Workspace) Running(ctx context.Context) (bool, error) {
 // the same dependencies as its commands.
 type Backend func(log events.Log) (*Workspace, error)
 
+// errRestoreKind is the error of a restore that is neither PHP nor static.
+var errRestoreKind = i18n.NewError("Restore the host(s) as PHP domains (--php VERSION) or as static hosts (--static).")
+
 // The errors of the actions that need the stack running: those that add
 // hosts point to start.
 var (
@@ -61,44 +65,72 @@ func (s *Server) routeTable() []route {
 	return []route{
 		{"GET /api/health", s.health},
 		{"POST /api/daemon/stop", s.stopDaemon},
-		{"GET /api/status", s.status},
-		{"GET /api/events", s.events},
-		{"GET /api/operations", s.operations},
-		{"GET /api/operations/{id}", s.operation},
-		{"POST /api/stack/start", s.startStack},
-		{"POST /api/stack/stop", s.stopStack},
-		{"POST /api/stack/restart", s.restartStack},
-		{"GET /api/containers", s.containers},
-		{"POST /api/containers/{name}/{action}", s.containerAction},
-		{"GET /api/stats", s.stats},
-		{"GET /api/logs", s.logs},
-		{"POST /api/hosts", s.addHosts},
-		{"POST /api/hosts/remove", s.removeHosts},
-		{"POST /api/hosts/{name}/certificate", s.renewCertificate},
-		{"POST /api/hosts/{name}/aliases", s.addAliases},
-		{"PUT /api/hosts/{name}/php", s.switchPHP},
-		{"POST /api/hosts/restore", s.restoreHosts},
-		{"GET /api/services", s.services},
-		{"PUT /api/services/{name}", s.setService},
-		{"GET /api/settings", s.settings},
-		{"PUT /api/settings/{key}", s.setSetting},
-		{"GET /api/hosts/archived", s.archivedHosts},
-		{"GET /api/dns", s.dnsState},
-		{"POST /api/dns/apply", s.applyDNS},
-		{"POST /api/dns/stop", s.stopDNS},
-		{"GET /api/dns/clients", s.dnsClients},
-		{"GET /api/ca", s.caStatus},
-		{"PUT /api/ca", s.setCA},
-		{"GET /api/s3", s.s3Info},
-		{"GET /api/s3/buckets", s.listBuckets},
-		{"POST /api/s3/buckets", s.createBuckets},
-		{"POST /api/s3/buckets/delete", s.deleteBuckets},
-		{"POST /api/s3/buckets/empty", s.emptyBuckets},
-		{"POST /api/s3/buckets/public", s.setBucketsPublic},
-		{"GET /api/s3/keys", s.listKeys},
-		{"POST /api/s3/keys", s.createKey},
-		{"GET /api/s3/keys/{id}", s.showKey},
-		{"POST /api/s3/keys/delete", s.deleteKeys},
+		{"GET /api/v1/host", s.hostInfo},
+		{"GET /api/v1/auth", s.authState},
+		{"POST /api/v1/auth/login", s.login},
+		{"POST /api/v1/auth/logout", s.logout},
+		{"PUT /api/v1/auth/password", s.setPassword},
+		{"GET /api/v1/auth/sessions", s.sessions},
+		{"DELETE /api/v1/auth/sessions/{id}", s.revokeSession},
+		{"GET /api/v1/auth/log", s.accessLog},
+		{"GET /api/v1/status", s.status},
+		{"GET /api/v1/events", s.events},
+		{"GET /api/v1/operations", s.operations},
+		{"GET /api/v1/operations/{id}", s.operation},
+		{"POST /api/v1/stack/start", s.startStack},
+		{"POST /api/v1/stack/stop", s.stopStack},
+		{"POST /api/v1/stack/restart", s.restartStack},
+		{"GET /api/v1/containers", s.containers},
+		{"POST /api/v1/containers/{name}/{action}", s.containerAction},
+		{"GET /api/v1/stats", s.stats},
+		{"GET /api/v1/logs", s.logs},
+		{"POST /api/v1/hosts", s.addHosts},
+		{"POST /api/v1/hosts/remove", s.removeHosts},
+		{"POST /api/v1/hosts/{name}/certificate", s.renewCertificate},
+		{"POST /api/v1/hosts/{name}/aliases", s.addAliases},
+		{"PUT /api/v1/hosts/{name}/php", s.switchPHP},
+		{"PUT /api/v1/hosts/{name}/websocket", s.setWebsocket},
+		{"GET /api/v1/hosts/{name}/caddyfile", s.siteFile},
+		{"PUT /api/v1/hosts/{name}/caddyfile", s.saveSite},
+		{"POST /api/v1/hosts/{name}/caddyfile/validate", s.validateSite},
+		{"POST /api/v1/hosts/{name}/caddyfile/reset", s.resetSite},
+		{"POST /api/v1/hosts/restore", s.restoreHosts},
+		{"GET /api/v1/services", s.services},
+		{"PUT /api/v1/services/{name}", s.setService},
+		{"GET /api/v1/settings", s.settings},
+		{"PUT /api/v1/settings/{key}", s.setSetting},
+		{"GET /api/v1/hosts/archived", s.archivedHosts},
+		{"GET /api/v1/dns", s.dnsState},
+		{"POST /api/v1/dns/apply", s.applyDNS},
+		{"POST /api/v1/dns/stop", s.stopDNS},
+		{"GET /api/v1/dns/clients", s.dnsClients},
+		{"GET /api/v1/ca", s.caStatus},
+		{"PUT /api/v1/ca", s.setCA},
+		{"GET /api/v1/redis", s.redisState},
+		{"GET /api/v1/redis/keys", s.redisKeys},
+		{"POST /api/v1/redis/keys/delete", s.deleteRedisKeys},
+		{"POST /api/v1/redis/flush", s.flushRedis},
+		{"GET /api/v1/databases", s.databases},
+		{"POST /api/v1/databases/{engine}", s.createDatabase},
+		{"POST /api/v1/databases/{engine}/delete", s.dropDatabases},
+		{"POST /api/v1/databases/{engine}/users", s.createDatabaseUser},
+		{"POST /api/v1/databases/{engine}/users/delete", s.dropDatabaseUsers},
+		{"GET /api/v1/s3", s.s3Info},
+		{"GET /api/v1/s3/buckets", s.listBuckets},
+		{"POST /api/v1/s3/buckets", s.createBuckets},
+		{"POST /api/v1/s3/buckets/delete", s.deleteBuckets},
+		{"POST /api/v1/s3/buckets/empty", s.emptyBuckets},
+		{"POST /api/v1/s3/buckets/public", s.setBucketsPublic},
+		{"GET /api/v1/s3/buckets/{bucket}/objects", s.listObjects},
+		{"PUT /api/v1/s3/buckets/{bucket}/object", s.uploadObject},
+		{"GET /api/v1/s3/buckets/{bucket}/object", s.downloadObject},
+		{"GET /api/v1/s3/buckets/{bucket}/object/link", s.objectLink},
+		{"POST /api/v1/s3/buckets/{bucket}/objects/delete", s.deleteObjects},
+		{"POST /api/v1/s3/buckets/{bucket}/objects/public", s.setObjectsPublic},
+		{"GET /api/v1/s3/keys", s.listKeys},
+		{"POST /api/v1/s3/keys", s.createKey},
+		{"GET /api/v1/s3/keys/{id}", s.showKey},
+		{"POST /api/v1/s3/keys/delete", s.deleteKeys},
 	}
 }
 
@@ -106,9 +138,43 @@ func (s *Server) routeTable() []route {
 func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
 	for _, r := range s.routeTable() {
-		mux.HandleFunc(r.pattern, r.handler)
+		h := r.handler
+		if needs, ok := destructive[r.pattern]; ok {
+			h = func(w http.ResponseWriter, req *http.Request) {
+				if needs(req) && !s.confirmed(w, req) {
+					return
+				}
+				r.handler(w, req)
+			}
+		}
+		mux.HandleFunc(r.pattern, h)
 	}
 	return mux
+}
+
+func always(*http.Request) bool { return true }
+
+// destructive are the routes that lose data or cut the service: requested
+// remotely, they need the password again (see confirmed).
+var destructive = map[string]func(*http.Request) bool{
+	"POST /api/daemon/stop":                           always,
+	"POST /api/v1/stack/stop":                         always,
+	"POST /api/v1/hosts/remove":                       always,
+	"POST /api/v1/hosts/{name}/caddyfile/reset":       always,
+	"POST /api/v1/dns/stop":                           always,
+	"POST /api/v1/containers/{name}/{action}":         func(r *http.Request) bool { return r.PathValue("action") == "stop" },
+	"POST /api/v1/s3/buckets/delete":                  always,
+	"POST /api/v1/s3/buckets/empty":                   always,
+	"POST /api/v1/s3/keys/delete":                     always,
+	"POST /api/v1/s3/buckets/{bucket}/objects/delete": always,
+	"POST /api/v1/redis/keys/delete":                  always,
+	"POST /api/v1/redis/flush":                        always,
+	"POST /api/v1/databases/{engine}/delete":          always,
+	"POST /api/v1/databases/{engine}/users/delete":    always,
+	// The access settings could open the dashboard wider
+	"PUT /api/v1/settings/{key}": func(r *http.Request) bool {
+		return strings.HasPrefix(strings.ToUpper(r.PathValue("key")), "DASHBOARD_")
+	},
 }
 
 // read runs fn on a workspace that reports nothing, for the requests that
@@ -191,6 +257,8 @@ type Host struct {
 	Target string `json:"target,omitempty"` // upstream of a proxy, target of an alias
 	Root   string `json:"root,omitempty"`   // static host
 	SPA    bool   `json:"spa,omitempty"`
+	// Websocket tells whether a proxy host forwards WebSocket connections
+	Websocket *bool `json:"websocket,omitempty"`
 }
 
 // Service is the state of an optional service.
@@ -221,7 +289,7 @@ func hostsOf(st *store.Store) ([]Host, error) {
 		return nil, err
 	}
 	for _, p := range proxies {
-		hosts = append(hosts, Host{Name: p.Domain, Kind: "proxy", Target: p.Target})
+		hosts = append(hosts, Host{Name: p.Domain, Kind: "proxy", Target: p.Target, Websocket: new(!p.NoWebsocket)})
 	}
 	statics, err := st.StaticHosts()
 	if err != nil {
@@ -299,6 +367,7 @@ type Setting struct {
 var applyNames = map[env.Apply]string{
 	env.ApplyNow: "now", env.ApplyLive: "live", env.ApplyAlias: "alias", env.ApplyRecreate: "recreate",
 	env.ApplyRebuild: "rebuild", env.ApplyRestartDNS: "restart_dns", env.ApplyRestartDB: "restart_db",
+	env.ApplyDaemon: "daemon",
 }
 
 func (s *Server) settings(w http.ResponseWriter, r *http.Request) {
@@ -377,10 +446,12 @@ type addHostsRequest struct {
 	// Root is the directory served, relative to the projects root
 	Root string `json:"root"`
 	// Target makes proxy hosts forwarding to it
-	Target   string `json:"target"`
-	Static   bool   `json:"static"`
-	SPA      bool   `json:"spa"`
-	ForceSSL bool   `json:"force_ssl"`
+	Target string `json:"target"`
+	// Websocket allows the WebSocket connections of proxy hosts (default)
+	Websocket *bool `json:"websocket"`
+	Static    bool  `json:"static"`
+	SPA       bool  `json:"spa"`
+	ForceSSL  bool  `json:"force_ssl"`
 }
 
 func (s *Server) addHosts(w http.ResponseWriter, r *http.Request) {
@@ -395,6 +466,9 @@ func (s *Server) addHosts(w http.ResponseWriter, r *http.Request) {
 	case req.Target != "" && (req.Static || req.Root != ""):
 		writeError(w, http.StatusBadRequest, i18n.T("A proxy host has no root and is not static."))
 		return
+	case req.Websocket != nil && req.Target == "":
+		writeError(w, http.StatusBadRequest, i18n.Tf("Option '%s' requires '%s'.", "websocket", "target"))
+		return
 	case req.SPA && !req.Static:
 		writeError(w, http.StatusBadRequest, i18n.Tf("Option '%s' requires '%s'.", "spa", "static"))
 		return
@@ -406,7 +480,7 @@ func (s *Server) addHosts(w http.ResponseWriter, r *http.Request) {
 		}
 		switch {
 		case req.Target != "":
-			return svc.AddProxy(ctx, req.Domains, req.Target, req.ForceSSL)
+			return svc.AddProxyWebsocket(ctx, req.Domains, req.Target, req.Websocket == nil || *req.Websocket, req.ForceSSL)
 		case req.Static:
 			return svc.AddStatic(ctx, req.Domains, req.Root, req.SPA, req.ForceSSL)
 		}
@@ -491,9 +565,12 @@ func (s *Server) switchPHP(w http.ResponseWriter, r *http.Request) {
 }
 
 type restoreRequest struct {
-	Domains  []string `json:"domains"`
-	PHP      string   `json:"php"`
-	ForceSSL bool     `json:"force_ssl"`
+	Domains []string `json:"domains"`
+	// PHP restores PHP domains with that version; Static restores static
+	// hosts. One of them is required
+	PHP      string `json:"php"`
+	Static   bool   `json:"static"`
+	ForceSSL bool   `json:"force_ssl"`
 }
 
 func (s *Server) restoreHosts(w http.ResponseWriter, r *http.Request) {
@@ -505,7 +582,18 @@ func (s *Server) restoreHosts(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, i18n.Tf("Missing field '%s'.", "domains"))
 		return
 	}
+	if req.Static == (req.PHP != "") {
+		writeError(w, http.StatusBadRequest, errRestoreKind.Error())
+		return
+	}
 	s.submit(w, r, "hosts.restore", func(ctx context.Context, ws *Workspace) (any, error) {
+		if req.Static {
+			svc, err := running(ctx, ws, errNotRunningStart)
+			if err != nil {
+				return nil, err
+			}
+			return svc.RestoreStatic(ctx, req.Domains, req.ForceSSL)
+		}
 		php, err := stack.ResolvePHP(req.PHP, ws.Env, ws.Stack.Log)
 		if err != nil {
 			return nil, err
@@ -574,6 +662,16 @@ func (s *Server) setSetting(w http.ResponseWriter, r *http.Request) {
 			return res, nil
 		}
 		ws.Stack.Log.Success(d.Key + " = " + c.Shown)
+		if d.Apply == env.ApplyDaemon {
+			if d.Key == env.DashboardPasswordKey {
+				// A new password signs every device out
+				if err := ws.Store.RemoveSessions(time.Time{}); err != nil {
+					return nil, err
+				}
+			}
+			s.ReloadAccess()
+			res.Hint = ""
+		}
 		if d.Apply == env.ApplyLive {
 			o, err := ws.Stack.ApplyOptional(ctx, d.Service)
 			if err != nil {
@@ -582,5 +680,23 @@ func (s *Server) setSetting(w http.ResponseWriter, r *http.Request) {
 			res.Service, res.Hint = &o, ""
 		}
 		return res, nil
+	})
+}
+
+// setWebsocket allows or refuses the WebSocket connections of a proxy host.
+func (s *Server) setWebsocket(w http.ResponseWriter, r *http.Request) {
+	host := r.PathValue("name")
+	var req struct {
+		Enabled bool `json:"enabled"`
+	}
+	if !readJSON(w, r, &req) {
+		return
+	}
+	s.submit(w, r, "hosts.websocket", func(ctx context.Context, ws *Workspace) (any, error) {
+		svc, err := running(ctx, ws, errNotRunning)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]bool{"websocket": req.Enabled}, svc.SetWebsocket(ctx, host, req.Enabled)
 	})
 }

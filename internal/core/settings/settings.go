@@ -6,6 +6,7 @@ package settings
 import (
 	"strings"
 
+	"github.com/leobsst/frankenphp-cli/internal/core/access"
 	"github.com/leobsst/frankenphp-cli/internal/core/env"
 	"github.com/leobsst/frankenphp-cli/internal/core/validate"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
@@ -107,6 +108,14 @@ func (c Change) Changed() bool { return c.Old != c.New }
 func Set(e *env.Env, d env.Definition, value *string) (Change, error) {
 	old := e.Get(d.Key)
 	var err error
+	if value != nil && d.Key == env.DashboardPasswordKey && *value != "" && !access.IsHash(*value) {
+		// Never stored in clear
+		hash, herr := access.HashPassword(*value)
+		if herr != nil {
+			return Change{}, herr
+		}
+		value = &hash
+	}
 	if value != nil {
 		err = e.Set(d.Key, *value)
 	} else {

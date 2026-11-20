@@ -23,6 +23,9 @@ const SocketFile = "daemon.sock"
 var ServiceSpec = background.Spec{
 	Label: "dev.frankenmanager.daemon", Unit: "frankenmanager-daemon.service", Description: "FrankenManager daemon",
 	Args: []string{"--no-update-check", "daemon", "run"}, PIDFile: ".daemon.pid", LogFile: "daemon.log",
+	// At login on Windows: `daemon start` starts it detached (no console
+	// window kept open) with its log, then exits
+	WindowsRun: "FrankenManager", RunArgs: []string{"--no-update-check", "daemon", "start"},
 }
 
 // LoadToken returns the access token of the HTTP API stored in dir,

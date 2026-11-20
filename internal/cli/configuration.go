@@ -201,11 +201,11 @@ func (a *app) configSet(ctx context.Context, name string, value *string) error {
 		Changed bool                  `json:"changed"`
 		Service *stack.OptionalResult `json:"service"`
 	}
-	err = a.runOp(ctx, dir, http.MethodPut, "/api/settings/"+d.Key, map[string]*string{"value": value}, &res)
+	err = a.runOp(ctx, dir, http.MethodPut, "/api/v1/settings/"+d.Key, map[string]*string{"value": value}, &res)
 	switch {
 	case err != nil:
 		return reported(err)
-	case !res.Changed || d.Apply == env.ApplyNow:
+	case !res.Changed || d.Apply == env.ApplyNow || d.Apply == env.ApplyDaemon:
 		return nil
 	case res.Service != nil:
 		return a.reportServiceOf(dir, *res.Service)

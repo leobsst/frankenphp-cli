@@ -59,7 +59,7 @@ func (x *daemonDNS) Apply(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	var st daemon.DNSState
-	if err := c.Run(ctx, http.MethodPost, "/api/dns/apply", nil, &st); err != nil {
+	if err := c.Run(ctx, http.MethodPost, "/api/v1/dns/apply", nil, &st); err != nil {
 		return false, err
 	}
 	return st.Running, nil
@@ -68,13 +68,13 @@ func (x *daemonDNS) Apply(ctx context.Context) (bool, error) {
 func (x *daemonDNS) Stop(ctx context.Context) {
 	x.stopWatcher(ctx)
 	if c := client.New(x.dir); c.Running(ctx) {
-		_ = c.Run(ctx, http.MethodPost, "/api/dns/stop", nil, nil)
+		_ = c.Run(ctx, http.MethodPost, "/api/v1/dns/stop", nil, nil)
 	}
 }
 
 func (x *daemonDNS) Running(ctx context.Context) bool {
 	var st daemon.DNSState
-	return client.New(x.dir).Do(ctx, http.MethodGet, "/api/dns", nil, &st) == nil && st.Running
+	return client.New(x.dir).Do(ctx, http.MethodGet, "/api/v1/dns", nil, &st) == nil && st.Running
 }
 
 // inProcessDNS is the LAN DNS server of the daemon itself.
@@ -180,7 +180,7 @@ func shareCAVia(start client.Starter) func(dataDir, certFile string, port int) e
 		if err != nil {
 			return err
 		}
-		return c.Run(context.Background(), http.MethodPut, "/api/ca", map[string]any{"enabled": true, "port": port}, nil)
+		return c.Run(context.Background(), http.MethodPut, "/api/v1/ca", map[string]any{"enabled": true, "port": port}, nil)
 	}
 }
 
@@ -190,7 +190,7 @@ func stopCAVia(dataDir string) bool {
 	if !c.Running(context.Background()) {
 		return stopped
 	}
-	err := c.Run(context.Background(), http.MethodPut, "/api/ca", map[string]any{"enabled": false}, nil)
+	err := c.Run(context.Background(), http.MethodPut, "/api/v1/ca", map[string]any{"enabled": false}, nil)
 	return stopped || err == nil
 }
 
@@ -202,7 +202,7 @@ func caStateVia(dataDir string) (pid, port int, ok bool) {
 		Sharing bool `json:"sharing"`
 		Port    int  `json:"port"`
 	}
-	if err := client.New(dataDir).Do(context.Background(), http.MethodGet, "/api/ca", nil, &st); err != nil || !st.Sharing {
+	if err := client.New(dataDir).Do(context.Background(), http.MethodGet, "/api/v1/ca", nil, &st); err != nil || !st.Sharing {
 		return 0, 0, false
 	}
 	return 0, st.Port, true

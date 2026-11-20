@@ -25,7 +25,7 @@ func (a *app) stop(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := a.runOp(ctx, dir, http.MethodPost, "/api/stack/stop", nil, nil); err != nil {
+	if err := a.runOp(ctx, dir, http.MethodPost, "/api/v1/stack/stop", nil, nil); err != nil {
 		return reported(err)
 	}
 	a.con.Println()

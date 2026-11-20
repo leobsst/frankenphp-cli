@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"net"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/leobsst/frankenphp-cli/internal/client"
+	"github.com/leobsst/frankenphp-cli/internal/core/access"
 	"github.com/leobsst/frankenphp-cli/internal/core/buckets"
 	"github.com/leobsst/frankenphp-cli/internal/core/caserver"
 	"github.com/leobsst/frankenphp-cli/internal/core/dnswatcher"
@@ -23,6 +25,7 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/events"
 	"github.com/leobsst/frankenphp-cli/internal/core/ssl"
 	"github.com/leobsst/frankenphp-cli/internal/core/stack"
+	"github.com/leobsst/frankenphp-cli/internal/core/store"
 	"github.com/leobsst/frankenphp-cli/internal/daemon"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
 	"github.com/leobsst/frankenphp-cli/internal/platform"
@@ -75,7 +78,13 @@ Examples:
 		Args:  noArgs,
 		RunE:  func(cmd *cobra.Command, _ []string) error { return a.daemonStatus(cmd.Context()) },
 	}
-	cmd.AddCommand(run, start, stop, status)
+	password := &cobra.Command{
+		Use:   "password",
+		Short: i18n.T("Set the password of the dashboard (required for the remote access)."),
+		Args:  noArgs,
+		RunE:  func(cmd *cobra.Command, _ []string) error { return a.dashboardPassword(cmd.Context()) },
+	}
+	cmd.AddCommand(run, start, stop, status, password)
 	return cmd
 }
 
@@ -197,6 +206,11 @@ func (a *app) runDaemon(ctx context.Context) error {
 	dnsServer := &inProcessDNS{host: h.dns, dir: dir}
 	srv := daemon.New(func(log events.Log) (*daemon.Workspace, error) { return a.workspace(dir, dnsServer, h.ca, log) },
 		token, port, version.Version)
+	srv.OpenStore = func() (*store.Store, error) { return a.openStore(dir) }
+	srv.LoadAccess = func() (daemon.AccessConfig, error) { return loadAccess(dir) }
+	srv.RemoteCert = func(cfg daemon.AccessConfig) (string, string, error) { return a.remoteCert(ctx, dir, cfg) }
+	srv.LANIP = a.deps.LANIP
+	srv.Logf = func(format string, args ...any) { fmt.Fprintf(a.errOut, format+"\n", args...) }
 	err = srv.Serve(ctx, socket, local)
 	a.log.Info(i18n.T("Dashboard API stopped."))
 	return err
@@ -274,4 +288,28 @@ func (a *app) workspace(dir string, dnsServer stack.DNS, ca *caserver.Host, log 
 		}, a.deps.LANIP),
 		Close: s.Close,
 	}, nil
+}
+
+// dashboardPassword asks the new password of the dashboard twice, without
+// showing it, then stores its hash: every device is signed out.
+func (a *app) dashboardPassword(ctx context.Context) error {
+	fmt.Fprint(a.errOut, i18n.T("New dashboard password: "))
+	pw, err := a.deps.ReadPassword()
+	fmt.Fprintln(a.errOut)
+	if err != nil {
+		return err
+	}
+	fmt.Fprint(a.errOut, i18n.T("Confirm the password: "))
+	again, err := a.deps.ReadPassword()
+	fmt.Fprintln(a.errOut)
+	if err != nil {
+		return err
+	}
+	if pw != again {
+		return i18n.NewError("The passwords differ.")
+	}
+	if len([]rune(pw)) < access.MinPasswordLength {
+		return i18n.Errorf("The password needs at least %d characters.", access.MinPasswordLength)
+	}
+	return a.configSet(ctx, env.DashboardPasswordKey, &pw)
 }

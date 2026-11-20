@@ -20,6 +20,8 @@ import (
 // ArchivedHost is a host whose site files are archived, ready to restore.
 type ArchivedHost struct {
 	Domain string `json:"domain"`
+	Kind   string `json:"kind"`          // "php" or "static"
+	PHP    string `json:"php,omitempty"` // the version it was served with
 }
 
 func (s *Server) archivedHosts(w http.ResponseWriter, _ *http.Request) {
@@ -31,7 +33,7 @@ func (s *Server) archivedHosts(w http.ResponseWriter, _ *http.Request) {
 		}
 		out := []ArchivedHost{}
 		for _, a := range archived {
-			out = append(out, ArchivedHost{Domain: a.FullDomain})
+			out = append(out, ArchivedHost{Domain: a.FullDomain, Kind: a.Kind, PHP: a.PHPVersion})
 		}
 		return out, nil
 	})

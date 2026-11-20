@@ -68,7 +68,7 @@ func (a *app) restart(ctx context.Context, forceSSL bool, targets []string, buil
 	if err != nil {
 		return err
 	}
-	err = a.runOp(ctx, dir, http.MethodPost, "/api/stack/restart",
+	err = a.runOp(ctx, dir, http.MethodPost, "/api/v1/stack/restart",
 		map[string]any{"targets": targets, "force_ssl": forceSSL, "build": build}, nil)
 	if err != nil {
 		return reported(err)

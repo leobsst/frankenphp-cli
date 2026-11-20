@@ -57,7 +57,7 @@ type staticOptions struct {
 }
 
 func newAddHostCmd(a *app) *cobra.Command {
-	var forceSSL bool
+	var forceSSL, noWebsocket bool
 	var php string
 	var static staticOptions
 	cmd := &cobra.Command{
@@ -88,6 +88,7 @@ Examples:
     frankenmanager add-host "api.test" --root monorepo/apps/api/public
     frankenmanager add-host "domain.test" http://127.0.0.1:8006
     frankenmanager add-host "domain.test" 127.0.0.1:8006
+    frankenmanager add-host "app.test" 127.0.0.1:3000 --no-websocket
     frankenmanager add-host "site.test" --static
     frankenmanager add-host "front.test" --static --root front/dist --spa`),
 		Args: rangeArgs(1, "DOMAINS", "TARGET"),
@@ -102,6 +103,9 @@ Examples:
 					return usageError{i18n.Errorf("Option '%s' cannot be used with a target.", "--"+name)}
 				}
 			}
+			if noWebsocket && !proxy {
+				return usageError{i18n.Errorf("Option '%s' requires a target.", "--no-websocket")}
+			}
 			if f.Changed("spa") && !static.enabled {
 				return usageError{i18n.Errorf("Option '%s' requires '%s'.", "--spa", "--static")}
 			}
@@ -113,7 +117,7 @@ Examples:
 			if static.enabled {
 				return a.addStaticHosts(cmd.Context(), strings.Fields(args[0]), static, forceSSL)
 			}
-			return a.addHost(cmd.Context(), strings.Fields(args[0]), forceSSL, php, target, proxy, static.root)
+			return a.addHost(cmd.Context(), strings.Fields(args[0]), forceSSL, php, target, proxy, static.root, noWebsocket)
 		},
 	}
 	f := cmd.Flags()
@@ -121,6 +125,7 @@ Examples:
 	f.StringVar(&php, "php", "", phpVersionUsage())
 	f.BoolVar(&static.enabled, "static", false, i18n.T("Serve the domain(s) as static files (HTML), without PHP"))
 	f.StringVar(&static.root, "root", "", i18n.T("Directory served, relative to the project path; its first directory must exist"))
+	f.BoolVar(&noWebsocket, "no-websocket", false, i18n.T("Refuse the WebSocket connections of the proxy host(s) (allowed by default)"))
 	f.BoolVar(&static.spa, "spa", false, i18n.T("Single-page app: unknown paths of a static host fall back to /index.html"))
 	return cmd
 }
@@ -136,29 +141,31 @@ func (a *app) prepare() (string, *env.Env, error) {
 	return dir, e, err
 }
 
-// addHostRequest is the body of POST /api/hosts.
+// addHostRequest is the body of POST /api/v1/hosts.
 type addHostRequest struct {
-	Domains  []string `json:"domains"`
-	PHP      string   `json:"php,omitempty"`
-	Root     string   `json:"root,omitempty"`
-	Target   string   `json:"target,omitempty"`
-	Static   bool     `json:"static,omitempty"`
-	SPA      bool     `json:"spa,omitempty"`
-	ForceSSL bool     `json:"force_ssl,omitempty"`
+	Domains []string `json:"domains"`
+	PHP     string   `json:"php,omitempty"`
+	Root    string   `json:"root,omitempty"`
+	Target  string   `json:"target,omitempty"`
+	Static  bool     `json:"static,omitempty"`
+	SPA     bool     `json:"spa,omitempty"`
+	// Websocket is false to refuse the WebSocket connections of proxy hosts
+	Websocket *bool `json:"websocket,omitempty"`
+	ForceSSL  bool  `json:"force_ssl,omitempty"`
 }
 
 // addHost adds PHP domains, served from root when set, or proxy hosts
 // forwarding to target.
 func (a *app) addHost(ctx context.Context, names []string, forceSSL bool, php, target string, proxy bool,
-	root string) error {
+	root string, noWebsocket bool) error {
 	dir, _, err := a.prepare()
 	if err != nil {
 		return err
 	}
 	if proxy {
 		var res domains.ProxyResult
-		err := a.runOp(ctx, dir, http.MethodPost, "/api/hosts",
-			addHostRequest{Domains: names, Target: target, ForceSSL: forceSSL}, &res)
+		err := a.runOp(ctx, dir, http.MethodPost, "/api/v1/hosts",
+			addHostRequest{Domains: names, Target: target, ForceSSL: forceSSL, Websocket: websocketOption(noWebsocket)}, &res)
 		if err != nil || len(res.Domains) == 0 {
 			return reported(err)
 		}
@@ -172,7 +179,7 @@ func (a *app) addHost(ctx context.Context, names []string, forceSSL bool, php, t
 	}
 
 	var res domains.PHPResult
-	err = a.runOp(ctx, dir, http.MethodPost, "/api/hosts",
+	err = a.runOp(ctx, dir, http.MethodPost, "/api/v1/hosts",
 		addHostRequest{Domains: names, PHP: php, Root: root, ForceSSL: forceSSL}, &res)
 	if err != nil || len(res.Domains) == 0 {
 		return reported(err)
@@ -193,7 +200,7 @@ func (a *app) addStaticHosts(ctx context.Context, names []string, o staticOption
 		return err
 	}
 	var res domains.StaticResult
-	err = a.runOp(ctx, dir, http.MethodPost, "/api/hosts",
+	err = a.runOp(ctx, dir, http.MethodPost, "/api/v1/hosts",
 		addHostRequest{Domains: names, Root: o.root, Static: true, SPA: o.spa, ForceSSL: forceSSL}, &res)
 	if err != nil || len(res.Hosts) == 0 {
 		return reported(err)
@@ -248,7 +255,7 @@ func (a *app) addAlias(ctx context.Context, target string, aliases []string, for
 		return err
 	}
 	var res domains.AliasResult
-	err = a.runOp(ctx, dir, http.MethodPost, "/api/hosts/"+url.PathEscape(target)+"/aliases",
+	err = a.runOp(ctx, dir, http.MethodPost, "/api/v1/hosts/"+url.PathEscape(target)+"/aliases",
 		map[string]any{"aliases": aliases, "force_ssl": forceSSL}, &res)
 	if err != nil || len(res.Aliases) == 0 {
 		return reported(err)
@@ -258,6 +265,15 @@ func (a *app) addAlias(ctx context.Context, target string, aliases []string, for
 	a.log.Info(i18n.T("Added aliases:"))
 	for _, domain := range res.Aliases {
 		a.log.Info(fmt.Sprintf("  - https://%s -> %s (%s)", domain, res.Target, res.Serves))
+	}
+	return nil
+}
+
+// websocketOption is the websocket field of a proxy host request: false
+// with --no-websocket, left out otherwise (allowed).
+func websocketOption(noWebsocket bool) *bool {
+	if noWebsocket {
+		return new(false)
 	}
 	return nil
 }

@@ -135,7 +135,7 @@ func TestProxies(t *testing.T) {
 	check(t, s.AddProxies([]string{"pve.test", "nas.test"}, "https://192.168.1.10:8006"))
 	check(t, s.AddProxies([]string{"pve.test"}, "127.0.0.1:1")) // ignored
 
-	want := []Proxy{{"pve.test", "https://192.168.1.10:8006"}, {"nas.test", "https://192.168.1.10:8006"}}
+	want := []Proxy{{Domain: "pve.test", Target: "https://192.168.1.10:8006"}, {Domain: "nas.test", Target: "https://192.168.1.10:8006"}}
 	if got := must(s.Proxies()); !reflect.DeepEqual(got, want) {
 		t.Errorf("Proxies() = %v, want %v", got, want)
 	}

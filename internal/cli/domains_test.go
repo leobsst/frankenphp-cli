@@ -143,8 +143,7 @@ func TestRestoreHostFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.writeEnv("DEFAULT_PROJECT_PATH=\n")
-	archived := filepath.Join(e.dir, "caddy", "sites", "archive", "old_Caddyfile")
-	writeFile(t, archived, "http://old.test {\n}\n")
+	writeFile(t, filepath.Join(e.dir, "caddy", "sites", "archive", "php-8.3", "old_Caddyfile"), "http://old.test {\n}\n")
 	code, out, _ := e.run("restore-host", "old.test", "--php", "8.5")
 	if code != 1 || !strings.HasSuffix(out, "ERROR: Cleanup complete. The host(s) were not restored.\n") {
 		t.Errorf("code %d, out:\n%s", code, out)
@@ -152,7 +151,8 @@ func TestRestoreHostFailure(t *testing.T) {
 	if names, _ := e.store().DomainNames(); !slices.Equal(names, []string{"app.test"}) {
 		t.Errorf("domains = %v", names)
 	}
-	if !exists(archived) || exists(e.site("8.5", "old")) {
+	// Back in the archive, as served then
+	if !exists(filepath.Join(e.dir, "caddy", "sites", "archive", "php-8.5", "old_Caddyfile")) || exists(e.site("8.5", "old")) {
 		t.Error("site file not back in the archive")
 	}
 }
@@ -221,7 +221,7 @@ func TestRemoveHost(t *testing.T) {
 	if !slices.Equal(e.dockerLines()[1:], []string{"stop frankenphp-8.4", "rm frankenphp-8.4", "restart franken-caddy-proxy"}) {
 		t.Errorf("docker: %v", e.dockerLines())
 	}
-	if exists(e.site("8.4", "app")) || !exists(filepath.Join(e.dir, "caddy", "sites", "archive", "app_Caddyfile")) {
+	if exists(e.site("8.4", "app")) || !exists(filepath.Join(e.dir, "caddy", "sites", "archive", "php-8.4", "app_Caddyfile")) {
 		t.Error("site file not archived")
 	}
 	if names, _ := s.DomainNames(); !slices.Equal(names, []string{"keep.test"}) {
@@ -239,9 +239,17 @@ func TestRestoreHost(t *testing.T) {
 		t.Errorf("code %d, out %q", code, out)
 	}
 
-	writeFile(t, filepath.Join(e.dir, "caddy", "sites", "archive", "old_Caddyfile"), "http://old.test {\n}\n")
+	writeFile(t, filepath.Join(e.dir, "caddy", "sites", "archive", "php-8.3", "old_Caddyfile"), "http://old.test {\n}\n")
 	_, out, _ = e.run("restore-host", "-l")
-	mustContain(t, out, "Archived Hosts", "│ old.test │ old_Caddyfile │")
+	mustContain(t, out, "Archived Hosts", "│ old.test │ PHP 8.3 │ old_Caddyfile │")
+
+	// PHP or static: one of them, said
+	for _, args := range [][]string{{"old.test"}, {"old.test", "--php", "8.4", "--static"}} {
+		code, _, errOut := e.run(append([]string{"restore-host"}, args...)...)
+		if code != ExitUsage || !strings.Contains(errOut, "--php VERSION") {
+			t.Errorf("%v: code %d, %q", args, code, errOut)
+		}
+	}
 
 	code, out, _ = e.run("restore-host", "old.test app.dev", "--php", "8.4")
 	if code != 0 {
@@ -407,5 +415,25 @@ func TestStaticHostIsNotPHP(t *testing.T) {
 	}
 	if code, out, _ := e.run("add-host", "site.test"); code != 0 || !strings.Contains(out, "Domain 'site.test' is already configured, skipping.") {
 		t.Errorf("add-host: code %d, out:\n%s", code, out)
+	}
+}
+
+// A static host comes back as a static host, with the root and fallback
+// of its site file.
+func TestRestoreStaticHost(t *testing.T) {
+	e := startedEnv(t)
+	writeFile(t, filepath.Join(e.dir, "caddy", "sites", "archive", "static", "front_Caddyfile"),
+		"front.test {\n\troot * /{$CUSTOM_PATH}/front/dist/\n\ttry_files {path} /index.html\n\tfile_server\n}\n")
+	code, out, _ := e.run("restore-host", "front.test", "--static")
+	if code != 0 {
+		t.Fatalf("code %d, out:\n%s", code, out)
+	}
+	mustContain(t, out, "-- Restored front_Caddyfile (static)\n", "--   - https://front.test (static)\n")
+	hosts, _ := e.store().StaticHosts()
+	if !slices.Equal(hosts, []store.StaticHost{{Domain: "front.test", Root: "front/dist", SPA: true}}) {
+		t.Errorf("static hosts = %v", hosts)
+	}
+	if !exists(filepath.Join(e.dir, "caddy", "sites", "static", "front_Caddyfile")) {
+		t.Error("site file not restored")
 	}
 }

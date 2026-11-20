@@ -47,7 +47,7 @@ func (a *app) removeHost(ctx context.Context, names []string) error {
 		return err
 	}
 	var res domains.RemoveResult
-	err = a.runOp(ctx, dir, http.MethodPost, "/api/hosts/remove", map[string]any{"domains": names}, &res)
+	err = a.runOp(ctx, dir, http.MethodPost, "/api/v1/hosts/remove", map[string]any{"domains": names}, &res)
 	if err != nil || res.Empty() {
 		return reported(err)
 	}
@@ -85,20 +85,21 @@ func (a *app) removeHost(ctx context.Context, names []string) error {
 // --- restore-host ------------------------------------------------------------
 
 func newRestoreHostCmd(a *app) *cobra.Command {
-	var list, forceSSL bool
+	var list, forceSSL, static bool
 	var php string
 	cmd := &cobra.Command{
-		Use:   "restore-host [DOMAINS]",
+		Use:   "restore-host [DOMAINS] --php VERSION | --static",
 		Short: i18n.T("Restore archived host(s) to the running server."),
 		Long: i18n.T(`Restore archived host(s) to the running server.
 
 This command allows you to restore previously removed domains from the archive.
-Use --list to see all available archived hosts.
+Use --list to see all available archived hosts. Restore PHP domains with
+--php and the version to serve them with, static hosts with --static.
 
 Examples:
     frankenmanager restore-host --list
-    frankenmanager restore-host "myapp.test"
-    frankenmanager restore-host "app1.test" --php 8.5`),
+    frankenmanager restore-host "myapp.test" --php 8.4
+    frankenmanager restore-host "front.test" --static`),
 		Args: maxArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if list {
@@ -108,6 +109,12 @@ Examples:
 				a.con.Println(a.con.Color(ui.Yellow, i18n.T("Specify domains to restore or use --list to see archived hosts.")))
 				return exitError(1)
 			}
+			if static == cmd.Flags().Changed("php") {
+				return usageError{i18n.NewError("Restore the host(s) as PHP domains (--php VERSION) or as static hosts (--static).")}
+			}
+			if static {
+				return a.restoreStatic(cmd.Context(), strings.Fields(args[0]), forceSSL)
+			}
 			return a.restoreHost(cmd.Context(), strings.Fields(args[0]), forceSSL, php)
 		},
 	}
@@ -115,6 +122,7 @@ Examples:
 	f.BoolVarP(&list, "list", "l", false, i18n.T("List all archived hosts"))
 	f.BoolVar(&forceSSL, "force-ssl", false, i18n.T("Force SSL certificate regeneration"))
 	f.StringVar(&php, "php", "", phpVersionUsage())
+	f.BoolVar(&static, "static", false, i18n.T("Restore static hosts"))
 	return cmd
 }
 
@@ -139,14 +147,18 @@ func (a *app) listArchived() error {
 		return nil
 	}
 	t := ui.Table{Title: i18n.T("Archived Hosts"), Columns: []ui.Column{
-		{Header: i18n.T("Domain"), Color: ui.Cyan}, {Header: "Caddyfile", Faint: true},
+		{Header: i18n.T("Domain"), Color: ui.Cyan}, {Header: i18n.T("Type")}, {Header: "Caddyfile", Faint: true},
 	}}
 	for _, item := range archived {
-		t.Rows = append(t.Rows, []string{item.FullDomain, item.SimpleDomain + "_Caddyfile"})
+		kind := i18n.T("static")
+		if item.Kind == caddyfile.ArchivedPHP {
+			kind = "PHP " + item.PHPVersion
+		}
+		t.Rows = append(t.Rows, []string{item.FullDomain, kind, item.SimpleDomain + "_Caddyfile"})
 	}
 	a.con.PrintTable(t)
 	a.log.Info("\n" + i18n.Tf("Archive directory: %s", g.ArchiveDir()))
-	a.log.Info(i18n.T(`Use 'frankenmanager restore-host "domain.test"' to restore a host.`))
+	a.log.Info(i18n.T(`Use 'frankenmanager restore-host "domain.test" --php VERSION' (or --static) to restore a host.`))
 	return nil
 }
 
@@ -158,7 +170,7 @@ func (a *app) restoreHost(ctx context.Context, names []string, forceSSL bool, ph
 		return err
 	}
 	var res domains.PHPResult
-	err = a.runOp(ctx, dir, http.MethodPost, "/api/hosts/restore",
+	err = a.runOp(ctx, dir, http.MethodPost, "/api/v1/hosts/restore",
 		map[string]any{"domains": names, "php": php, "force_ssl": forceSSL}, &res)
 	if err != nil || len(res.Domains) == 0 {
 		return reported(err)
@@ -168,6 +180,28 @@ func (a *app) restoreHost(ctx context.Context, names []string, forceSSL bool, ph
 	a.log.Info(i18n.T("Restored domains:"))
 	for _, domain := range res.Domains {
 		a.log.Info(fmt.Sprintf("  - https://%s (PHP %s)", domain, res.PHP))
+	}
+	return nil
+}
+
+// restoreStatic brings archived static hosts back, with the root and
+// fallback of their site file.
+func (a *app) restoreStatic(ctx context.Context, names []string, forceSSL bool) error {
+	dir, _, err := a.prepare()
+	if err != nil {
+		return err
+	}
+	var res domains.StaticResult
+	err = a.runOp(ctx, dir, http.MethodPost, "/api/v1/hosts/restore",
+		map[string]any{"domains": names, "static": true, "force_ssl": forceSSL}, &res)
+	if err != nil || len(res.Hosts) == 0 {
+		return reported(err)
+	}
+	a.con.Println()
+	a.log.Success(i18n.T("Host(s) restored successfully!"))
+	a.log.Info(i18n.T("Restored domains:"))
+	for _, h := range res.Hosts {
+		a.log.Info(fmt.Sprintf("  - https://%s (%s)", h.Domain, i18n.T("static")))
 	}
 	return nil
 }
@@ -203,7 +237,7 @@ func (a *app) switchPHP(ctx context.Context, domain, php string) error {
 		return err
 	}
 	var res domains.SwitchResult
-	err = a.runOp(ctx, dir, http.MethodPut, "/api/hosts/"+url.PathEscape(domain)+"/php", map[string]any{"php": php}, &res)
+	err = a.runOp(ctx, dir, http.MethodPut, "/api/v1/hosts/"+url.PathEscape(domain)+"/php", map[string]any{"php": php}, &res)
 	if err != nil || !res.Switched {
 		return reported(err)
 	}

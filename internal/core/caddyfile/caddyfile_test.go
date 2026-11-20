@@ -226,7 +226,9 @@ func TestMoveArchiveRestore(t *testing.T) {
 		}
 	}
 
-	write(t, filepath.Join(sites, "archive", "my.app_Caddyfile"), "older archive")
+	write(t, filepath.Join(sites, "archive", "php-8.4", "my.app_Caddyfile"), "older archive")
+	// Left at the root by earlier releases: neither listed nor restored
+	write(t, filepath.Join(sites, "archive", "blog_Caddyfile"), "http://legacy.test {\n}\n")
 	if err := g.Archive([]string{"my.app.test", "blog.test", "none.test"}); err != nil {
 		t.Fatal(err)
 	}
@@ -234,8 +236,9 @@ func TestMoveArchiveRestore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Only the _Caddyfile suffix is cut: "my.app", not "my"
-	want := []Archived{{"blog", "blog.test"}, {"my.app", "my.app.test"}}
+	// In the directory of their version; only the _Caddyfile suffix is
+	// cut: "my.app", not "my"
+	want := []Archived{{"blog", "blog.test", ArchivedPHP, "8.4"}, {"my.app", "my.app.test", ArchivedPHP, "8.4"}}
 	if !slices.Equal(archived, want) {
 		t.Errorf("archived = %v", archived)
 	}
@@ -249,6 +252,9 @@ func TestMoveArchiveRestore(t *testing.T) {
 	}
 	if read(t, filepath.Join(sites, "php-8.5", "my.app_Caddyfile")) != "http://my.app.test {\n}\n" {
 		t.Error("archive not replaced on archive")
+	}
+	if !exists(filepath.Join(sites, "archive", "blog_Caddyfile")) {
+		t.Error("the archive of an earlier release was touched")
 	}
 
 	want2 := []string{
@@ -380,5 +386,59 @@ func TestGenerateForVersionRoot(t *testing.T) {
 	}
 	if read(t, path) != got || !strings.HasPrefix(log.lines[len(log.lines)-2], "warning: ") {
 		t.Errorf("existing site file changed or no warning: %v", log.lines)
+	}
+}
+
+// A static host comes back with the root and fallback of its site file.
+func TestRestoreStatic(t *testing.T) {
+	caddyDir := t.TempDir()
+	g := New(caddyDir, caddyDir, &memLog{})
+	hosts := []store.StaticHost{{Domain: "front.test", Root: "front/dist", SPA: true}, {Domain: "site.test", Root: "."}}
+	if err := g.GenerateStatic(hosts); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.ArchiveStatic([]string{"front.test", "site.test"}); err != nil {
+		t.Fatal(err)
+	}
+	archived, err := g.ListArchived()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []Archived{{"front", "front.test", ArchivedStatic, ""}, {"site", "site.test", ArchivedStatic, ""}}; !slices.Equal(archived, want) {
+		t.Errorf("archived = %v", archived)
+	}
+	if peek := g.ArchivedStatic([]string{"front.test"}); !slices.Equal(peek, hosts[:1]) || !exists(filepath.Join(g.StaticArchiveDir(), "front_Caddyfile")) {
+		t.Errorf("peek = %v, or the file moved", peek)
+	}
+	restored, err := g.RestoreStatic([]string{"front.test", "site", "none.test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(restored, hosts) {
+		t.Errorf("restored = %v", restored)
+	}
+	if !exists(filepath.Join(g.StaticDir(), "front_Caddyfile")) || exists(filepath.Join(g.StaticArchiveDir(), "front_Caddyfile")) {
+		t.Error("site file not moved back")
+	}
+}
+
+// A proxy host refusing WebSocket answers the upgrade requests 403; the
+// others forward them (Caddy does by default).
+func TestWriteMainNoWebsocket(t *testing.T) {
+	caddyDir := t.TempDir()
+	err := WriteMain(caddyDir, Main{Proxies: []store.Proxy{
+		{Domain: "api.test", Target: "127.0.0.1:8006", NoWebsocket: true}, {Domain: "ws.test", Target: "127.0.0.1:7000"},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := read(t, filepath.Join(caddyDir, MainName))
+	want := "api.test {\n" +
+		"\ttls /certs/api.test.pem /certs/api.test-key.pem\n" +
+		"\t@websocket {\n\t\theader Connection *Upgrade*\n\t\theader Upgrade websocket\n\t}\n" +
+		"\trespond @websocket \"WebSocket connections are disabled for this host\" 403\n" +
+		"\treverse_proxy 127.0.0.1:8006\n"
+	if !strings.Contains(got, want) || strings.Count(got, "@websocket {") != 1 {
+		t.Errorf("got:\n%s", got)
 	}
 }

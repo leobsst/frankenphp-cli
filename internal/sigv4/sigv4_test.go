@@ -83,3 +83,24 @@ func TestVerifyRejectsUnsignedACLHeaders(t *testing.T) {
 		t.Error("unsigned x-amz-acl accepted")
 	}
 }
+
+// A presigned URL is accepted by Verify (the gateway) until it expires,
+// for its object only.
+func TestPresignThenVerify(t *testing.T) {
+	now := time.Now()
+	uri := "/" + EncodePath("media/dir/a b.txt")
+	q := Presign(example, http.MethodGet, "s3.frankenmanager.test", uri, time.Hour, now)
+	req, _ := http.NewRequest(http.MethodGet, "https://s3.frankenmanager.test"+uri+"?"+q, nil)
+	req.Host = "s3.frankenmanager.test"
+	if _, err := Verify(req, nil, "us-east-1", secretOf, now.Add(30*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Verify(req, nil, "us-east-1", secretOf, now.Add(2*time.Hour)); err == nil {
+		t.Error("expired URL accepted")
+	}
+	other, _ := http.NewRequest(http.MethodGet, "https://s3.frankenmanager.test/media/other.txt?"+q, nil)
+	other.Host = req.Host
+	if _, err := Verify(other, nil, "us-east-1", secretOf, now); err == nil {
+		t.Error("URL accepted for another object")
+	}
+}

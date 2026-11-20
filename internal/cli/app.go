@@ -83,6 +83,8 @@ type Deps struct {
 	// Language returns the system language (a locale name, "fr_FR.UTF-8"),
 	// for the CLI_LANGUAGE "auto" setting.
 	Language func() string
+	// ReadPassword reads a password without showing it.
+	ReadPassword func() (string, error)
 }
 
 func (d Deps) withDefaults() Deps {
@@ -133,6 +135,9 @@ func (d Deps) withDefaults() Deps {
 	}
 	if d.Language == nil {
 		d.Language = i18n.System
+	}
+	if d.ReadPassword == nil {
+		d.ReadPassword = platform.ReadPassword
 	}
 	if d.DaemonService == nil {
 		d.DaemonService = daemonService

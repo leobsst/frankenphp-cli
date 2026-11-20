@@ -65,7 +65,7 @@ type Error struct {
 
 func (e *Error) Error() string { return e.Message }
 
-// Do sends a request to path (e.g. "/api/status") with body as JSON (nil:
+// Do sends a request to path (e.g. "/api/v1/status") with body as JSON (nil:
 // none) and decodes the answer into out (nil: ignored).
 func (c *Client) Do(ctx context.Context, method, path string, body, out any) error {
 	var reader io.Reader
@@ -309,7 +309,7 @@ func (c *Client) RunWithEvents(ctx context.Context, method, path string, body, o
 			return ctx.Err()
 		case <-time.After(50 * time.Millisecond):
 		}
-		if err := c.Do(ctx, http.MethodGet, "/api/operations/"+op.ID, nil, &op); err != nil {
+		if err := c.Do(ctx, http.MethodGet, "/api/v1/operations/"+op.ID, nil, &op); err != nil {
 			return err
 		}
 	}

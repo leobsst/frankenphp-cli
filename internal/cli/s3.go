@@ -269,7 +269,7 @@ func (a *app) s3CreateBuckets(ctx context.Context, names []string, public bool) 
 	if err != nil {
 		return err
 	}
-	return reported(a.runOp(ctx, dir, http.MethodPost, "/api/s3/buckets", map[string]any{"names": names, "public": public}, nil))
+	return reported(a.runOp(ctx, dir, http.MethodPost, "/api/v1/s3/buckets", map[string]any{"names": names, "public": public}, nil))
 }
 
 func (a *app) s3DeleteBuckets(ctx context.Context, names []string, force bool) error {
@@ -277,7 +277,7 @@ func (a *app) s3DeleteBuckets(ctx context.Context, names []string, force bool) e
 	if err != nil {
 		return err
 	}
-	return reported(a.runOp(ctx, dir, http.MethodPost, "/api/s3/buckets/delete", map[string]any{"names": names, "force": force}, nil))
+	return reported(a.runOp(ctx, dir, http.MethodPost, "/api/v1/s3/buckets/delete", map[string]any{"names": names, "force": force}, nil))
 }
 
 func (a *app) s3EmptyBuckets(ctx context.Context, names []string, yes bool) (err error) {
@@ -306,7 +306,7 @@ func (a *app) s3EmptyBuckets(ctx context.Context, names []string, yes bool) (err
 			return nil
 		}
 	}
-	return reported(a.runOp(ctx, x.svc.Dir, http.MethodPost, "/api/s3/buckets/empty", map[string]any{"names": names}, nil))
+	return reported(a.runOp(ctx, x.svc.Dir, http.MethodPost, "/api/v1/s3/buckets/empty", map[string]any{"names": names}, nil))
 }
 
 func (a *app) s3SetPublic(ctx context.Context, names []string, public bool) error {
@@ -314,7 +314,7 @@ func (a *app) s3SetPublic(ctx context.Context, names []string, public bool) erro
 	if err != nil {
 		return err
 	}
-	return reported(a.runOp(ctx, dir, http.MethodPost, "/api/s3/buckets/public", map[string]any{"names": names, "public": public}, nil))
+	return reported(a.runOp(ctx, dir, http.MethodPost, "/api/v1/s3/buckets/public", map[string]any{"names": names, "public": public}, nil))
 }
 
 func newS3KeyCmd(a *app) *cobra.Command {
@@ -390,7 +390,7 @@ func (a *app) s3CreateKey(ctx context.Context, bucket, label string, readOnly bo
 			Owner bool `json:"owner"`
 		} `json:"grants"`
 	}
-	err = a.runOp(ctx, dir, http.MethodPost, "/api/s3/keys", map[string]any{"bucket": bucket, "name": label, "read_only": readOnly}, &k)
+	err = a.runOp(ctx, dir, http.MethodPost, "/api/v1/s3/keys", map[string]any{"bucket": bucket, "name": label, "read_only": readOnly}, &k)
 	if err != nil {
 		return reported(err)
 	}
@@ -464,7 +464,7 @@ func (a *app) s3DeleteKeys(ctx context.Context, ids []string) error {
 	if err != nil {
 		return err
 	}
-	return reported(a.runOp(ctx, dir, http.MethodPost, "/api/s3/keys/delete", map[string]any{"ids": ids}, nil))
+	return reported(a.runOp(ctx, dir, http.MethodPost, "/api/v1/s3/keys/delete", map[string]any{"ids": ids}, nil))
 }
 
 // passthrough reads the arguments of a command without flag parsing:

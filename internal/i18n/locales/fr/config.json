@@ -120,5 +120,14 @@
   "Invalid domain name: %s": "Nom de domaine invalide : %s",
   "Invalid proxy target: %s": "Cible de proxy invalide : %s",
   "Directory does not exist: %s": "Le répertoire n'existe pas : %s",
-  "Invalid root: %s (a path relative to the project path, without '..')": "Racine invalide : %s (un chemin relatif au chemin des projets, sans « .. »)"
+  "Invalid root: %s (a path relative to the project path, without '..')": "Racine invalide : %s (un chemin relatif au chemin des projets, sans « .. »)",
+  "at least %d characters": "au moins %d caractères",
+  "%v (IPv4, IPv6 or CIDR, comma-separated)": "%v (IPv4, IPv6 ou CIDR, séparés par des virgules)",
+  "Who reaches the dashboard: local (this machine), lan (also the local networks) or internet (also any address); lan and internet need DASHBOARD_PASSWORD": "Qui accède au dashboard : local (cette machine), lan (aussi les réseaux locaux) ou internet (aussi toute adresse) ; lan et internet exigent DASHBOARD_PASSWORD",
+  "HTTPS port of the remote access to the dashboard (lan, internet)": "Port HTTPS de l'accès distant au dashboard (lan, internet)",
+  "Password of the dashboard (stored hashed), required for the remote access": "Mot de passe du dashboard (stocké haché), obligatoire pour l'accès distant",
+  "Addresses allowed to reach the dashboard remotely (IPv4, IPv6, CIDR, comma-separated); empty allows every address": "Adresses autorisées à accéder au dashboard à distance (IPv4, IPv6, CIDR, séparés par des virgules) ; vide autorise toutes les adresses",
+  "Require the dashboard password on this machine too": "Exiger le mot de passe du dashboard sur cette machine aussi",
+  "Certificate (PEM file) of the remote access; generated with mkcert when empty": "Certificat (fichier PEM) de l'accès distant ; généré avec mkcert s'il est vide",
+  "Private key (PEM file) of DASHBOARD_TLS_CERT": "Clé privée (fichier PEM) de DASHBOARD_TLS_CERT"
 }

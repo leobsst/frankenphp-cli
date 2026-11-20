@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/leobsst/frankenphp-cli/internal/core/access"
 	"github.com/leobsst/frankenphp-cli/internal/core/phpversions"
 	"github.com/leobsst/frankenphp-cli/internal/core/s3"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
@@ -34,6 +35,8 @@ const (
 	ApplyRestartDNS
 	// ApplyRestartDB: the root passwords are synced by restart --database.
 	ApplyRestartDB
+	// ApplyDaemon: the daemon applies it at once (access to the dashboard).
+	ApplyDaemon
 )
 
 // Hint returns the command applying a change on a running server, "" when
@@ -57,7 +60,7 @@ func (a Apply) Label() string {
 	switch a {
 	case ApplyLive:
 		return i18n.T("live")
-	case ApplyAlias:
+	case ApplyAlias, ApplyDaemon:
 		return i18n.T("immediate")
 	case ApplyRecreate:
 		return "stop/start"
@@ -156,6 +159,27 @@ const DashboardPortKey = "DASHBOARD_PORT"
 // OS service manager (started at login), or started on demand only.
 const DaemonAutostartKey = "DAEMON_AUTOSTART"
 
+// The keys of the access to the dashboard, applied by the daemon at once.
+const (
+	// DashboardAccessKey is local, lan or internet (see access.Modes).
+	DashboardAccessKey = "DASHBOARD_ACCESS"
+	// DashboardRemotePortKey is the HTTPS port of the remote access.
+	DashboardRemotePortKey = "DASHBOARD_REMOTE_PORT"
+	// DashboardPasswordKey holds the hash of the dashboard password.
+	DashboardPasswordKey = "DASHBOARD_PASSWORD"
+	// DashboardAllowedIPsKey lists the addresses allowed remotely.
+	DashboardAllowedIPsKey = "DASHBOARD_ALLOWED_IPS"
+	// DashboardLocalAuthKey requires the password on the host too.
+	DashboardLocalAuthKey = "DASHBOARD_LOCAL_AUTH"
+	// DashboardTLSCertKey and DashboardTLSKeyKey are the certificate of the
+	// remote access, generated with mkcert when empty.
+	DashboardTLSCertKey = "DASHBOARD_TLS_CERT"
+	DashboardTLSKeyKey  = "DASHBOARD_TLS_KEY"
+	// DefaultDashboardRemotePort is the default HTTPS port of the remote
+	// access.
+	DefaultDashboardRemotePort = "9443"
+)
+
 // DefaultDashboardPort is the default port of the dashboard API.
 const DefaultDashboardPort = "9081"
 
@@ -168,6 +192,22 @@ const DefaultAlias = "fkm"
 var booleans = []string{"true", "false"}
 
 func static(v string) func() string { return func() string { return v } }
+
+// validateDashboardPassword accepts a stored hash or a password long
+// enough (hashed when set, see settings.Set).
+func validateDashboardPassword(v string) error {
+	if v == "" || access.IsHash(v) || len([]rune(v)) >= access.MinPasswordLength {
+		return nil
+	}
+	return i18n.Errorf("at least %d characters", access.MinPasswordLength)
+}
+
+func validateAllowList(v string) error {
+	if _, err := access.ParseAllowList(v); err != nil {
+		return i18n.Errorf("%v (IPv4, IPv6 or CIDR, comma-separated)", err)
+	}
+	return nil
+}
 
 func validatePort(v string) error {
 	n, err := strconv.Atoi(v)
@@ -298,6 +338,20 @@ func buildDefinitions() []Definition {
 		{Key: "PGADMIN_PORT", Description: i18n.N("pgAdmin port (dev only)"), Default: static("8081"), Validate: validatePort, Apply: ApplyRecreate},
 		{Key: DashboardPortKey, Description: i18n.N("Port of the dashboard API (frankenmanager daemon), on 127.0.0.1"),
 			Default: static(DefaultDashboardPort), Validate: validatePort, Apply: ApplyNow},
+		{Key: DashboardAccessKey, Description: i18n.N("Who reaches the dashboard: local (this machine), lan (also the local networks) or internet (also any address); lan and internet need DASHBOARD_PASSWORD"),
+			Default: static(access.Local), Values: access.Modes, Apply: ApplyDaemon},
+		{Key: DashboardRemotePortKey, Description: i18n.N("HTTPS port of the remote access to the dashboard (lan, internet)"),
+			Default: static(DefaultDashboardRemotePort), Validate: validatePort, Apply: ApplyDaemon},
+		{Key: DashboardPasswordKey, Description: i18n.N("Password of the dashboard (stored hashed), required for the remote access"),
+			Validate: validateDashboardPassword, Secret: true, Apply: ApplyDaemon},
+		{Key: DashboardAllowedIPsKey, Description: i18n.N("Addresses allowed to reach the dashboard remotely (IPv4, IPv6, CIDR, comma-separated); empty allows every address"),
+			Validate: validateAllowList, Apply: ApplyDaemon},
+		{Key: DashboardLocalAuthKey, Description: i18n.N("Require the dashboard password on this machine too"),
+			Default: static("false"), Values: booleans, Apply: ApplyDaemon},
+		{Key: DashboardTLSCertKey, Description: i18n.N("Certificate (PEM file) of the remote access; generated with mkcert when empty"),
+			Apply: ApplyDaemon},
+		{Key: DashboardTLSKeyKey, Description: i18n.N("Private key (PEM file) of DASHBOARD_TLS_CERT"),
+			Apply: ApplyDaemon},
 		{Key: DaemonAutostartKey, Description: i18n.N("Run the daemon (dashboard API, LAN DNS server) at login, through the OS service manager"),
 			Default: static("true"), Values: booleans, Apply: ApplyNow},
 

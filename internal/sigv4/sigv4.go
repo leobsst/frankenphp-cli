@@ -296,3 +296,23 @@ func Anonymous(r *http.Request) bool {
 	q := r.URL.Query()
 	return q.Get("X-Amz-Signature") == "" && q.Get("X-Amz-Credential") == ""
 }
+
+// Presign returns the query string (without "?") of a presigned request:
+// method on scheme://host uri (canonical, see EncodePath) valid for
+// expires, only the host header signed. Anyone holding the URL can send
+// that request until it expires.
+func Presign(c Credentials, method, host, uri string, expires time.Duration, now time.Time) string {
+	now = now.UTC()
+	amzDate, day := now.Format(dateFormat), now.Format("20060102")
+	scope := day + "/" + c.Region + "/s3/aws4_request"
+	q := url.Values{
+		"X-Amz-Algorithm":     {algorithm},
+		"X-Amz-Credential":    {c.AccessKey + "/" + scope},
+		"X-Amz-Date":          {amzDate},
+		"X-Amz-Expires":       {strconv.Itoa(int(expires.Seconds()))},
+		"X-Amz-SignedHeaders": {"host"},
+	}
+	canonical := strings.Join([]string{method, uri, CanonicalQuery(q), "host:" + host + "\n", "host", UnsignedPayload}, "\n")
+	q.Set("X-Amz-Signature", signatureOf(c.SecretKey, day, c.Region, amzDate, scope, canonical))
+	return CanonicalQuery(q)
+}

@@ -296,13 +296,19 @@ func (s *Service) AddPHP(ctx context.Context, domains []string, php, root string
 
 // ProxyResult is what AddProxy did.
 type ProxyResult struct {
-	Domains []string `json:"domains"` // empty when nothing was done
-	Target  string   `json:"target"`
+	Domains   []string `json:"domains"` // empty when nothing was done
+	Target    string   `json:"target"`
+	Websocket bool     `json:"websocket"`
 }
 
 // AddProxy adds domains forwarding to a raw upstream: certificate, hosts
 // entry and main Caddyfile only, no PHP container.
 func (s *Service) AddProxy(ctx context.Context, domains []string, target string, forceSSL bool) (ProxyResult, error) {
+	return s.AddProxyWebsocket(ctx, domains, target, true, forceSSL)
+}
+
+// AddProxyWebsocket is AddProxy allowing the WebSocket connections or not.
+func (s *Service) AddProxyWebsocket(ctx context.Context, domains []string, target string, websocket, forceSSL bool) (ProxyResult, error) {
 	added, err := s.newHosts(domains)
 	if err != nil {
 		return ProxyResult{}, err
@@ -334,6 +340,13 @@ func (s *Service) AddProxy(ctx context.Context, domains []string, target string,
 		if err := s.Store.AddProxies(added, target); err != nil {
 			return err
 		}
+		if !websocket {
+			for _, d := range added {
+				if _, err := s.Store.SetProxyWebsocket(d, false); err != nil {
+					return err
+				}
+			}
+		}
 		if err := s.writeMain(); err != nil {
 			return err
 		}
@@ -347,7 +360,7 @@ func (s *Service) AddProxy(ctx context.Context, domains []string, target string,
 		return ProxyResult{}, c.fail(ctx, err, i18n.T("The proxy host(s) were not added."),
 			func() { _ = s.Store.RemoveProxies(added) })
 	}
-	return ProxyResult{Domains: added, Target: target}, nil
+	return ProxyResult{Domains: added, Target: target, Websocket: websocket}, nil
 }
 
 // StaticResult is what AddStatic did.
@@ -401,6 +414,25 @@ func (s *Service) AddStatic(ctx context.Context, domains []string, root string, 
 		}
 	}
 
+	g := s.generator(s.Log)
+	s.Log.Info(i18n.Tf("Adding %d new static host(s)...", len(added)))
+	return s.serveStatics(ctx, statics, customPath, forceSSL, i18n.T("The static host(s) were not added."),
+		func() error {
+			s.Log.Step(i18n.T("Generating Caddyfiles..."))
+			return g.GenerateStatic(statics)
+		},
+		func() { _ = s.generator(events.NewLog(nil)).ArchiveStatic(added) })
+}
+
+// serveStatics registers static hosts whose site files write creates, then
+// generates their certificates and hosts entries, and has the reverse proxy
+// serve them. On failure, undo puts the site files back where they were.
+func (s *Service) serveStatics(ctx context.Context, statics []store.StaticHost, customPath string, forceSSL bool,
+	failed string, write func() error, undo func()) (StaticResult, error) {
+	names := make([]string, len(statics))
+	for i, h := range statics {
+		names[i] = h.Domain
+	}
 	certs, err := s.Certs()
 	if err != nil {
 		return StaticResult{}, err
@@ -414,19 +446,17 @@ func (s *Service) AddStatic(ctx context.Context, domains []string, root string, 
 	c := &cleanup{s: s}
 	g := s.generator(s.Log)
 	err = func() error {
-		s.Log.Info(i18n.Tf("Adding %d new static host(s)...", len(added)))
 		s.Log.Step(i18n.T("Generating SSL certificates..."))
-		if err := certs.GenerateAll(ctx, added, forceSSL, s.Env.IsProduction()); err != nil {
+		if err := certs.GenerateAll(ctx, names, forceSSL, s.Env.IsProduction()); err != nil {
 			return err
 		}
 		s.Log.Step(i18n.T("Adding hosts entries..."))
-		for _, domain := range added {
+		for _, domain := range names {
 			if err := c.add(ctx, domain); err != nil {
 				return err
 			}
 		}
-		s.Log.Step(i18n.T("Generating Caddyfiles..."))
-		if err := g.GenerateStatic(statics); err != nil {
+		if err := write(); err != nil {
 			return err
 		}
 		if err := s.Store.AddStaticHosts(statics); err != nil {
@@ -449,9 +479,9 @@ func (s *Service) AddStatic(ctx context.Context, domains []string, root string, 
 		return nil
 	}()
 	if err != nil {
-		return StaticResult{}, c.fail(ctx, err, i18n.T("The static host(s) were not added."), func() {
-			_ = s.Store.RemoveStaticHosts(added)
-			_ = s.generator(events.NewLog(nil)).ArchiveStatic(added)
+		return StaticResult{}, c.fail(ctx, err, failed, func() {
+			_ = s.Store.RemoveStaticHosts(names)
+			undo()
 			_ = s.writeMain()
 		})
 	}

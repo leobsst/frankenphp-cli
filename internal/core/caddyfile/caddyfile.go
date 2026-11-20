@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/leobsst/frankenphp-cli/internal/core/phpversions"
 	"github.com/leobsst/frankenphp-cli/internal/core/s3"
@@ -253,12 +254,10 @@ func (g *Generator) MoveToVersion(domain, fromVersion, toVersion string) error {
 	return nil
 }
 
-// Archive moves the site files of domains to sites/archive/, replacing
-// older archives. Each file is searched in the PHP version directories.
+// Archive moves the site files of domains to sites/archive/php-<v>/, v
+// being the PHP version directory they were found in, replacing older
+// archives.
 func (g *Generator) Archive(domains []string) error {
-	if err := os.MkdirAll(g.ArchiveDir(), dirMode); err != nil {
-		return err
-	}
 	versionDirs, err := filepath.Glob(filepath.Join(g.SitesDir, "php-*"))
 	if err != nil {
 		return err
@@ -276,7 +275,11 @@ func (g *Generator) Archive(domains []string) error {
 			g.Log.Warning(i18n.Tf("Caddyfile for %s not found, skipping archive", domain))
 			continue
 		}
-		if err := replace(src, filepath.Join(g.ArchiveDir(), name)); err != nil {
+		dst := filepath.Join(g.ArchiveDir(), filepath.Base(filepath.Dir(src)))
+		if err := os.MkdirAll(dst, dirMode); err != nil {
+			return err
+		}
+		if err := replace(src, filepath.Join(dst, name)); err != nil {
 			return err
 		}
 		g.Log.Info(i18n.Tf("Archived %s", name))
@@ -284,34 +287,64 @@ func (g *Generator) Archive(domains []string) error {
 	return nil
 }
 
-// Archived is a site file waiting in sites/archive/.
+// Archived kinds.
+const (
+	ArchivedPHP    = "php"
+	ArchivedStatic = "static"
+)
+
+// Archived is a site file waiting in sites/archive/php-<v>/ or
+// sites/archive/static/.
 type Archived struct {
 	SimpleDomain string
 	FullDomain   string // read from the file, <simple>.test when unreadable
+	Kind         string // ArchivedPHP or ArchivedStatic
+	PHPVersion   string // the version it was served with, PHP only
 }
 
-// ListArchived returns the archived site files, sorted by name.
+// ListArchived returns the archived site files, PHP ones first (by
+// version, then name), then static ones. The files left at the root of
+// sites/archive/ by earlier releases are not listed.
 //
 // The simple domain is the file name without the _Caddyfile suffix only:
 // "my.app_Caddyfile" gives "my.app", not "my".
 func (g *Generator) ListArchived() ([]Archived, error) {
-	files, err := filepath.Glob(filepath.Join(g.ArchiveDir(), "*"+suffix))
+	php, err := filepath.Glob(filepath.Join(g.ArchiveDir(), "php-*", "*"+suffix))
 	if err != nil {
 		return nil, err
 	}
-	archived := make([]Archived, 0, len(files))
-	for _, f := range files {
-		simple := strings.TrimSuffix(filepath.Base(f), suffix)
-		full := extractDomain(f)
-		if full == "" {
-			full = simple + ".test"
+	static, err := filepath.Glob(filepath.Join(g.StaticArchiveDir(), "*"+suffix))
+	if err != nil {
+		return nil, err
+	}
+	archived := make([]Archived, 0, len(php)+len(static))
+	for _, f := range append(php, static...) {
+		a := Archived{SimpleDomain: strings.TrimSuffix(filepath.Base(f), suffix), Kind: ArchivedStatic}
+		if dir := filepath.Base(filepath.Dir(f)); dir != StaticDirName {
+			a.Kind, a.PHPVersion = ArchivedPHP, strings.TrimPrefix(dir, "php-")
 		}
-		archived = append(archived, Archived{SimpleDomain: simple, FullDomain: full})
+		if a.FullDomain = extractDomain(f); a.FullDomain == "" {
+			a.FullDomain = a.SimpleDomain + ".test"
+		}
+		archived = append(archived, a)
 	}
 	return archived, nil
 }
 
-// RestoreToVersion moves the archived site files of domains (full or
+// archivedPHP returns the archived PHP site file of a simple domain, the
+// most recent one when several versions keep one, "" when none.
+func (g *Generator) archivedPHP(simple string) string {
+	files, _ := filepath.Glob(filepath.Join(g.ArchiveDir(), "php-*", simple+suffix))
+	best, bestTime := "", time.Time{}
+	for _, f := range files {
+		if info, err := os.Stat(f); err == nil && (best == "" || info.ModTime().After(bestTime)) {
+			best, bestTime = f, info.ModTime()
+		}
+	}
+	return best
+}
+
+// RestoreToVersion moves the archived PHP site files of domains (full or
 // simple names) to sites/php-<phpVersion>/, replacing the target, and
 // returns the full domains restored.
 func (g *Generator) RestoreToVersion(domains []string, phpVersion string) ([]string, error) {
@@ -322,8 +355,8 @@ func (g *Generator) RestoreToVersion(domains []string, phpVersion string) ([]str
 	var restored []string
 	for _, domain := range domains {
 		simple := SimpleDomain(domain)
-		src := filepath.Join(g.ArchiveDir(), simple+suffix)
-		if !exists(src) {
+		src := g.archivedPHP(simple)
+		if src == "" {
 			g.Log.Warning(i18n.Tf("Archived Caddyfile for '%s' not found, skipping", domain))
 			continue
 		}
@@ -336,6 +369,66 @@ func (g *Generator) RestoreToVersion(domains []string, phpVersion string) ([]str
 		}
 		g.Log.Info(i18n.Tf("Restored %s%s (PHP %s)", simple, suffix, phpVersion))
 		restored = append(restored, full)
+	}
+	return restored, nil
+}
+
+var (
+	// staticRoot matches the root of a static site file.
+	staticRoot = regexp.MustCompile(`(?m)^[ \t]*root \* /\{\$CUSTOM_PATH\}/(.*?)/?[ \t]*$`)
+	// staticSPA matches the active fallback of a single-page app.
+	staticSPA = regexp.MustCompile(`(?m)^[ \t]*try_files \{path\} /index\.html`)
+)
+
+// ArchivedStatic returns the static hosts of the archived static site files
+// of domains (full or simple names), root and fallback read from their
+// file, warning about the missing ones.
+func (g *Generator) ArchivedStatic(domains []string) []store.StaticHost {
+	hosts, _ := g.restoreStatic(domains, false)
+	return hosts
+}
+
+// RestoreStatic moves the archived static site files of domains (full or
+// simple names) back to sites/static/, replacing the target, and returns
+// the static hosts restored: root and fallback read from their file.
+func (g *Generator) RestoreStatic(domains []string) ([]store.StaticHost, error) {
+	return g.restoreStatic(domains, true)
+}
+
+func (g *Generator) restoreStatic(domains []string, move bool) ([]store.StaticHost, error) {
+	if move {
+		if err := os.MkdirAll(g.StaticDir(), dirMode); err != nil {
+			return nil, err
+		}
+	}
+	var restored []store.StaticHost
+	for _, domain := range domains {
+		simple := SimpleDomain(domain)
+		src := filepath.Join(g.StaticArchiveDir(), simple+suffix)
+		data, err := os.ReadFile(src)
+		if err != nil {
+			if !move {
+				g.Log.Warning(i18n.Tf("Archived Caddyfile for '%s' not found, skipping", domain))
+			}
+			continue
+		}
+		h := store.StaticHost{Domain: extractDomain(src), SPA: staticSPA.Match(data)}
+		if h.Domain == "" {
+			h.Domain = simple + ".test"
+		}
+		if m := staticRoot.FindSubmatch(data); m != nil {
+			h.Root = string(m[1])
+		}
+		if h.Root == "" {
+			h.Root = "."
+		}
+		if move {
+			if err := replace(src, filepath.Join(g.StaticDir(), simple+suffix)); err != nil {
+				return restored, err
+			}
+			g.Log.Info(i18n.Tf("Restored %s%s (static)", simple, suffix))
+		}
+		restored = append(restored, h)
 	}
 	return restored, nil
 }
@@ -564,7 +657,11 @@ func WriteMain(caddyDir string, m Main) error {
 		registered[a.Alias] = true
 	}
 	for _, p := range m.Proxies {
-		lines = append(lines, rawProxyBlock(p.Domain, p.Target)...)
+		if p.NoWebsocket {
+			lines = append(lines, noWebsocketBlock(p.Domain, p.Target)...)
+		} else {
+			lines = append(lines, rawProxyBlock(p.Domain, p.Target)...)
+		}
 		registered[p.Domain] = true
 	}
 
@@ -641,6 +738,20 @@ func rawProxyBlock(domain, target string, directives ...string) []string {
 	return siteBlock(domain, append(proxy, "\t}")...)
 }
 
+// noWebsocketBlock forwards domain to target, refusing the WebSocket
+// connections (an Upgrade request answers 403). Caddy forwards them
+// otherwise.
+func noWebsocketBlock(domain, target string) []string {
+	return siteBlock(domain,
+		"\t@websocket {",
+		"\t\theader Connection *Upgrade*",
+		"\t\theader Upgrade websocket",
+		"\t}",
+		"\trespond @websocket \"WebSocket connections are disabled for this host\" 403",
+		"\treverse_proxy "+target,
+	)
+}
+
 func siteBlock(domain string, proxy ...string) []string {
 	lines := []string{
 		domain + " {",
@@ -659,4 +770,40 @@ func siteBlock(domain string, proxy ...string) []string {
 		"}",
 		"",
 	)
+}
+
+// SitePath returns the site file of a PHP domain (phpVersion set) or of a
+// static host.
+func (g *Generator) SitePath(domain, phpVersion string) string {
+	if phpVersion == "" {
+		return filepath.Join(g.StaticDir(), fileName(domain))
+	}
+	return filepath.Join(g.versionDir(phpVersion), fileName(domain))
+}
+
+// PHPTemplate returns the site file a PHP domain gets from the template,
+// with root (relative to the projects root, "" for the template's).
+func (g *Generator) PHPTemplate(domain, root string) (string, error) {
+	content, err := g.buildWorkerSite(domain, SimpleDomain(domain))
+	if err != nil || root == "" {
+		return content, err
+	}
+	return withRoot(content, root), nil
+}
+
+// StaticTemplate returns the site file a static host gets.
+func StaticTemplate(h store.StaticHost) string { return staticSite(h) }
+
+// SiteRoot returns the root of a site file relative to the projects root,
+// "" when it has none under it.
+func SiteRoot(content string) string {
+	m := rootDirective.FindStringSubmatchIndex(content)
+	if m == nil {
+		return ""
+	}
+	root, ok := strings.CutPrefix(content[m[3]:m[1]], "/{$CUSTOM_PATH}/")
+	if !ok {
+		return ""
+	}
+	return strings.TrimSuffix(root, "/")
 }

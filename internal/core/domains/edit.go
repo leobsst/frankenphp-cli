@@ -231,24 +231,18 @@ func (s *Service) Remove(ctx context.Context, names []string) (RemoveResult, err
 	return res, nil
 }
 
-// Restore brings archived domains back with php, a supported version (see
-// stack.ResolvePHP), not their original one. The result is empty when nothing
-// was restored.
-func (s *Service) Restore(ctx context.Context, names []string, php string, forceSSL bool) (PHPResult, error) {
-	if err := phpversions.Validate(php); err != nil {
-		return PHPResult{}, err
-	}
+// restorable returns the names that can be restored: not active (compared
+// without their TLD: app.test is active when app.dev is registered), once.
+func (s *Service) restorable(names []string) ([]string, error) {
 	existing, err := s.Store.DomainNames()
 	if err != nil {
-		return PHPResult{}, err
+		return nil, err
 	}
 	statics, err := s.Store.StaticHostNames()
 	if err != nil {
-		return PHPResult{}, err
+		return nil, err
 	}
 	existing = append(existing, statics...)
-	// The names are compared without their TLD: app.test is active when
-	// app.dev is registered
 	short := func(d string) string {
 		if i := strings.LastIndex(d, "."); i >= 0 {
 			return d[:i]
@@ -269,7 +263,53 @@ func (s *Service) Restore(ctx context.Context, names []string, php string, force
 	}
 	if len(restore) == 0 {
 		s.Log.Info(i18n.T("No domains to restore."))
-		return PHPResult{}, nil
+	}
+	return restore, nil
+}
+
+// RestoreStatic brings archived static hosts back, with the root and
+// fallback of their site file. The result is empty when nothing was
+// restored.
+func (s *Service) RestoreStatic(ctx context.Context, names []string, forceSSL bool) (StaticResult, error) {
+	restore, err := s.restorable(names)
+	if err != nil || len(restore) == 0 {
+		return StaticResult{}, err
+	}
+	g := s.generator(s.Log)
+	statics := g.ArchivedStatic(restore)
+	if len(statics) == 0 {
+		s.Log.Info(i18n.T("No Caddyfiles were restored."))
+		return StaticResult{}, nil
+	}
+	customPath, err := s.projectPath()
+	if err != nil {
+		return StaticResult{}, err
+	}
+	var restored []string
+	s.Log.Info(i18n.Tf("Restoring %d static host(s)...", len(statics)))
+	return s.serveStatics(ctx, statics, customPath, forceSSL, i18n.T("The host(s) were not restored."),
+		func() error {
+			s.Log.Step(i18n.T("Restoring Caddyfiles..."))
+			hosts, err := g.RestoreStatic(restore)
+			for _, h := range hosts {
+				restored = append(restored, h.Domain)
+			}
+			return err
+		},
+		// Back to the archive, ready for another restore
+		func() { _ = s.generator(events.NewLog(nil)).ArchiveStatic(restored) })
+}
+
+// Restore brings archived domains back with php, a supported version (see
+// stack.ResolvePHP), not their original one. The result is empty when nothing
+// was restored.
+func (s *Service) Restore(ctx context.Context, names []string, php string, forceSSL bool) (PHPResult, error) {
+	if err := phpversions.Validate(php); err != nil {
+		return PHPResult{}, err
+	}
+	restore, err := s.restorable(names)
+	if err != nil || len(restore) == 0 {
+		return PHPResult{}, err
 	}
 
 	active, err := s.Store.ActivePHPVersions()
@@ -456,4 +496,21 @@ func services(e *env.Env) []string {
 		hosts = append(hosts, s3.Domain)
 	}
 	return hosts
+}
+
+// SetWebsocket allows or refuses the WebSocket connections of a proxy host,
+// then has the reverse proxy apply it.
+func (s *Service) SetWebsocket(ctx context.Context, host string, on bool) error {
+	ok, err := s.Store.SetProxyWebsocket(host, on)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return i18n.Errorf("'%s' is not a proxy host.", host)
+	}
+	if err := s.writeMain(); err != nil {
+		return err
+	}
+	s.restartProxy(ctx)
+	return nil
 }

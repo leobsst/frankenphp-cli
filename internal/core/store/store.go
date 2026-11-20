@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -44,6 +45,8 @@ type AliasEntry struct {
 type Proxy struct {
 	Domain string
 	Target string
+	// NoWebsocket refuses the WebSocket connections (allowed by default)
+	NoWebsocket bool
 }
 
 // StaticHost is a domain whose files the reverse proxy serves itself, with
@@ -128,6 +131,32 @@ var schema = []string{
 	`CREATE TABLE IF NOT EXISTS settings (
 		key TEXT PRIMARY KEY,
 		value TEXT NOT NULL
+	)`,
+	// The options of the proxy hosts, apart from the proxies table that
+	// earlier releases read and write: absent means the defaults
+	`CREATE TABLE IF NOT EXISTS proxy_options (
+		domain TEXT PRIMARY KEY,
+		websocket INTEGER NOT NULL DEFAULT 1
+	)`,
+	// The sessions of the dashboard: the SHA-256 of their token, never the
+	// token. Times in Unix seconds. Unknown to earlier releases
+	`CREATE TABLE IF NOT EXISTS dashboard_sessions (
+		id TEXT PRIMARY KEY,
+		token_hash TEXT NOT NULL UNIQUE,
+		device TEXT NOT NULL DEFAULT '',
+		ip TEXT NOT NULL DEFAULT '',
+		remote INTEGER NOT NULL DEFAULT 0,
+		created INTEGER NOT NULL,
+		last_seen INTEGER NOT NULL
+	)`,
+	// The connections to the dashboard: logins, failures, revocations
+	`CREATE TABLE IF NOT EXISTS dashboard_access (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		at INTEGER NOT NULL,
+		ip TEXT NOT NULL,
+		event TEXT NOT NULL,
+		device TEXT NOT NULL DEFAULT '',
+		remote INTEGER NOT NULL DEFAULT 0
 	)`,
 	// The user configuration (formerly .env): only the values set by the
 	// user, the defaults live in the code
@@ -437,10 +466,25 @@ func (s *Store) RemoveAliasesForTargets(targets []string) ([]string, error) {
 
 // Proxies returns the proxy hosts, in insertion order.
 func (s *Store) Proxies() ([]Proxy, error) {
-	return queryList(s.db, "SELECT domain, target FROM proxies ORDER BY id", func(r *sql.Rows) (Proxy, error) {
+	return queryList(s.db, "SELECT p.domain, p.target, COALESCE(o.websocket, 1) FROM proxies p "+
+		"LEFT JOIN proxy_options o ON o.domain = p.domain ORDER BY p.id", func(r *sql.Rows) (Proxy, error) {
 		var p Proxy
-		return p, r.Scan(&p.Domain, &p.Target)
+		var ws bool
+		err := r.Scan(&p.Domain, &p.Target, &ws)
+		p.NoWebsocket = !ws
+		return p, err
 	})
+}
+
+// SetProxyWebsocket allows or refuses the WebSocket connections of a proxy
+// host, and reports whether it is one.
+func (s *Store) SetProxyWebsocket(domain string, on bool) (bool, error) {
+	if _, ok, err := s.ProxyTarget(domain); err != nil || !ok {
+		return false, err
+	}
+	_, err := s.db.Exec("INSERT INTO proxy_options (domain, websocket) VALUES (?, ?) "+
+		"ON CONFLICT(domain) DO UPDATE SET websocket = excluded.websocket", domain, on)
+	return err == nil, err
 }
 
 // ProxyTarget returns the upstream of a proxy host and whether it is one.
@@ -457,6 +501,9 @@ func (s *Store) AddProxies(domains []string, target string) error {
 // RemoveProxies removes proxy hosts. Their aliases are left (see
 // RemoveAliasesForTargets).
 func (s *Store) RemoveProxies(domains []string) error {
+	if err := s.execEach("DELETE FROM proxy_options WHERE domain = ?", domains); err != nil {
+		return err
+	}
 	return s.execEach("DELETE FROM proxies WHERE domain = ?", domains)
 }
 
@@ -621,4 +668,111 @@ func (s *Store) inTx(fn func(*sql.Tx) error) error {
 		return err
 	}
 	return tx.Commit()
+}
+
+// --- Dashboard sessions ------------------------------------------------------
+
+// Session is a signed-in device of the dashboard.
+type Session struct {
+	ID       string    `json:"id"`
+	Device   string    `json:"device"`
+	IP       string    `json:"ip"`
+	Remote   bool      `json:"remote"`
+	Created  time.Time `json:"created"`
+	LastSeen time.Time `json:"last_seen"`
+}
+
+// AddSession stores a session, its token as tokenHash.
+func (s *Store) AddSession(sess Session, tokenHash string) error {
+	_, err := s.db.Exec("INSERT INTO dashboard_sessions (id, token_hash, device, ip, remote, created, last_seen) "+
+		"VALUES (?, ?, ?, ?, ?, ?, ?)", sess.ID, tokenHash, sess.Device, sess.IP, sess.Remote,
+		sess.Created.Unix(), sess.LastSeen.Unix())
+	return err
+}
+
+// SessionByToken returns the session of a token hash and whether it
+// exists.
+func (s *Store) SessionByToken(tokenHash string) (Session, bool, error) {
+	var sess Session
+	var created, seen int64
+	err := s.db.QueryRow("SELECT id, device, ip, remote, created, last_seen FROM dashboard_sessions WHERE token_hash = ?",
+		tokenHash).Scan(&sess.ID, &sess.Device, &sess.IP, &sess.Remote, &created, &seen)
+	if errors.Is(err, sql.ErrNoRows) {
+		return sess, false, nil
+	}
+	sess.Created, sess.LastSeen = time.Unix(created, 0).UTC(), time.Unix(seen, 0).UTC()
+	return sess, err == nil, err
+}
+
+// TouchSession records the last use of a session.
+func (s *Store) TouchSession(id, ip string, at time.Time) error {
+	_, err := s.db.Exec("UPDATE dashboard_sessions SET last_seen = ?, ip = ? WHERE id = ?", at.Unix(), ip, id)
+	return err
+}
+
+// Sessions returns the sessions, most recently used first.
+func (s *Store) Sessions() ([]Session, error) {
+	return queryList(s.db, "SELECT id, device, ip, remote, created, last_seen FROM dashboard_sessions ORDER BY last_seen DESC",
+		func(r *sql.Rows) (Session, error) {
+			var sess Session
+			var created, seen int64
+			err := r.Scan(&sess.ID, &sess.Device, &sess.IP, &sess.Remote, &created, &seen)
+			sess.Created, sess.LastSeen = time.Unix(created, 0).UTC(), time.Unix(seen, 0).UTC()
+			return sess, err
+		})
+}
+
+// RemoveSession revokes a session and reports whether it existed.
+func (s *Store) RemoveSession(id string) (bool, error) {
+	res, err := s.db.Exec("DELETE FROM dashboard_sessions WHERE id = ?", id)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
+// RemoveSessions revokes every session (a new password), or those unused
+// since before (expired) when before is not zero.
+func (s *Store) RemoveSessions(before time.Time) error {
+	if before.IsZero() {
+		_, err := s.db.Exec("DELETE FROM dashboard_sessions")
+		return err
+	}
+	_, err := s.db.Exec("DELETE FROM dashboard_sessions WHERE last_seen < ?", before.Unix())
+	return err
+}
+
+// AccessEntry is a connection event of the dashboard.
+type AccessEntry struct {
+	At     time.Time `json:"at"`
+	IP     string    `json:"ip"`
+	Event  string    `json:"event"` // login, login_failed, logout, revoked, refused...
+	Device string    `json:"device,omitempty"`
+	Remote bool      `json:"remote"`
+}
+
+// accessLogSize is how many connection events are kept.
+const accessLogSize = 1000
+
+// LogAccess records a connection event, keeping the latest ones only.
+func (s *Store) LogAccess(e AccessEntry) error {
+	if _, err := s.db.Exec("INSERT INTO dashboard_access (at, ip, event, device, remote) VALUES (?, ?, ?, ?, ?)",
+		e.At.Unix(), e.IP, e.Event, e.Device, e.Remote); err != nil {
+		return err
+	}
+	_, err := s.db.Exec("DELETE FROM dashboard_access WHERE id <= (SELECT MAX(id) FROM dashboard_access) - ?", accessLogSize)
+	return err
+}
+
+// AccessLog returns the latest connection events, newest first.
+func (s *Store) AccessLog(limit int) ([]AccessEntry, error) {
+	return queryList(s.db, "SELECT at, ip, event, device, remote FROM dashboard_access ORDER BY id DESC LIMIT "+
+		strconv.Itoa(limit), func(r *sql.Rows) (AccessEntry, error) {
+		var e AccessEntry
+		var at int64
+		err := r.Scan(&at, &e.IP, &e.Event, &e.Device, &e.Remote)
+		e.At = time.Unix(at, 0).UTC()
+		return e, err
+	})
 }

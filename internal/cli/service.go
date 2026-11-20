@@ -80,7 +80,7 @@ func (a *app) setService(ctx context.Context, name string, on bool) error {
 		return err
 	}
 	var res stack.OptionalResult
-	if err := a.runOp(ctx, dir, http.MethodPut, "/api/services/"+name, map[string]any{"enabled": on}, &res); err != nil {
+	if err := a.runOp(ctx, dir, http.MethodPut, "/api/v1/services/"+name, map[string]any{"enabled": on}, &res); err != nil {
 		return reported(err)
 	}
 	return a.reportServiceOf(dir, res)

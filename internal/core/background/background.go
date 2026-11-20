@@ -39,6 +39,12 @@ type Spec struct {
 	Args        []string // the command line after the binary
 	PIDFile     string   // in the data directory
 	LogFile     string   // in the data directory: the error output
+	// WindowsRun, when set, is the value name of the process in the Run key
+	// of the user (HKCU): Windows then runs RunArgs at login. Windows has no
+	// user service manager without administrator rights; nothing relaunches
+	// the process when it dies
+	WindowsRun string
+	RunArgs    []string // the command line after the binary, at login
 	// Env is the environment of the process under the service manager,
 	// whose own is minimal (launchd: PATH=/usr/bin:/bin:/usr/sbin:/sbin)
 	Env map[string]string
@@ -143,6 +149,9 @@ func (s *Service) Start(ctx context.Context) error {
 		if s.startSystemd(ctx) {
 			return nil
 		}
+	case s.GOOS == "windows" && s.WindowsRun != "":
+		// Best effort: the process starts detached now either way
+		s.run(ctx, "reg", "add", windowsRunKey, "/v", s.WindowsRun, "/t", "REG_SZ", "/d", s.windowsRunCommand(), "/f")
 	}
 	pid, err := s.Spawn(s)
 	if err != nil {
@@ -157,6 +166,10 @@ func (s *Service) Start(ctx context.Context) error {
 func (s *Service) Stop(ctx context.Context) bool {
 	stopped := s.stopLaunchd(ctx)
 	if s.stopSystemd(ctx) {
+		stopped = true
+	}
+	if s.GOOS == "windows" && s.WindowsRun != "" &&
+		s.run(ctx, "reg", "delete", windowsRunKey, "/v", s.WindowsRun, "/f") {
 		stopped = true
 	}
 	if pid := s.RunningPID(); pid != 0 {
@@ -192,6 +205,24 @@ func SpawnDetached(s *Service) (int, error) {
 func (s *Service) run(ctx context.Context, name string, args ...string) bool {
 	res, err := s.Run.Run(ctx, command.Cmd{Name: name, Args: args})
 	return err == nil && res.OK()
+}
+
+// --- Windows: Run key ---
+
+// windowsRunKey is the key of the programs Windows runs at the user's login.
+const windowsRunKey = `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
+
+// windowsRunCommand is the command line of the Run key value: the binary,
+// quoted, then RunArgs.
+func (s *Service) windowsRunCommand() string {
+	parts := []string{`"` + s.Exe + `"`}
+	for _, a := range s.RunArgs {
+		if strings.ContainsAny(a, " \t") {
+			a = `"` + a + `"`
+		}
+		parts = append(parts, a)
+	}
+	return strings.Join(parts, " ")
 }
 
 // --- macOS: LaunchAgent ---

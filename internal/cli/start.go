@@ -116,7 +116,7 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) error
 		}
 	}
 	var res stack.StartResult
-	err = a.runOp(ctx, dir, http.MethodPost, "/api/stack/start", stack.StartOptions{
+	err = a.runOp(ctx, dir, http.MethodPost, "/api/v1/stack/start", stack.StartOptions{
 		Domains: domains, Path: path, PHP: o.php, ForceSSL: o.forceSSL, Build: o.build,
 	}, &res)
 	if err != nil {

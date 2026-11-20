@@ -178,3 +178,13 @@ func DropBucketACL(dir, bucketID string) error {
 	}
 	return os.RemoveAll(filepath.Join(ACLDir(dir), bucketID))
 }
+
+// ObjectPublic reports whether the ACL of an object makes it public.
+func ObjectPublic(dir, bucketID, key string) bool {
+	if bucketID == "" || strings.ContainsAny(bucketID, `/\.`) {
+		return false
+	}
+	sum := sha256.Sum256([]byte(key))
+	_, err := os.Stat(filepath.Join(ACLDir(dir), bucketID, hex.EncodeToString(sum[:])))
+	return err == nil
+}

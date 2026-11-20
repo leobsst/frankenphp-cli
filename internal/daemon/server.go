@@ -7,17 +7,17 @@ package daemon
 
 import (
 	"context"
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
 	"net/http"
-	"strconv"
-	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/leobsst/frankenphp-cli/internal/core/access"
+	"github.com/leobsst/frankenphp-cli/internal/core/store"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
 )
 
@@ -33,8 +33,46 @@ type Server struct {
 	Queue   *Queue
 	Bus     *Bus
 
+	// OpenStore opens the database of the sessions; LoadAccess reads the
+	// access settings; RemoteCert returns the certificate of the remote
+	// access (generated when the settings name none). Nil without remote
+	// access (tests, the in-process server of the CLI).
+	OpenStore  func() (*store.Store, error)
+	LoadAccess func() (AccessConfig, error)
+	RemoteCert func(cfg AccessConfig) (certFile, keyFile string, err error)
+	// LANIP returns the address of the host on the local network
+	LANIP func() string
+	// Logf reports what the remote access does (the daemon log)
+	Logf func(format string, args ...any)
+
 	mu   sync.Mutex
 	stop context.CancelFunc // ends Serve, set while it runs
+
+	serveCtx  context.Context // the context of Serve, while it runs
+	accessCfg atomic.Pointer[AccessConfig]
+	limiter   limiter
+	remote    remoteListener
+}
+
+// accessRefresh is how often the access settings are read again.
+var accessRefresh = 30 * time.Second
+
+// serveContext is the context of Serve, Background before it runs.
+func (s *Server) serveContext() context.Context {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.serveCtx != nil {
+		return s.serveCtx
+	}
+	return context.Background()
+}
+
+// access returns the access settings in force.
+func (s *Server) access() AccessConfig {
+	if c := s.accessCfg.Load(); c != nil {
+		return *c
+	}
+	return AccessConfig{Mode: access.Local}
 }
 
 // New returns a server with its queue and bus.
@@ -57,6 +95,28 @@ func (s *Server) Serve(ctx context.Context, socket, local net.Listener) error {
 	s.stop = cancel
 	s.mu.Unlock()
 	go s.Queue.Run(ctx)
+	if s.Backend != nil {
+		go s.watchContainers(ctx)
+	}
+	s.mu.Lock()
+	s.serveCtx = ctx
+	s.mu.Unlock()
+	s.ReloadAccess()
+	defer s.remote.stop()
+	// A change made without the daemon (a command run in its own process)
+	// is picked up too
+	go func() {
+		tick := time.NewTicker(accessRefresh)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-tick.C:
+				s.ReloadAccess()
+			}
+		}
+	}()
 
 	api := s.routes()
 	var servers []*http.Server
@@ -102,43 +162,6 @@ func (s *Server) shutdown(servers []*http.Server) {
 	for _, srv := range servers {
 		_ = srv.Shutdown(ctx)
 	}
-}
-
-// guard protects the HTTP access: the daemon drives Docker and the hosts
-// file, and FrankenManager runs its own DNS server. The Host and Origin
-// headers must be the local address (no DNS rebinding), and the token is
-// required: in the Authorization header, or the access_token query
-// parameter for the event and log streams (EventSource sends no header).
-func (s *Server) guard(next http.Handler) http.Handler {
-	port := strconv.Itoa(s.Port)
-	hosts := []string{"127.0.0.1:" + port, "localhost:" + port}
-	allowed := func(host string) bool {
-		for _, h := range hosts {
-			if strings.EqualFold(host, h) {
-				return true
-			}
-		}
-		return false
-	}
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !allowed(r.Host) {
-			writeError(w, http.StatusForbidden, i18n.T("Forbidden host."))
-			return
-		}
-		if origin := r.Header.Get("Origin"); origin != "" && !allowed(strings.TrimPrefix(origin, "http://")) {
-			writeError(w, http.StatusForbidden, i18n.T("Forbidden origin."))
-			return
-		}
-		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if token == "" && (r.URL.Path == "/api/events" || r.URL.Path == "/api/logs") {
-			token = r.URL.Query().Get("access_token")
-		}
-		if subtle.ConstantTimeCompare([]byte(token), []byte(s.Token)) != 1 {
-			writeError(w, http.StatusUnauthorized, i18n.T("Missing or invalid access token."))
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
 }
 
 // --- Responses ---------------------------------------------------------------
