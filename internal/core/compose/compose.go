@@ -152,7 +152,32 @@ func Build(o Options) string {
 			"    driver: bridge",
 		)
 	}
-	return strings.Join(lines, "\n") + "\n"
+	return strings.Join(withLogRotation(lines), "\n") + "\n"
+}
+
+// logRotation bounds the logs Docker keeps of each container (10 MB x 3):
+// FrankenManager keeps no copy, the dashboard reads them from Docker. The
+// json-file driver is named: the size options are refused by others
+// (journald...).
+var logRotation = []string{
+	"    logging:",
+	"      driver: json-file",
+	"      options:",
+	"        max-size: \"10m\"",
+	"        max-file: \"3\"",
+}
+
+// withLogRotation adds logRotation to every service, after its restart
+// policy.
+func withLogRotation(lines []string) []string {
+	out := make([]string, 0, len(lines)+len(logRotation)*8)
+	for _, l := range lines {
+		out = append(out, l)
+		if l == "    restart: always" {
+			out = append(out, logRotation...)
+		}
+	}
+	return out
 }
 
 // dir returns the host path of a ${VAR} directory: relative to the data

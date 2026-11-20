@@ -3,6 +3,11 @@ services:
     container_name: franken-caddy-proxy
     image: caddy:2-alpine
     restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     network_mode: host
     volumes:
       - ${CADDY_DIR:-${PWD}/caddy}/Caddyfile:/etc/caddy/Caddyfile
@@ -19,6 +24,11 @@ services:
     container_name: frankenphp-8.3
     image: custom-frankenphp:8.3
     restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     network_mode: host
     user: ${UID}:${GID}
     environment:

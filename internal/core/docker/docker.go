@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -123,6 +124,9 @@ type Manager struct {
 	// live (`--verbose`) instead of a quiet build. It needs a Runner that
 	// is a Streamer.
 	BuildOutput io.Writer
+	// Engine is the Engine API to read the containers with; nil looks for
+	// it with the real runner (see engine), never in tests.
+	Engine *Engine
 }
 
 // New returns a Manager using the real docker command.
@@ -458,6 +462,17 @@ func (m *Manager) Exec(ctx context.Context, container string, command ...string)
 	return res.ExitCode, string(res.Stdout) + string(res.Stderr)
 }
 
+// ExecEnv runs command in a container with the variables named by pass
+// set from env: docker reads them from its own environment, so that their
+// values (passwords, queries) never show on a command line.
+func (m *Manager) ExecEnv(ctx context.Context, container string, env map[string]string, command ...string) (Result, error) {
+	args := []string{"exec"}
+	for _, k := range slices.Sorted(maps.Keys(env)) {
+		args = append(args, "-e", k)
+	}
+	return m.Runner.Run(ctx, m.Dir, env, append(append(args, container), command...)...)
+}
+
 // Status is a container's state ("running", "exited"...) and health
 // ("healthy", "unhealthy", "starting" or "N/A").
 type Status struct {
@@ -489,6 +504,12 @@ func (s Statuses) Running(name string) bool { return s[name].State == "running" 
 
 // ContainerStatuses lists every container, stopped ones included.
 func (m *Manager) ContainerStatuses(ctx context.Context) Statuses {
+	if e := m.engine(ctx); e != nil {
+		if st, err := e.statuses(ctx); err == nil {
+			return st
+		}
+		forgetEngine()
+	}
 	res, err := m.run(ctx, "ps", "--all", "--no-trunc", "--format", "json")
 	if err != nil || res.ExitCode != 0 {
 		return Statuses{}

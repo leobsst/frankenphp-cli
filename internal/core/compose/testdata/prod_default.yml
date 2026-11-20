@@ -3,6 +3,11 @@ services:
     container_name: franken_mariadb
     image: mariadb:${MARIADB_VERSION:-10.11.9}
     restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     command: --max-allowed-packet=${MYSQL_MAX_ALLOWED_PACKET:-512M} --port=${DB_LISTEN_PORT:-3306} --bind-address=${BIND_ADDRESS:-127.0.0.1}
     network_mode: host
     user: ${UID}:${GID}
@@ -21,6 +26,11 @@ services:
     container_name: franken-caddy-proxy
     image: caddy:2-alpine
     restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     network_mode: host
     volumes:
       - ${CADDY_DIR:-${PWD}/caddy}/Caddyfile:/etc/caddy/Caddyfile
@@ -37,6 +47,11 @@ services:
     container_name: frankenphp-8.3
     image: custom-frankenphp:8.3
     restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     network_mode: host
     user: ${UID}:${GID}
     environment:

@@ -45,6 +45,12 @@ func (m *Manager) Stats(ctx context.Context, names ...string) ([]Stat, error) {
 	if len(up) == 0 {
 		return []Stat{}, nil
 	}
+	if e := m.engine(ctx); e != nil {
+		if stats, err := e.stats(ctx, up); err == nil {
+			return stats, nil
+		}
+		forgetEngine()
+	}
 	res, err := m.run(ctx, append([]string{"stats", "--no-stream", "--format", "json"}, up...)...)
 	if err != nil {
 		return nil, err
@@ -84,11 +90,38 @@ var ErrNoStream = errors.New("the docker runner cannot stream")
 // FollowLogs streams the logs of a container to out, with their
 // timestamps, from its last tail lines, until ctx ends.
 func (m *Manager) FollowLogs(ctx context.Context, name string, tail int, out io.Writer) error {
+	if e := m.engine(ctx); e != nil {
+		return e.followLogs(ctx, name, tail, out)
+	}
 	s, ok := m.Runner.(Streamer)
 	if !ok {
 		return ErrNoStream
 	}
 	_, err := s.Stream(ctx, m.Dir, out, "logs", "--follow", "--timestamps", "--tail", strconv.Itoa(tail), name)
+	if ctx.Err() != nil {
+		return nil
+	}
+	return err
+}
+
+// WatchEvents calls changed for each container event (start, stop, health
+// change...), until ctx ends or the stream breaks.
+func (m *Manager) WatchEvents(ctx context.Context, changed func()) error {
+	if e := m.engine(ctx); e != nil {
+		return e.watchEvents(ctx, changed)
+	}
+	s, ok := m.Runner.(Streamer)
+	if !ok {
+		return ErrNoStream
+	}
+	pr, pw := io.Pipe()
+	done := make(chan error, 1)
+	go func() { done <- eachLine(ctx, pr, changed) }()
+	_, err := s.Stream(ctx, m.Dir, pw, "events", "--filter", "type=container", "--format", "{{json .}}")
+	_ = pw.Close()
+	if lineErr := <-done; err == nil {
+		err = lineErr
+	}
 	if ctx.Err() != nil {
 		return nil
 	}
