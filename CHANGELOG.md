@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Merge registered domains with newly provided domains
   - Support for `--force-ssl` flag to regenerate certificates
 - `stop` - Stop all running containers
+  - The containers are really removed: `docker compose down` gets the variables of the compose file, without which compose could not read it once a static host was mounted (it then stopped nothing while reporting success); a failure is now reported
 - `restart` - Restart all or specific containers (caddy, database, cache, phpmyadmin, soketi, s3) and the LAN DNS server (dns)
   - Support for individual service restart with `--caddy`, `--db`, `--cache`, `--pma`, `--dns`, `--soketi`, `--s3` flags
   - `--force-ssl` option for certificate regeneration during restart
@@ -75,7 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - A final release is newer than its pre-releases (`0.10.0` replaces `0.10.0-rc.1`); pre-releases are never offered to the stable installs
   - Refreshes the static files of the data directory right after installing the new version (as the real user under `sudo`)
   - Works on Windows too, from an Administrator terminal: the running `.exe` is moved aside and removed by the next update
-  - Stops a running server before installing and starts it again on the new version (as the real user under `sudo`); a stopped server stays stopped, a failed install restarts the previous version
+  - Stops a running server before installing and starts it again on the new version (as the real user under `sudo`); a stopped server stays stopped, a failed install restarts the previous version. The restart no longer fails with "The server is already running": the stop now really removes the containers
   - Linux: grants port 53 again to the new binary, or tells to rerun `sudo frankenmanager setup`
 - `trust-ca` - Share the local mkcert root CA over the LAN (off by default)
 - `daemon start|stop|status|run` - The daemon behind the dashboard: one HTTP/JSON API (`api/openapi.yaml`) on a Unix socket for the CLI and on `127.0.0.1:DASHBOARD_PORT` for the dashboard (token of `daemon.token`, `Host` and `Origin` checked against DNS rebinding)

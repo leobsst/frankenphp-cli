@@ -423,10 +423,19 @@ func (m *Manager) ComposeUp(ctx context.Context, env map[string]string, services
 	return nil
 }
 
-// ComposeDown stops the stack, ignoring failures. Only the generated compose
-// file is used.
-func (m *Manager) ComposeDown(ctx context.Context) {
-	_, _ = m.run(ctx, composeArgs("down")...)
+// ComposeDown stops and removes the containers of the generated compose
+// file. env holds its variables, as for ComposeUp: without them, compose
+// cannot read the file (e.g. the empty projects root of the static sites
+// mount) and stops nothing.
+func (m *Manager) ComposeDown(ctx context.Context, env map[string]string) error {
+	res, err := m.Runner.Run(ctx, m.Dir, env, composeArgs("down")...)
+	if err == nil && res.ExitCode != 0 {
+		err = errors.New(strings.TrimSpace(string(res.Stderr)))
+	}
+	if err != nil {
+		return &Error{i18n.Tf("Failed to stop containers: %s", err.Error())}
+	}
+	return nil
 }
 
 // RestartContainer restarts a container, false when it failed (missing).

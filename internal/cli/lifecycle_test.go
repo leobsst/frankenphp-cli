@@ -235,6 +235,9 @@ func TestStop(t *testing.T) {
 	if err := s.AddProxies([]string{"vite.test"}, "127.0.0.1:5173"); err != nil {
 		t.Fatal(err)
 	}
+	if err := s.SetSetting(store.SettingProjectPath, "/projects"); err != nil {
+		t.Fatal(err)
+	}
 	writeFile(t, e.hostsFile, "127.0.0.1\tlocalhost\n127.0.0.1\tapp.test\n::1\t\tapp.test\n"+
 		"127.0.0.1\tvite.test\n127.0.0.1\tws.frankenmanager.test\n")
 	e.dns.running = true
@@ -249,6 +252,32 @@ func TestStop(t *testing.T) {
 	}
 	if !slices.Contains(e.dockerLines(), "down") || e.dns.running {
 		t.Errorf("docker %v, LAN DNS server serving: %v", e.dockerLines(), e.dns.running)
+	}
+	// down gets the variables of the compose file: without the projects
+	// root, compose cannot read the static sites mount and stops nothing
+	for i, c := range e.docker.calls {
+		if slices.Contains(c, "down") && e.docker.envs[i]["CUSTOM_PATH"] != "/projects" {
+			t.Errorf("down without the projects root: %v", e.docker.envs[i])
+		}
+	}
+}
+
+// A down that fails is reported: the containers still run.
+func TestStopReportsAFailedDown(t *testing.T) {
+	e := newEnv(t)
+	if err := e.store().AddDomains([]string{"app.test"}, "8.4"); err != nil {
+		t.Fatal(err)
+	}
+	e.docker.ps = running
+	e.docker.handle = func(args []string) docker.Result {
+		if slices.Contains(args, "down") {
+			return docker.Result{ExitCode: 1, Stderr: []byte("invalid spec: :/:ro: empty section between colons\n")}
+		}
+		return docker.Result{}
+	}
+	code, out, _ := e.run("stop")
+	if code != 1 || !strings.Contains(out, "Failed to stop containers: invalid spec") || strings.Contains(out, "Web server stopped!") {
+		t.Errorf("code %d, out:\n%s", code, out)
 	}
 }
 

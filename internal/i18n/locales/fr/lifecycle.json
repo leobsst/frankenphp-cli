@@ -69,6 +69,7 @@
   "docker build exited with code %d (see the logs above)": "docker build s'est terminé avec le code %d (voir les journaux ci-dessus)",
   "Failed to build image for PHP %s: %v": "Échec de la construction de l'image pour PHP %s : %v",
   "Failed to start containers: %s": "Échec du démarrage des conteneurs : %s",
+  "Failed to stop containers: %s": "Échec de l'arrêt des conteneurs : %s",
   "Initializing FrankenManager data directory: %s": "Initialisation du répertoire de données de FrankenManager : %s",
   "FrankenManager initialized successfully.": "FrankenManager initialisé avec succès.",
   "Permission denied on %s: the FrankenManager data directory is probably owned by root (created by a previous sudo run). Fix it with: sudo chown -R \"$(whoami)\" \"%s\"": "Permission refusée sur %s : le répertoire de données de FrankenManager appartient probablement à root (créé lors d'une exécution précédente avec sudo). Corrigez-le avec : sudo chown -R \"$(whoami)\" \"%s\"",

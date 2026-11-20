@@ -209,7 +209,9 @@ func TestComposeUpAndDown(t *testing.T) {
 	if err := m.ComposeUp(ctx, nil, "dns"); err != nil {
 		t.Fatal(err)
 	}
-	m.ComposeDown(ctx)
+	if err := m.ComposeDown(ctx, vars); err != nil {
+		t.Fatal(err)
+	}
 	want := []string{
 		"--log-level error compose -f docker-compose-generated.yml up -d --remove-orphans",
 		"--log-level error compose -f docker-compose-generated.yml up -d --no-deps dns",
@@ -218,15 +220,21 @@ func TestComposeUpAndDown(t *testing.T) {
 	if !slices.Equal(r.argLines(), want) {
 		t.Errorf("calls = %v", r.argLines())
 	}
-	if r.calls[0].dir != m.Dir || r.calls[0].env["UID"] != "501" {
-		t.Errorf("first call = %+v", r.calls[0])
+	// down gets the variables too: compose cannot read the file without them
+	if r.calls[0].dir != m.Dir || r.calls[0].env["UID"] != "501" || r.calls[2].env["UID"] != "501" {
+		t.Errorf("calls = %+v", r.calls)
 	}
 
 	r.respond = func([]string) (Result, error) { return Result{ExitCode: 1, Stderr: []byte("port taken\n")}, nil }
 	if err := m.ComposeUp(ctx, nil); err == nil || err.Error() != "Failed to start containers: port taken\n" {
 		t.Errorf("err = %v", err)
 	}
-	m.ComposeDown(ctx) // failures ignored
+	r.respond = func([]string) (Result, error) {
+		return Result{ExitCode: 1, Stderr: []byte("invalid spec: :/:ro: empty section between colons\n")}, nil
+	}
+	if err := m.ComposeDown(ctx, nil); err == nil || err.Error() != "Failed to stop containers: invalid spec: :/:ro: empty section between colons" {
+		t.Errorf("down err = %v", err)
+	}
 }
 
 func TestContainerCommands(t *testing.T) {

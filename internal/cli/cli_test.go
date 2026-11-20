@@ -39,10 +39,12 @@ type fakeDocker struct {
 	ps     string
 	handle func(args []string) docker.Result
 	calls  [][]string
+	envs   []map[string]string // the variables of each call, nil for the streams
 }
 
-func (f *fakeDocker) Run(_ context.Context, _ string, _ map[string]string, args ...string) (docker.Result, error) {
+func (f *fakeDocker) Run(_ context.Context, _ string, env map[string]string, args ...string) (docker.Result, error) {
 	f.calls = append(f.calls, args)
+	f.envs = append(f.envs, env)
 	if args[0] == "ps" {
 		return docker.Result{Stdout: []byte(f.ps)}, nil
 	}
@@ -56,6 +58,7 @@ func (f *fakeDocker) Run(_ context.Context, _ string, _ map[string]string, args 
 // build logs: the docker runner of --verbose builds.
 func (f *fakeDocker) Stream(_ context.Context, _ string, out io.Writer, args ...string) (int, error) {
 	f.calls = append(f.calls, append([]string{"stream"}, args...))
+	f.envs = append(f.envs, nil)
 	_, _ = io.WriteString(out, "#1 [internal] load build definition from Dockerfile\n")
 	return 0, nil
 }

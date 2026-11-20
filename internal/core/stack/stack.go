@@ -57,6 +57,23 @@ func GenerateCompose(dataDir string, e *env.Env, phpVersions []string) error {
 	return err
 }
 
+// ComposeDown stops the stack, with the variables of the compose file (the
+// projects root the server runs with).
+func ComposeDown(ctx context.Context, d *docker.Manager, e *env.Env, s *store.Store) error {
+	customPath, err := ProjectPath(e, s)
+	if err != nil {
+		return err
+	}
+	vars, err := e.ComposeEnvVars(d.Dir, customPath, e.DBEngines())
+	if err != nil {
+		// A setting down does not need is missing (a password...): the
+		// projects root is the variable compose cannot read the file
+		// without, the others only warn
+		vars = map[string]string{"CUSTOM_PATH": customPath, "UID": e.Get("UID"), "GID": e.Get("GID")}
+	}
+	return d.ComposeDown(ctx, vars)
+}
+
 // ComposeUp regenerates the compose file and brings the whole stack up to
 // date, customPath being the projects root mounted in the PHP containers.
 func ComposeUp(ctx context.Context, d *docker.Manager, e *env.Env, phpVersions []string,

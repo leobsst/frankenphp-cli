@@ -506,7 +506,8 @@ func (s *Service) Start(ctx context.Context, o StartOptions) (StartResult, error
 	if err := BuildImages(ctx, d, e, s.Log, customPath, versions, o.Build); err != nil {
 		return fail(err)
 	}
-	d.ComposeDown(ctx)
+	// Leftovers of an interrupted start: best effort, up reports the failures
+	_ = ComposeDown(ctx, d, e, st)
 	if listen != "" {
 		RemoveLegacyDNS(ctx, d)
 	}
@@ -543,7 +544,10 @@ func (s *Service) Stop(ctx context.Context) error {
 
 	s.Log.Step(i18n.T("Stopping web server..."))
 	s.DNS.Stop(ctx)
-	d.ComposeDown(ctx)
+	// Reported: a failed down leaves the containers running
+	if err := ComposeDown(ctx, d, s.Env, st); err != nil {
+		return err
+	}
 
 	names, err := st.DomainNames()
 	if err != nil {
