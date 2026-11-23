@@ -68,6 +68,12 @@ func TestGenerateAll(t *testing.T) {
 	if !slices.Equal(r.Lines(), want) {
 		t.Errorf("calls = %v", r.Lines())
 	}
+	// Without it, mkcert reads the Firefox profiles: a macOS privacy prompt
+	for _, c := range r.Calls[1:] {
+		if c.Env["TRUST_STORES"] != "system" {
+			t.Errorf("%v: TRUST_STORES = %q", c.Args, c.Env["TRUST_STORES"])
+		}
+	}
 	wantLog := []string{
 		"info: Creating SSL certificates for: a.test, b.test, c.test",
 		"info: Certificate for a.test still valid (10 days old), skipping",

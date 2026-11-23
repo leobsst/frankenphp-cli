@@ -104,6 +104,14 @@ func (m *Manager) InstallCA(ctx context.Context) error {
 	return os.WriteFile(filepath.Join(m.Dir, "rootCA.pem"), data, 0o644)
 }
 
+// generateEnv limits mkcert's trust store checks to the system store: before
+// each certificate it otherwise checks that its CA is in Firefox's NSS
+// databases, reading the Firefox profiles. Run by the daemon (through
+// FrankenManager.app on macOS), that read asks for access to Firefox's data
+// in Privacy & Security, blocked until accepted. Generating a certificate
+// needs none of it: `setup --install-mkcert` installs the CA in Firefox.
+var generateEnv = map[string]string{"TRUST_STORES": "system"}
+
 // generate runs mkcert for domain into <domain>.pem / <domain>-key.pem,
 // valid for domain and the extra names.
 func (m *Manager) generate(ctx context.Context, mkcert, domain string, extra ...string) (command.Result, error) {
@@ -112,7 +120,7 @@ func (m *Manager) generate(ctx context.Context, mkcert, domain string, extra ...
 		"-key-file", filepath.Join(m.Dir, domain+"-key.pem"),
 		domain,
 	}
-	return m.Run.Run(ctx, command.Cmd{Name: mkcert, Args: append(args, extra...)})
+	return m.Run.Run(ctx, command.Cmd{Name: mkcert, Args: append(args, extra...), Env: generateEnv})
 }
 
 // GenerateLocalhost (re)generates the localhost certificate.
