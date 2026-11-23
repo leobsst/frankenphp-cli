@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -289,17 +290,58 @@ func (s *Server) remoteGuard(next http.Handler) http.Handler {
 		cfg := s.access()
 		addr := clientAddr(r)
 		rq := requester{remote: true, ip: addr.String()}
+		origin := r.Header.Get("Origin")
+		crossOrigin := origin != "" && !strings.EqualFold(strings.TrimPrefix(origin, "https://"), r.Host)
+		if crossOrigin && appOrigin(origin) {
+			// First, so that the app can read every answer, a refusal too
+			allowApp(w, origin)
+		}
 		if !access.Remote(cfg.Mode) || (cfg.Mode == access.LAN && !access.Private(addr)) || !cfg.Allow.Allows(addr) {
 			s.logAccess(rq, "refused", r.UserAgent())
 			writeError(w, http.StatusForbidden, i18n.T("This address may not reach the dashboard."))
 			return
 		}
-		if origin := r.Header.Get("Origin"); origin != "" && !strings.EqualFold(strings.TrimPrefix(origin, "https://"), r.Host) {
-			writeError(w, http.StatusForbidden, i18n.T("Forbidden origin."))
-			return
+		if crossOrigin {
+			if !appOrigin(origin) {
+				writeError(w, http.StatusForbidden, i18n.T("Forbidden origin."))
+				return
+			}
+			if r.Method == http.MethodOptions {
+				// Preflight: the browser sends no Authorization header
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
 		}
 		s.requireSession(w, r, rq, next)
 	})
+}
+
+// appOrigin reports whether origin is the mobile app (Capacitor serves it
+// from capacitor://localhost on iOS, https://localhost on Android) or its
+// dev server (http://localhost:<port>). The app signs in with a Bearer
+// token: the cookie is never allowed across origins.
+func appOrigin(origin string) bool {
+	u, err := url.Parse(origin)
+	if err != nil || u.Hostname() != "localhost" {
+		return false
+	}
+	switch u.Scheme {
+	case "capacitor", "https", "http":
+		return true
+	}
+	return false
+}
+
+// allowApp answers the CORS headers of the mobile app, without
+// Access-Control-Allow-Credentials.
+func allowApp(w http.ResponseWriter, origin string) {
+	h := w.Header()
+	h.Set("Access-Control-Allow-Origin", origin)
+	h.Add("Vary", "Origin")
+	h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE")
+	h.Set("Access-Control-Allow-Headers", "Authorization, Content-Type, "+confirmHeader)
+	h.Set("Access-Control-Expose-Headers", "Content-Disposition")
+	h.Set("Access-Control-Max-Age", "600")
 }
 
 // confirmed reports whether a destructive request may run: always on the

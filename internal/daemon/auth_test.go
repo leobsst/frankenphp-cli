@@ -135,6 +135,66 @@ func TestRemoteAccess(t *testing.T) {
 	}
 }
 
+// The mobile app (Capacitor: capacitor://localhost on iOS, https://localhost
+// on Android) and its dev server call the remote access across origins: the
+// CORS headers let them read every answer, a refusal too, and the preflight
+// passes without a session. The cookie never crosses origins: no
+// Access-Control-Allow-Credentials. Any other origin stays refused.
+func TestRemoteAccessAppOrigins(t *testing.T) {
+	allow, _ := access.ParseAllowList("192.168.1.0/24")
+	s := authServer(t, AccessConfig{Mode: access.LAN, Allow: allow})
+	h := s.remoteGuard(s.routes())
+	app := func(origin string, extra map[string]string) map[string]string {
+		headers := map[string]string{"Origin": origin}
+		for k, v := range extra {
+			headers[k] = v
+		}
+		return headers
+	}
+
+	for _, origin := range []string{"capacitor://localhost", "https://localhost", "http://localhost:5174"} {
+		w := remoteRequest(h, http.MethodOptions, "/api/v1/auth/login", "192.168.1.5", "",
+			app(origin, map[string]string{"Access-Control-Request-Method": "POST"}))
+		got := w.Header()
+		if w.Code != http.StatusNoContent || got.Get("Access-Control-Allow-Origin") != origin ||
+			!strings.Contains(got.Get("Access-Control-Allow-Headers"), "Authorization") ||
+			!strings.Contains(got.Get("Access-Control-Allow-Headers"), confirmHeader) ||
+			got.Get("Access-Control-Allow-Credentials") != "" {
+			t.Errorf("preflight from %s: %d %v", origin, w.Code, got)
+		}
+	}
+
+	origin := "capacitor://localhost"
+	if w := remoteRequest(h, http.MethodGet, "/api/health", "192.168.1.5", "", app(origin, nil)); w.Code != http.StatusOK ||
+		w.Header().Get("Access-Control-Allow-Origin") != origin {
+		t.Errorf("health: %d %v", w.Code, w.Header())
+	}
+	// Without a session, the app reads the 401 to ask for the password
+	if w := remoteRequest(h, http.MethodGet, "/api/v1/auth/sessions", "192.168.1.5", "", app(origin, nil)); w.Code != http.StatusUnauthorized ||
+		w.Header().Get("Access-Control-Allow-Origin") != origin {
+		t.Errorf("no session: %d %v", w.Code, w.Header())
+	}
+	// A refused address: the app reads why
+	if w := remoteRequest(h, http.MethodGet, "/api/health", "8.8.8.8", "", app(origin, nil)); w.Code != http.StatusForbidden ||
+		w.Header().Get("Access-Control-Allow-Origin") != origin {
+		t.Errorf("refused address: %d %v", w.Code, w.Header())
+	}
+
+	token := login(t, h, "192.168.1.5")
+	w := remoteRequest(h, http.MethodGet, "/api/v1/auth/sessions", "192.168.1.5", "",
+		app(origin, map[string]string{"Authorization": "Bearer " + token}))
+	if w.Code != http.StatusOK || w.Header().Get("Access-Control-Allow-Origin") != origin {
+		t.Errorf("sessions: %d %v", w.Code, w.Header())
+	}
+
+	for _, foreign := range []string{"https://evil.test", "http://localhost.evil.test", "capacitor://evil.test", "file://localhost"} {
+		w := remoteRequest(h, http.MethodOptions, "/api/v1/auth/login", "192.168.1.5", "", app(foreign, nil))
+		if w.Code != http.StatusForbidden || w.Header().Get("Access-Control-Allow-Origin") != "" {
+			t.Errorf("foreign origin %s: %d %v", foreign, w.Code, w.Header())
+		}
+	}
+}
+
 // Too many wrong passwords lock the address, not the others.
 func TestLoginLockout(t *testing.T) {
 	s := authServer(t, AccessConfig{Mode: access.Internet})

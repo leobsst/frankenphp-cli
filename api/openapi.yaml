@@ -36,7 +36,9 @@ servers:
   - url: http://127.0.0.1:9081
     description: This machine
   - url: https://{host}:9443
-    description: Remote access (DASHBOARD_ACCESS lan or internet)
+    description: >-
+      Remote access (DASHBOARD_ACCESS lan or internet). Besides its own origin, it answers the CORS requests of a
+      mobile app (capacitor://localhost, https://localhost, http://localhost:<port>), signed in with a Bearer token.
     variables:
       host: { default: 192.168.1.10 }
 security:
