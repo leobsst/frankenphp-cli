@@ -15,6 +15,7 @@ import (
 
 	mdns "github.com/miekg/dns"
 
+	"github.com/leobsst/frankenphp-cli/internal/command"
 	"github.com/leobsst/frankenphp-cli/internal/core/dns"
 	"github.com/leobsst/frankenphp-cli/internal/core/env"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
@@ -124,6 +125,8 @@ func TestStopSystemd(t *testing.T) {
 	if got := strings.Join(r.Lines(), "|"); got != want {
 		t.Errorf("calls = %s", got)
 	}
+	// No unit left nor loaded: systemctl fails, nothing was running
+	r.Handle = func(command.Cmd) (command.Result, error) { return command.Result{ExitCode: 5}, nil }
 	if w.Stop(t.Context()) {
 		t.Error("second Stop found something")
 	}

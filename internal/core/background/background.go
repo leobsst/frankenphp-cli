@@ -266,15 +266,19 @@ func (s *Service) startLaunchd(ctx context.Context) bool {
 	return false
 }
 
+// stopLaunchd boots the job out by its label even without its plist: a job
+// whose plist was removed while it was still loaded (a failed bootout, an
+// earlier release) keeps running and relaunching otherwise, on the same
+// port.
 func (s *Service) stopLaunchd(ctx context.Context) bool {
-	if _, err := os.Stat(s.PlistPath); err != nil {
-		return false
-	}
-	if s.Run.LookPath("launchctl") != "" {
-		s.run(ctx, "launchctl", "bootout", s.launchdDomain()+"/"+s.Label)
+	_, err := os.Stat(s.PlistPath)
+	stopped := err == nil
+	if s.Run.LookPath("launchctl") != "" &&
+		s.run(ctx, "launchctl", "bootout", s.launchdDomain()+"/"+s.Label) {
+		stopped = true
 	}
 	_ = os.Remove(s.PlistPath)
-	return true
+	return stopped
 }
 
 // LaunchdPlist is the LaunchAgent of spec, starting the process at login
@@ -394,11 +398,13 @@ func (s *Service) startSystemd(ctx context.Context) bool {
 	return false
 }
 
+// stopSystemd also stops a unit still running without its file, for the
+// same reason as stopLaunchd.
 func (s *Service) stopSystemd(ctx context.Context) bool {
-	if _, err := os.Stat(s.UnitPath); err != nil {
-		return false
-	}
 	hasSystemctl := s.Run.LookPath("systemctl") != ""
+	if _, err := os.Stat(s.UnitPath); err != nil {
+		return hasSystemctl && s.systemctl(ctx, "stop", s.Unit)
+	}
 	if hasSystemctl {
 		s.systemctl(ctx, "disable", "--now", s.Unit)
 	}

@@ -129,6 +129,7 @@ func TestStartLaunchdWithApp(t *testing.T) {
 		t.Errorf("plist:\n%s", data)
 	}
 	want := []string{
+		"launchctl bootout gui/501/" + LaunchdLabel, // a job left without its plist
 		agent + " -f " + app,
 		"launchctl bootstrap gui/501 " + w.PlistPath,
 		"launchctl bootstrap gui/501 " + w.PlistPath,
@@ -150,13 +151,32 @@ func TestStartLaunchdWithApp(t *testing.T) {
 	}
 }
 
+// A job still loaded after its plist was removed (an earlier release, a
+// failed bootout) keeps serving on the same port: Stop boots it out by its
+// label anyway.
+func TestStopLaunchdWithoutPlist(t *testing.T) {
+	w, r, _ := newWatcher(t, "darwin", map[string]string{"launchctl": "/bin/launchctl"})
+	if !w.Stop(t.Context()) {
+		t.Error("Stop did not report the loaded job")
+	}
+	if want := []string{"launchctl bootout gui/501/" + LaunchdLabel}; !slices.Equal(r.Lines(), want) {
+		t.Errorf("stop calls = %v", r.Lines())
+	}
+
+	// Not loaded: launchctl fails, nothing was running
+	r.Handle = func(command.Cmd) (command.Result, error) { return command.Result{ExitCode: 3}, nil }
+	if w.Stop(t.Context()) {
+		t.Error("Stop reported a job that is not loaded")
+	}
+}
+
 func TestStartLaunchdFailureFallsBackToDetached(t *testing.T) {
 	w, r, spawned := newWatcher(t, "darwin", map[string]string{"launchctl": "/bin/launchctl"})
 	r.Handle = func(command.Cmd) (command.Result, error) { return command.Result{ExitCode: 1}, nil }
 	if err := w.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if len(r.Calls) != 5 || *spawned != 1 {
+	if len(r.Calls) != 6 || *spawned != 1 { // bootout, then 5 bootstraps
 		t.Errorf("calls %v, spawned %d", r.Lines(), *spawned)
 	}
 	if _, err := os.Stat(w.PlistPath); err == nil {
@@ -176,7 +196,10 @@ func TestStartSystemd(t *testing.T) {
 	if string(data) != SystemdUnitContent(w.DataDir, []string{w.Exe, "--no-update-check", Command}) {
 		t.Errorf("unit:\n%s", data)
 	}
-	want := []string{"systemctl --user daemon-reload", "systemctl --user enable --now " + SystemdUnit}
+	want := []string{
+		"systemctl --user stop " + SystemdUnit, // a unit left without its file
+		"systemctl --user daemon-reload", "systemctl --user enable --now " + SystemdUnit,
+	}
 	if !slices.Equal(r.Lines(), want) || *spawned != 0 {
 		t.Errorf("calls = %v", r.Lines())
 	}
