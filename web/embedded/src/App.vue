@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { watch } from 'vue'
-import { fr } from '@nuxt/ui/locale'
 import { useToast } from '@nuxt/ui/composables'
 import ConfirmPassword from '@app/components/ConfirmPassword.vue'
+import { uiLocale } from '@app/i18n'
 import { bindNotifier } from '@app/composables/useFm'
 import { useApplyPrefs } from '@app/composables/usePrefs'
 import DashboardLayout from './DashboardLayout.vue'
@@ -41,7 +41,7 @@ watch(
 </script>
 
 <template>
-  <UApp :locale="fr" :toaster="{ position: 'bottom-right', max: 4 }">
+  <UApp :locale="uiLocale" :toaster="{ position: 'bottom-right', max: 4 }">
     <DashboardLayout v-if="session.phase === 'ready'" />
     <SignIn v-else-if="session.phase === 'login'" />
     <div v-else class="grid min-h-dvh place-items-center bg-muted p-6">

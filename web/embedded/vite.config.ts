@@ -29,6 +29,8 @@ export default defineConfig({
     alias: { '@app': fileURLToPath(new URL('../app/src', import.meta.url)) },
     dedupe: ['vue', 'vue-router', '@nuxt/ui'],
   },
+  // vue-i18n (web/app/src/i18n.ts): Composition API only, no devtools in production.
+  define: { __VUE_I18N_FULL_INSTALL__: true, __VUE_I18N_LEGACY_API__: false, __INTLIFY_PROD_DEVTOOLS__: false },
   // Relative paths: the same build serves https://frankenmanager.test, 127.0.0.1 and remote access.
   base: './',
   build: { emptyOutDir: true },

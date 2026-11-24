@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import type { CommandPaletteGroup, CommandPaletteItem } from '@nuxt/ui'
 import { defineShortcuts } from '@nuxt/ui/composables'
 import { NAV, SETTINGS } from '../nav'
@@ -8,6 +9,7 @@ import { domainIcon, envLabel, state } from '../composables/useFm'
 import { navBurger } from '../composables/useSidebar'
 import SidebarContent from './SidebarContent.vue'
 
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 const searchOpen = ref(false)
@@ -27,7 +29,7 @@ const connectionHint = computed(() => (local.value
 const groups = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() => {
   const go = (path: string) => () => { router.push(path); searchOpen.value = false }
   return [
-    { id: 'pages', label: 'Pages', items: [...NAV, SETTINGS].map((p) => ({ label: p.label, icon: p.icon, onSelect: go(p.path) })) },
+    { id: 'pages', label: 'Pages', items: [...NAV, SETTINGS].map((p) => ({ label: t(p.labelKey), icon: p.icon, onSelect: go(p.path) })) },
     {
       id: 'domains', label: 'Domaines', items: state.domains.map((d) => ({
         label: d.name, suffix: d.archived ? 'Archivé' : envLabel(d),
@@ -51,7 +53,7 @@ const groups = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() => {
     <UBreadcrumb
       color="neutral"
       class="max-md:hidden"
-      :items="[{ label: local ? 'Hôte local' : state.connection.host }, { label: String(route.meta.label ?? '') }]"
+      :items="[{ label: local ? 'Hôte local' : state.connection.host }, { label: route.meta.labelKey ? t(String(route.meta.labelKey)) : '' }]"
       :ui="{ link: 'text-[13px]', separatorIcon: 'size-4' }"
     />
 

@@ -7,6 +7,7 @@
 import { computed, nextTick, reactive, ref } from 'vue'
 import { ApiError, client, lastMessage, type Instance, type Client, type Container as ApiContainer, type HostInfo, type Operation, type Stat, type Status, type ApiResponse, type LogLine, type OpEvent, type Schema } from '../lib/api'
 import { defaultRoot } from './caddyfile'
+import { setLanguage, type LanguagePref } from '../i18n'
 
 export type Php = '8.2' | '8.3' | '8.4' | '8.5'
 export const PHP_VERSIONS: Php[] = ['8.5', '8.4', '8.3', '8.2']
@@ -64,11 +65,12 @@ export interface Prefs {
   autoRefresh: boolean
   notifications: boolean
   reduceMotion: boolean
-  lang: 'fr' | 'en'
+  /** Interface language, or the system's (stored per device, like the other preferences). */
+  language: LanguagePref
 }
 export const DEFAULT_PREFS: Prefs = {
   theme: 'system', primary: '#2563EB', accent: '#8B5CF6',
-  autoRefresh: true, notifications: true, reduceMotion: false, lang: 'fr',
+  autoRefresh: true, notifications: true, reduceMotion: false, language: 'system',
 }
 
 export const PROJECTS_ROOT = '/projects'
@@ -118,13 +120,16 @@ const blank = () => ({
 function loadPrefs(): Prefs {
   try {
     const p = localStorage.getItem('fm-prefs')
-    return p ? { ...DEFAULT_PREFS, ...JSON.parse(p) } : { ...DEFAULT_PREFS }
+    // `lang` (before the translations, when the choice was only simulated) is dropped: the system language applies.
+    const { lang: _lang, ...saved } = p ? JSON.parse(p) : {}
+    return { ...DEFAULT_PREFS, ...saved }
   } catch {
     return { ...DEFAULT_PREFS }
   }
 }
 
 export const state = reactive(blank())
+setLanguage(state.prefs.language)
 
 // ---------- Notifications (wired to Nuxt UI's useToast() in App.vue) ----------
 type ToastKind = 'success' | 'error' | 'warning' | 'info'

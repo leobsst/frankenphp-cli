@@ -3,6 +3,7 @@ import { computed, ref, useTemplateRef } from 'vue'
 import { useResizeObserver, useScroll } from '@vueuse/core'
 import type { NavigationMenuItem } from '@nuxt/ui'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { NAV, SETTINGS } from '../nav'
 import { state, updateAvailable, updates } from '../composables/useFm'
 import { shell } from '../lib/shell'
@@ -11,12 +12,13 @@ import UpdateModal from './UpdateModal.vue'
 // Side navigation content, shared by the sidebar (desktop / tablet)
 // and the mobile side menu. `collapsed`: icon-only bar (tablet).
 const props = defineProps<{ collapsed?: boolean }>()
+const { t } = useI18n()
 
 // Pages are child routes of "/" (dashboard layout): without `exact`, the overview link
 // would stay active on every page.
-const main = computed<NavigationMenuItem[]>(() => NAV.map((n) => ({ label: n.label, icon: n.icon, to: n.path, exact: n.path === '/', tooltip: props.collapsed })))
+const main = computed<NavigationMenuItem[]>(() => NAV.map((n) => ({ label: t(n.labelKey), icon: n.icon, to: n.path, exact: n.path === '/', tooltip: props.collapsed })))
 const bottom = computed<NavigationMenuItem[]>(() => [
-  { label: SETTINGS.label, icon: SETTINGS.icon, to: SETTINGS.path, tooltip: props.collapsed },
+  { label: t(SETTINGS.labelKey), icon: SETTINGS.icon, to: SETTINGS.path, tooltip: props.collapsed },
   ...(shell.switchTo ? [{ label: 'Changer d’instance', icon: 'i-lucide-server-cog', to: shell.switchTo, tooltip: props.collapsed }] : []),
   { label: 'Documentation', icon: 'i-lucide-circle-help', to: 'https://github.com/leobsst/frankenphp-cli#readme', target: '_blank', tooltip: props.collapsed },
 ])

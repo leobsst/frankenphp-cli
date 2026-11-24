@@ -20,8 +20,8 @@ export const router = createRouter({
       component: () => import('./DashboardLayout.vue'),
       meta: { dashboard: true },
       children: [
-        ...NAV.map(({ name, path, label, component }) => ({ name, path: path.slice(1), component, meta: { label, dashboard: true } })),
-        { name: SETTINGS.name, path: SETTINGS.path.slice(1), component: () => import('@app/pages/SettingsPage.vue'), meta: { label: SETTINGS.label, dashboard: true } },
+        ...NAV.map(({ name, path, labelKey, component }) => ({ name, path: path.slice(1), component, meta: { labelKey, dashboard: true } })),
+        { name: SETTINGS.name, path: SETTINGS.path.slice(1), component: () => import('@app/pages/SettingsPage.vue'), meta: { labelKey: SETTINGS.labelKey, dashboard: true } },
       ],
     },
     { path: '/:pathMatch(.*)*', redirect: '/' },
