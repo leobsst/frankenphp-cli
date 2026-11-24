@@ -77,6 +77,8 @@
   "Unsupported platform: %s-%s": "Plateforme non prise en charge : %s-%s",
   "Could not reach GitHub (%w).": "Impossible de joindre GitHub (%w).",
   "Could not reach GitHub (%s).": "Impossible de joindre GitHub (%s).",
+  "GitHub API rate limit reached: try again later.": "Limite de requêtes de l'API GitHub atteinte : réessayez plus tard.",
+  "Update checks are not available here.": "La recherche de mises à jour n'est pas disponible ici.",
   "GitHub returned an unreadable response (%w).": "GitHub a renvoyé une réponse illisible (%w).",
   "Unexpected release format from GitHub (missing 'tag_name').": "Format de version inattendu de GitHub (« tag_name » manquant).",
   "The latest release (%s) has no build for this platform (%s).": "La dernière version (%s) n'a pas de build pour cette plateforme (%s).",

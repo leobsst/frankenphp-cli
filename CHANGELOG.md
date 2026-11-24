@@ -5,6 +5,13 @@ All notable changes to FrankenManager will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Dashboard: the sidebar footer tells when a newer FrankenManager release is out (`v0.13.0 · v0.13.1 disponible`) and opens the update window: installed and latest versions, the notes of every release in between, a "Vérifier" button looking up GitHub again, and the install command (`sudo frankenmanager update`) to copy and run in a terminal of the host
+- `GET /api/v1/update` - The installed version, the latest stable release, whether an update is available and the notes of the newer releases (GitHub release bodies, Markdown); cached one hour by the daemon (a failure, ten minutes), `?refresh=true` looks up again; GitHub out of reach or rate limited answers `502` with the reason, or the previous answer with its `error`; a successful lookup also refreshes the cache of the CLI's update notice
+
 ## [1.0.0] - 2026-02-10
 
 ### Added

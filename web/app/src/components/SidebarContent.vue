@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, useTemplateRef } from 'vue'
+import { computed, ref, useTemplateRef } from 'vue'
 import { useResizeObserver, useScroll } from '@vueuse/core'
 import type { NavigationMenuItem } from '@nuxt/ui'
 import { useRouter } from 'vue-router'
 import { NAV, SETTINGS } from '../nav'
-import { state } from '../composables/useFm'
+import { state, updateAvailable, updates } from '../composables/useFm'
 import { shell } from '../lib/shell'
+import UpdateModal from './UpdateModal.vue'
 
 // Side navigation content, shared by the sidebar (desktop / tablet)
 // and the mobile side menu. `collapsed`: icon-only bar (tablet).
@@ -25,6 +26,13 @@ const router = useRouter()
 const instName = computed(() => shell.name || state.connection.host)
 const instAddress = computed(() => shell.address || state.connection.address)
 const local = computed(() => state.connection.mode === 'local')
+
+const updateOpen = ref(false)
+const updateTooltip = computed(() => {
+  if (updateAvailable.value) return `FrankenManager ${state.app.latest} est disponible`
+  if (updates.info && !updates.info.error) return `FrankenManager ${state.app.version} est à jour`
+  return 'Rechercher une mise à jour'
+})
 
 // Fade at the top / bottom of the page list, only when there is content left to scroll on that side.
 const scroller = useTemplateRef<HTMLElement>('scroller')
@@ -83,11 +91,21 @@ const navUi = {
   </div>
   <UNavigationMenu :items="bottom" orientation="vertical" :collapsed="collapsed" :highlight="false" :ui="navUi" class="shrink-0 pt-4 pb-4" />
 
-  <!-- Instance daemon version, and event stream state. -->
-  <div class="mx-2 mb-1 flex items-center gap-2 px-1 py-2 text-[11px] text-muted" :class="collapsed && 'justify-center'">
-    <UIcon name="i-lucide-badge-check" class="size-4 shrink-0" />
-    <span v-if="!collapsed" class="min-w-0 truncate font-mono">FrankenManager v{{ state.app.version || '…' }}</span>
-  </div>
+  <!-- Instance daemon version (opens the update modal), and event stream state. -->
+  <UTooltip :text="updateTooltip" :content="{ side: 'right' }">
+    <button
+      class="mx-2 mb-1 flex items-center gap-2 rounded-lg px-1 py-2 text-left text-[11px] text-muted hover:text-highlighted"
+      :class="collapsed && 'justify-center'"
+      @click="updateOpen = true"
+    >
+      <UIcon :name="updateAvailable ? 'i-lucide-download' : 'i-lucide-badge-check'" class="size-4 shrink-0" :class="updateAvailable && 'text-warning'" />
+      <span v-if="!collapsed" class="min-w-0 truncate">
+        <span class="font-mono">v{{ state.app.version || '…' }}</span>
+        <span v-if="updateAvailable" class="ml-1.5 font-medium text-warning">· v{{ state.app.latest }} disponible</span>
+      </span>
+    </button>
+  </UTooltip>
+  <UpdateModal v-model:open="updateOpen" />
   <div
     class="mx-2 flex items-center gap-2 border-t border-default py-6 text-xs font-medium"
     :class="[state.error ? 'text-error' : state.live ? 'text-primary' : 'text-muted', collapsed && 'justify-center']"
