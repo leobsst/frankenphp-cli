@@ -2,6 +2,7 @@ import type { Router } from 'vue-router'
 import { App as CapApp } from '@capacitor/app'
 import { Capacitor } from '@capacitor/core'
 import { t } from '@app/i18n'
+import { isScreenshotLink, openScreenshotLink, SCREENSHOT_LINKS, watchScreenshotRequests } from '../demo/screenshots'
 
 /**
  * Pairing with a QR code. The dashboard of an instance (Remote access) shows a QR code holding a pairing link:
@@ -94,13 +95,20 @@ export async function scanPairing(): Promise<string | null> {
 const handled = new Set<string>()
 
 function handle(router: Router, url: string | undefined) {
-  if (!url || !/^frankenmanager:/i.test(url) || handled.has(url)) return
+  if (!url || !/^frankenmanager:/i.test(url)) return
+  // Screenshot builds only: frankenmanager://demo/… opens a page of the demo (src/demo/screenshots.ts).
+  if (SCREENSHOT_LINKS && isScreenshotLink(url)) {
+    void openScreenshotLink(router, url)
+    return
+  }
+  if (handled.has(url)) return
   handled.add(url)
   void openPairing(router, url)
 }
 
 /** Follows the pairing links that open the app (system camera, link in another app). */
 export async function listenPairingLinks(router: Router) {
+  if (SCREENSHOT_LINKS) watchScreenshotRequests(router)
   if (!Capacitor.isNativePlatform()) return
   await CapApp.addListener('appUrlOpen', ({ url }) => handle(router, url))
   const launch = await CapApp.getLaunchUrl().catch(() => undefined)
