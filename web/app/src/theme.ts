@@ -63,3 +63,18 @@ export const uiTheme = {
     ],
   },
 }
+
+/**
+ * Icon bundling for the `ui()` Vite plugin of the embedded dashboard and the mobile app: every Lucide icon the code
+ * names is inlined in the build, so the dashboard works offline (PWA, mobile app, network without Internet access).
+ *
+ * Nuxt UI's default scan only reads web/embedded or web/mobile (the Vite root), and only their .vue files: the shared
+ * pages of web/app and the icons named in .ts files (navigation, composables, toasts) were missing from the bundle and
+ * fetched from the Iconify API at runtime. The patterns are relative to the Vite root, a sibling of web/app. Icons
+ * must be written in full (`i-lucide-…`), never built from parts, for the scan to find them.
+ */
+export const uiIcons = {
+  clientBundle: {
+    scan: { globInclude: ['src/**/*.{vue,ts}', '../app/src/**/*.{vue,ts}'] },
+  },
+}

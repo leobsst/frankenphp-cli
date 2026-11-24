@@ -260,18 +260,31 @@ func (e *Env) DBEngines() []string {
 // development: phpMyAdmin whenever MariaDB or MySQL runs, pgAdmin when
 // PostgreSQL is the only engine. "" in production or without admin UI.
 func (e *Env) DBAdminTarget() string {
+	if port := e.DBAdminPort(); port != "" {
+		return "127.0.0.1:" + port
+	}
+	return ""
+}
+
+// DBAdminPort returns the host port of the admin UI DBAdminTarget points
+// to (PMA_PORT or PGADMIN_PORT), "" in production or without admin UI.
+func (e *Env) DBAdminPort() string {
 	if e.IsProduction() {
 		return ""
 	}
 	engines := e.DBEngines()
 	if slices.Contains(engines, "mariadb") || slices.Contains(engines, "mysql") {
-		return "127.0.0.1:" + e.getOr("PMA_PORT", "8080")
+		return e.getOr("PMA_PORT", "8080")
 	}
 	if slices.Contains(engines, "postgresql") {
-		return "127.0.0.1:" + e.getOr("PGADMIN_PORT", "8081")
+		return e.getOr("PGADMIN_PORT", "8081")
 	}
 	return ""
 }
+
+// ServicesExposed reports whether EXPOSE_SERVICES is "true": the service
+// ports are published on every interface instead of 127.0.0.1 only.
+func (e *Env) ServicesExposed() bool { return e.Get("EXPOSE_SERVICES") == "true" }
 
 // ResolveDir returns the directory configured by key (default when empty),
 // relative to projectDir unless absolute.
@@ -294,7 +307,7 @@ func (e *Env) ComposeEnvVars(projectDir, customPath string, dbEngines []string) 
 	// localhost prefixes the development port bindings; bind is the address
 	// the services listen on in production (host network)
 	localhost, bind := "127.0.0.1:", "127.0.0.1"
-	if e.Get("EXPOSE_SERVICES") == "true" {
+	if e.ServicesExposed() {
 		localhost, bind = "", "0.0.0.0"
 	}
 	uid, err := e.Require("UID")
