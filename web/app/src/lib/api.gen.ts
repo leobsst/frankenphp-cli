@@ -11,7 +11,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Version of the daemon */
+        /**
+         * Version, API version and features of the daemon
+         * @description Needs no session (remote access: the allowed addresses only); the daemon token stays required on 127.0.0.1:DASHBOARD_PORT. A daemon older than the `api` and `features` fields answers `version` only.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -2775,8 +2778,17 @@ export interface components {
         Error: {
             error: string;
         };
+        /** @description What a client needs to adapt to this daemon. Answered without a session on the remote access: it tells nothing about the settings or the stack. */
         Health: {
+            /** @description The version of the daemon. */
             version: string;
+            /**
+             * @description The major version of the API
+             * @enum {string}
+             */
+            api: "v1";
+            /** @description The capabilities of this daemon, to test before using them: `dashboard` (it serves the pages), `update` (GET /api/v1/update looks up the releases), `docker` (it drives the stack and its containers), `pairing` (POST /api/v1/auth/pairing and POST /api/v1/auth/pair). Unknown values are to be ignored. */
+            features: string[];
         };
         Operation: {
             /** @example op-12 */
