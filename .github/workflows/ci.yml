@@ -12,6 +12,8 @@ on:
       - "Dockerfile"
       - "docker-compose*.yml"
       - "**.go"
+      - "api/**"
+      - "web/**"
       - "go.mod"
       - "go.sum"
       - ".golangci.yml"
@@ -88,6 +90,12 @@ jobs:
         run: |
           npm install --global pnpm@10.33.0
           make web
+
+      # The TypeScript types of the dashboard are generated from the spec and committed: they must not drift
+      - name: Check the API types against the spec
+        run: |
+          pnpm --dir web gen:api
+          git diff --exit-code -- web/app/src/lib/api.gen.ts
 
       - name: Cross-compile every target without cgo
         run: make build-all
