@@ -718,6 +718,7 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [valid]
                 properties:
                   valid: { type: boolean }
         "409": { $ref: "#/components/responses/Error" }
@@ -1508,7 +1509,7 @@ components:
         secret: { type: boolean }
         apply:
           type: string
-          enum: [now, live, alias, recreate, rebuild, restart_dns, restart_db]
+          enum: [now, live, alias, recreate, rebuild, restart_dns, restart_db, daemon]
         applies: { type: string, description: Label of `apply`, in the daemon's language. }
         hint: { type: string, description: The command that applies a change. }
 
@@ -1682,6 +1683,7 @@ components:
         running: { type: boolean }
         info:
           type: object
+          required: [version, uptime_seconds, used_memory, connected_clients, keys, hits, misses]
           properties:
             version: { type: string }
             uptime_seconds: { type: integer }

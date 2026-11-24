@@ -996,6 +996,7 @@ The daemon serves the dashboard, built into the binary. On this machine, open it
 - Before the stack runs, `frankenmanager dashboard` opens `https://127.0.0.1:9444` itself.
 - From another device, the dashboard answers at the [remote access](#remote-access-to-the-dashboard), with the password.
 - From the source, `make web` builds the pages (pnpm) before `make build`; without it, the daemon answers that the dashboard is not part of the build.
+- Its TypeScript types of the API (`web/app/src/lib/api.gen.ts`) are generated from `api/openapi.yaml` by `pnpm --dir web gen:api`: run it after changing the spec and commit the result, the CI fails when they differ.
 
 #### Remote access to the dashboard
 

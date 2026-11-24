@@ -222,6 +222,10 @@ func (s *Server) accessLog(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if list == nil {
+		// An empty log is [], not null: the dashboard maps over it
+		list = []store.AccessEntry{}
+	}
 	writeJSON(w, http.StatusOK, list)
 }
 

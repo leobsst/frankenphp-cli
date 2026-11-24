@@ -1,3 +1,5 @@
+import type { components, paths } from './api.gen'
+
 /**
  * Managed instance: its API address and the session token sent as Bearer. Without a token, the session is the
  * browser cookie (remote access opened in a browser, on the same origin as the API).
@@ -14,68 +16,26 @@ export function setUnauthorizedHandler(fn: (inst: Instance) => void) {
   unauthorized = fn
 }
 
-// ---------- Daemon API types (api/openapi.yaml, /api/v1) ----------
+// ---------- Daemon API types (generated from api/openapi.yaml: pnpm --dir web gen:api) ----------
 
-export interface HostInfo {
-  hostname: string
-  os: string
-  arch: string
-  version: string
-  lan_ip?: string
-  remote: boolean
-  mode: string
-  remote_url?: string
-}
-export interface Host {
-  name: string
-  kind: 'php' | 'proxy' | 'static' | 'alias'
-  php?: string
-  target?: string
-  root?: string
-  spa?: boolean
-  websocket?: boolean
-}
-export interface Service {
-  name: string
-  setting: string
-  enabled: boolean
-  state: string
-}
-export interface Status {
-  running: boolean
-  hosts: Host[]
-  services: Service[]
-}
-export interface Container {
-  name: string
-  state: string
-  health: string
-}
-export interface Stat {
-  name: string
-  cpu_percent: number
-  mem_percent: number
-  mem_usage: string
-  net_io: string
-  block_io: string
-}
-export interface OpEvent {
-  kind: 'message' | 'step' | 'break' | 'output'
-  level: 'info' | 'success' | 'warning' | 'error'
-  message?: string
-}
-export interface Operation {
-  id: string
-  kind: string
-  status: 'queued' | 'running' | 'succeeded' | 'failed'
-  error?: string
-  events: OpEvent[]
-}
-export interface LogLine {
-  container: string
-  time: string
-  line: string
-}
+/** A schema of the spec, by name. */
+export type Schema<N extends keyof components['schemas']> = components['schemas'][N]
+
+type Method = 'get' | 'post' | 'put' | 'delete'
+type JsonBody<R> = R extends { content: { 'application/json': infer B } } ? B : never
+/** JSON body of the success response (200, 201 or 202) of a route of the spec, e.g. `ApiResponse<'/api/v1/redis'>`. */
+export type ApiResponse<P extends keyof paths, M extends Method = 'get'> =
+  paths[P][M] extends { responses: infer R } ? JsonBody<R[Extract<keyof R, 200 | 201 | 202>]> : never
+
+export type HostInfo = Schema<'HostInfo'>
+export type Host = Schema<'Host'>
+export type Service = Schema<'Service'>
+export type Status = Schema<'Status'>
+export type Container = Schema<'Container'>
+export type Stat = Schema<'Stat'>
+export type OpEvent = Schema<'Event'>
+export type Operation = Schema<'Operation'>
+export type LogLine = Schema<'LogLine'>
 
 // ---------- Errors ----------
 
@@ -198,11 +158,11 @@ export function client(inst: Instance) {
 export type Client = ReturnType<typeof client>
 
 /** Daemon version (public route): checks that the address responds before asking for the password. */
-export const health = (url: string) => send<{ version: string }>(url, null, 'GET', '/api/health', { timeout: 8_000 })
+export const health = (url: string) => send<ApiResponse<'/api/health'>>(url, null, 'GET', '/api/health', { timeout: 8_000 })
 
 /** Opens a session with the dashboard password: the daemon returns a (Bearer) token for the app. */
 export const login = (url: string, password: string, device: string) =>
-  send<{ token: string; session: { id: string } }>(url, null, 'POST', '/api/v1/auth/login', { body: { password, device } })
+  send<ApiResponse<'/api/v1/auth/login', 'post'>>(url, null, 'POST', '/api/v1/auth/login', { body: { password, device } })
 
 export const hostInfo = (url: string, token: string) => send<HostInfo>(url, token, 'GET', '/api/v1/host', { timeout: 8_000 })
 
