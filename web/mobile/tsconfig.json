@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "preserve",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "types": ["vite/client"],
+    "paths": { "@app/*": ["../app/src/*"] }
+  },
+  "include": ["src/**/*.ts", "src/**/*.vue", "../app/src/**/*.ts", "../app/src/**/*.vue", "auto-imports.d.ts", "components.d.ts"]
+}

@@ -1,0 +1,7 @@
+// Version and build number. Default values: version.local.xcconfig, not committed, replaces them. It is written by
+// scripts/app-version.mjs (before `pnpm ios`, or `pnpm version:sync`) from APP_VERSION and APP_BUILD, otherwise the
+// last mobile-vX.Y.Z git tag and the commit count.
+MARKETING_VERSION = 0.1.0
+CURRENT_PROJECT_VERSION = 1
+
+#include? "version.local.xcconfig"

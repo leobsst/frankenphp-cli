@@ -1,0 +1,47 @@
+{
+  "name": "frankenmanager-mobile",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && vue-tsc --noEmit",
+    "typecheck": "vue-tsc --noEmit",
+    "ios": "node scripts/ios-signing.mjs && node scripts/app-version.mjs && pnpm build && cap sync ios",
+    "android": "node scripts/app-version.mjs && pnpm build && cap sync android",
+    "sync": "node scripts/app-version.mjs && pnpm build && cap sync",
+    "ios:signing": "node scripts/ios-signing.mjs",
+    "android:apk": "node scripts/app-version.mjs && pnpm build && cap sync android && cd android && ./gradlew assembleDebug",
+    "android:install": "node scripts/app-version.mjs && pnpm build && cap sync android && cd android && ./gradlew installDebug",
+    "version:sync": "node scripts/app-version.mjs",
+    "assets": "capacitor-assets generate && node scripts/assets-extras.mjs",
+    "deploy": "pnpm assets && pnpm ios && pnpm android"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.5.3",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/core": "8.5.3",
+    "@capacitor/device": "8.0.3",
+    "@capacitor/ios": "8.5.3",
+    "@capacitor/preferences": "8.0.1",
+    "@capacitor/splash-screen": "8.0.2",
+    "@frankenmanager/app": "workspace:*",
+    "@iconify-json/lucide": "^1.2.154",
+    "@nuxt/ui": "4.12.0",
+    "@vueuse/core": "14.4.0",
+    "tailwindcss": "4.3.5",
+    "uqr": "0.1.3",
+    "vue": "3.5.45",
+    "vue-router": "4.6.3"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^4.0.0",
+    "@capacitor/cli": "8.5.3",
+    "@types/node": "^22.20.5",
+    "@vitejs/plugin-vue": "6.0.10",
+    "sharp": "0.35.5",
+    "typescript": "5.9.3",
+    "vite": "8.2.6",
+    "vue-tsc": "3.1.1"
+  }
+}
