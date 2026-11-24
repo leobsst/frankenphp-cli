@@ -380,6 +380,7 @@ export function connect(inst: Instance, opts: { mode?: 'local' | 'remote'; clien
   state.connection.mode = opts.mode ?? 'remote'
   state.connection.client = opts.client ?? 'App FrankenManager'
   api = client(inst)
+  resetUpdates()
   resume()
 }
 
@@ -407,6 +408,8 @@ export function resume() {
     if (ev.message && ev.kind !== 'output') pushLog(ev.level === 'error' ? 'ERROR' : ev.level === 'warning' ? 'WARN' : 'INFO', 'FrankenManager', ev.message)
   })
   timers = [setInterval(refreshStats, 5_000), setInterval(refresh, 30_000)]
+  void loadUpdates()
+  timers.push(setInterval(() => void loadUpdates(), UPDATE_POLL_MS))
 }
 
 /** Suspends the streams (background) without forgetting the instance. */
@@ -932,4 +935,62 @@ export const actions = {
   signIn: async (_password: string): Promise<string | null> => null,
   /** The domain only resolves on a device that uses the instance's LAN DNS. */
   openSite: (name: string) => { window.open(`https://${name}`, '_blank') },
+}
+
+// ---------- FrankenManager updates (GET /api/v1/update) ----------
+/** A release newer than the instance's daemon, with its GitHub notes (Markdown). */
+export interface ReleaseNotes { version: string; name: string; published_at: string; url: string; notes: string }
+export interface UpdateInfo {
+  version: string
+  latest: string | null
+  update_available: boolean
+  /** Releases newer than `version`, newest first. */
+  releases: ReleaseNotes[]
+  /** Command installing the update in a terminal of the host (administrator rights). */
+  command: string
+  checked_at: string
+  /** Failure of the last lookup, when the answer comes from an earlier one. */
+  error?: string
+}
+
+/** The daemon caches the lookup (one hour): polling it rarely is enough. */
+const UPDATE_POLL_MS = 30 * 60_000
+const blankUpdates = () => ({ info: null as UpdateInfo | null, checking: false, error: '' })
+/** Lookup of the instance's daemon; `error`: no answer at all (GitHub unreachable, rate limit). */
+export const updates = reactive(blankUpdates())
+export const updateAvailable = computed(() => !!updates.info?.update_available)
+
+function resetUpdates() {
+  Object.assign(updates, blankUpdates())
+}
+
+/** Reads the lookup; `refresh` bypasses the daemon's cache. Returns the error, null when answered. */
+async function loadUpdates(refresh = false): Promise<string | null> {
+  if (!api) return 'Aucune instance.'
+  const c = api
+  updates.checking = true
+  try {
+    const info = await c.get<UpdateInfo>(`/api/v1/update${refresh ? '?refresh=true' : ''}`)
+    if (c !== api) return null
+    updates.info = info
+    updates.error = ''
+    state.app.latest = info.latest
+    return null
+  } catch (e) {
+    const err = e instanceof Error ? e.message : String(e)
+    if (c === api) updates.error = err
+    return err
+  } finally {
+    if (c === api) updates.checking = false
+  }
+}
+
+/** "Vérifier": looks up GitHub again (`frankenmanager update --check`). */
+export async function checkUpdate() {
+  const err = await loadUpdates(true)
+  const info = updates.info
+  if (err || !info) toast('error', 'Vérification impossible', err ?? undefined)
+  else if (info.error) toast('warning', 'Vérification impossible', info.error)
+  else if (info.update_available) toast('info', 'Mise à jour disponible', `FrankenManager ${info.latest} est disponible.`)
+  else toast('success', 'FrankenManager est à jour', `Version ${info.version}.`)
 }
