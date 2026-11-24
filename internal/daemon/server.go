@@ -44,6 +44,9 @@ type Server struct {
 	RemoteCert func(cfg AccessConfig) (certFile, keyFile string, err error)
 	// LANIP returns the address of the host on the local network
 	LANIP func() string
+	// RootCAPath returns the PEM file of the mkcert root CA, whose
+	// fingerprint the pairing QR code carries; nil when unknown
+	RootCAPath func(ctx context.Context) (string, error)
 	// UI holds the pages of the dashboard (web/embedded/dist), nil when the
 	// build has none; HTTPSPort is the port of the HTTPS listener on
 	// 127.0.0.1 that serves them with the API (see dashboardGuard)
@@ -61,6 +64,7 @@ type Server struct {
 	serveCtx  context.Context // the context of Serve, while it runs
 	accessCfg atomic.Pointer[AccessConfig]
 	limiter   limiter
+	pairings  pairingCodes
 	remote    remoteListener
 	updates   updateCache
 }

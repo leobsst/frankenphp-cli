@@ -443,6 +443,7 @@ function openEvents() {
       refreshSoon = setTimeout(() => { void refresh().then(openLogs) }, 400)
     }
   })
+  es.addEventListener('paired', (e) => onPaired(JSON.parse((e as MessageEvent).data) as PairedEvent))
   es.addEventListener('event', (e) => {
     const ev = JSON.parse((e as MessageEvent).data) as OpEvent
     if (ev.message && ev.kind !== 'output') pushLog(ev.level === 'error' ? 'ERROR' : ev.level === 'warning' ? 'WARN' : 'INFO', 'FrankenManager', ev.message)
@@ -460,6 +461,7 @@ export function connect(inst: Instance, opts: { mode?: 'local' | 'remote'; clien
   state.connection.client = opts.client ?? 'App FrankenManager'
   api = client(inst)
   resetUpdates()
+  resetPairing()
   resume()
 }
 
@@ -1060,4 +1062,42 @@ export async function checkUpdate() {
   else if (info.error) toast('warning', 'Vérification impossible', info.error)
   else if (info.update_available) toast('info', 'Mise à jour disponible', `FrankenManager ${info.latest} est disponible.`)
   else toast('success', 'FrankenManager est à jour', `Version ${info.version}.`)
+}
+
+// ---------- Device pairing (POST /api/v1/auth/pairing, "paired" event) ----------
+/** A one-time code for the mobile app: `qr` is the text of the QR code to show. */
+export type Pairing = ApiResponse<'/api/v1/auth/pairing', 'post'>
+type PairedEvent = Schema<'PairedEvent'>
+
+const blankPairing = () => ({ code: null as Pairing | null, creating: false, error: '', paired: '' })
+/** The code shown by the pairing modal; `paired`: the device that used it. */
+export const pairing = reactive(blankPairing())
+
+function resetPairing() {
+  Object.assign(pairing, blankPairing())
+}
+
+/** New code (the previous one stays valid until it expires). Remotely, the daemon asks for the password again. */
+export async function createPairing() {
+  if (!api) return
+  const c = api
+  Object.assign(pairing, { creating: true, error: '', paired: '' })
+  try {
+    const code = await c.post<Pairing>('/api/v1/auth/pairing', {}, { action: 'Appairer un appareil' })
+    if (c === api) pairing.code = code
+  } catch (e) {
+    if (c === api) Object.assign(pairing, { code: null, error: e instanceof Error ? e.message : String(e) })
+  } finally {
+    if (c === api) pairing.creating = false
+  }
+}
+
+/** Modal closed: the code is forgotten here (it expires on the daemon side). */
+export const closePairing = resetPairing
+
+/** A device used a code: the modal tells which one if it is the code shown, the sessions are read again. */
+function onPaired(ev: PairedEvent) {
+  if (pairing.code?.id === ev.id) Object.assign(pairing, { code: null, paired: ev.device })
+  toast('success', 'Appareil appairé', ev.device)
+  loadAccess().catch(() => {})
 }
