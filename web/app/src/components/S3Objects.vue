@@ -102,7 +102,7 @@ async function submitUpload() {
 </script>
 
 <template>
-  <ResourceTable :title="`Objets de ${bucket}`" :data="rows" :columns="columns" search-key="name" empty="Ce dossier est vide.">
+  <ResourceTable :title="`Objets de ${bucket}`" :paginate="false" :data="rows" :columns="columns" search-key="name" empty="Ce dossier est vide.">
     <template #name-cell="{ row }">
       <button v-if="row.original.folder" type="button" class="text-left" @click="prefix += row.original.name">
         <NameCell icon="i-lucide-folder" :name="row.original.name" :sub="row.original.count ? `${row.original.count} objet(s)` : 'Dossier'" />

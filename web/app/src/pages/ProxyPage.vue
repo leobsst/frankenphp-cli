@@ -11,6 +11,8 @@ import SideForm from '../components/SideForm.vue'
 import InfoBanner from '../components/InfoBanner.vue'
 import ConfirmModal from '../components/ConfirmModal.vue'
 import CaddyfileEditor from '../components/CaddyfileEditor.vue'
+import TablePagination from '../components/TablePagination.vue'
+import { usePagination } from '../composables/usePagination'
 import { focusField } from '../composables/focus'
 import { simpleDomain } from '../composables/caddyfile'
 import { actions, active, aliasTarget, caddyfilePathOf, containerFor, domainStatus, hasSiteCaddyfile, isCaddyfileCustom, isProxied, servedPath, state, type Domain, type FieldErrors } from '../composables/useFm'
@@ -53,6 +55,8 @@ const caddyfile = computed(() => active.value.map(caddyBlock).join('\n\n'))
 
 // Site Caddyfiles: one per PHP project and per static host, editable (aliases and proxy hosts have none).
 const sites = computed(() => active.value.filter(hasSiteCaddyfile))
+const sitePager = usePagination(sites, { key: 'proxy-site-caddyfiles' })
+const { page: sitePage, pageSize: siteSize, total: siteTotal, from: siteFrom, to: siteTo, rows: siteRows } = sitePager
 // The domain stays set after closing so the title does not go blank during the animation.
 const editing = ref('')
 const editorOpen = ref(false)
@@ -90,7 +94,7 @@ const columns: TableColumn<Domain>[] = [
   <UTabs v-model="tab" :items="tabs" :content="false" variant="link" class="mt-5 mb-2" :ui="{ trigger: 'text-xs px-0 me-16 pb-2.5' }" />
 
   <TwoColumns>
-    <ResourceTable v-if="tab === 'routes'" title="Règles de routage" :data="active" :columns="columns" search-key="name">
+    <ResourceTable v-if="tab === 'routes'" storage-key="proxy-routes" title="Règles de routage" :data="active" :columns="columns" search-key="name">
       <template #name-cell="{ row }"><NameCell icon="i-lucide-arrow-up-right" :name="row.original.name" :sub="kind(row.original)" /></template>
       <template #dest-cell="{ row }">{{ dest(row.original) }}</template>
       <template #state-cell="{ row }"><StateBadge :value="domainStatus(row.original)" ok="Active" /></template>
@@ -118,13 +122,17 @@ const columns: TableColumn<Domain>[] = [
         <h2 class="text-[15px] font-semibold text-highlighted">Caddyfiles des sites</h2>
         <p class="mt-1 text-[11px] text-muted">Un fichier par projet PHP (généré depuis caddy/Caddyfile.template) et par hôte statique, puis modifiable.</p>
         <ul class="mt-3 divide-y divide-default">
-          <li v-for="d in sites" :key="d.name" class="flex items-center gap-3 py-3">
+          <li v-for="d in siteRows" :key="d.name" class="flex items-center gap-3 py-3">
             <NameCell icon="i-lucide-file-code" :name="d.name" :sub="caddyfilePathOf(d.name)" class="min-w-0 flex-1" />
             <UBadge v-if="isCaddyfileCustom(d.name)" label="Personnalisé" variant="soft" class="max-sm:hidden" />
             <UButton color="neutral" variant="outline" size="sm" icon="i-lucide-pencil" label="Modifier" @click="edit(d.name)" />
           </li>
         </ul>
         <p v-if="!sites.length" class="py-6 text-center text-xs text-muted">Aucun projet PHP ni hôte statique.</p>
+        <TablePagination
+          v-model:page="sitePage" :total="siteTotal" :from="siteFrom" :to="siteTo" :page-size="siteSize"
+          class="border-t border-default" @update:page-size="sitePager.setPageSize"
+        />
       </UCard>
       <UCard :ui="{ body: 'p-5 sm:p-5' }">
         <h2 class="text-[15px] font-semibold text-highlighted">Caddyfile du reverse proxy</h2>
