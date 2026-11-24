@@ -1021,6 +1021,15 @@ frankenmanager trust-ca on                            # Then install the root CA
 - Five wrong passwords from an address lock it for 15 minutes.
 - The settings apply within 30 seconds, without restarting anything.
 
+#### Install the dashboard on a phone
+
+From the [remote access](#remote-access-to-the-dashboard), the dashboard installs as an app (PWA), with no store: its own icon and window, without the browser's bars. Install the root CA on the phone first (`frankenmanager trust-ca on`, see [iOS and Android devices](#ios-and-android-devices)): the browser installs the app on a trusted certificate only.
+
+- iOS: open `https://<this machine>:9443` in **Safari**, tap **Share**, then **Sur l'écran d'accueil** (Add to Home Screen).
+- Android: open it in **Chrome**, then **⋮ > Installer l'application** (Install app), or accept the banner Chrome offers.
+
+Each instance is its own app (one per address): install one per machine you manage. The app opens even when the daemon is stopped or the phone is off the network, showing that the daemon does not answer until it does. Only the pages are kept on the phone (the page and its scripts, styles and icons); the API answers, `/config.json` and any other site are never cached. When the daemon serves a new version (after `update`), the app offers **Recharger** instead of switching in the middle of what you are doing. The pages of this machine (https://frankenmanager.test, `https://127.0.0.1:9444`) install no offline cache: they always load the daemon's current version.
+
 ### Show version
 
 ```bash
