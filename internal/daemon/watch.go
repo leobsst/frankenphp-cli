@@ -18,11 +18,27 @@ var (
 	watchRetry = 5 * time.Second
 )
 
+// DockerState is the "docker" message of the event stream: whether the
+// Docker engine answers.
+type DockerState struct {
+	Reachable bool `json:"reachable"`
+}
+
 // watchContainers publishes the state of the containers of the stack
-// ("containers" on the event stream) when Docker reports a change, until
-// ctx ends. One event stream, shared by every client.
+// ("containers" on the event stream) when Docker reports a change, and
+// whether Docker answers ("docker") when that changes, until ctx ends. One
+// event stream, shared by every client.
 func (s *Server) watchContainers(ctx context.Context) {
 	var last []byte
+	var reachable *bool // last published, nil before the first check
+	checkDocker := func(ws *Workspace) bool {
+		up := ws.Stack.Docker.Reachable(ctx)
+		if reachable == nil || *reachable != up {
+			reachable = &up
+			s.Bus.Publish("docker", DockerState{Reachable: up})
+		}
+		return up
+	}
 	publish := func() {
 		ws, err := s.Backend(events.NewLog(nil))
 		if err != nil {
@@ -40,32 +56,48 @@ func (s *Server) watchContainers(ctx context.Context) {
 		last = data
 		s.Bus.Publish("containers", list)
 	}
-	for ctx.Err() == nil {
-		ws, err := s.Backend(events.NewLog(nil))
-		if err == nil {
-			changed := make(chan struct{}, 1)
-			watchCtx, stop := context.WithCancel(ctx)
-			go func() {
-				timer := time.NewTimer(0)
-				defer timer.Stop()
-				for {
-					select {
-					case <-watchCtx.Done():
-						return
-					case <-changed:
-						timer.Reset(watchDebounce)
-					case <-timer.C:
-						publish()
-					}
-				}
-			}()
-			_ = ws.Stack.Docker.WatchEvents(watchCtx, func() {
+	// follow publishes the containers on each Docker event, until the
+	// events stream breaks
+	follow := func(ws *Workspace) {
+		changed := make(chan struct{}, 1)
+		watchCtx, stop := context.WithCancel(ctx)
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			timer := time.NewTimer(0)
+			defer timer.Stop()
+			for {
 				select {
-				case changed <- struct{}{}:
-				default:
+				case <-watchCtx.Done():
+					return
+				case <-changed:
+					timer.Reset(watchDebounce)
+				case <-timer.C:
+					publish()
 				}
-			})
-			stop()
+			}
+		}()
+		_ = ws.Stack.Docker.WatchEvents(watchCtx, func() {
+			select {
+			case changed <- struct{}{}:
+			default:
+			}
+		})
+		stop()
+		<-done
+	}
+	for ctx.Err() == nil {
+		if ws, err := s.Backend(events.NewLog(nil)); err == nil {
+			// While Docker does not answer, its events stream would break at
+			// once: it is checked again after watchRetry
+			if checkDocker(ws) {
+				follow(ws)
+				// The stream broke: Docker may have stopped, its containers
+				// are then reported "not found"
+				if ctx.Err() == nil && !checkDocker(ws) {
+					publish()
+				}
+			}
 			_ = ws.Close()
 		}
 		select {

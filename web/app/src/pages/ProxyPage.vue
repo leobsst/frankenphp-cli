@@ -136,7 +136,7 @@ const columns: TableColumn<Domain>[] = [
     <SideForm
       title="Nouvelle route proxy"
       description="Exposez un service local sans créer de conteneur PHP."
-      hint="Caddy sera rechargé. Aucun conteneur PHP supplémentaire ne sera créé. Astuce démo : ciblez le port 443 pour voir l’erreur."
+      hint="Caddy sera rechargé. Aucun conteneur PHP supplémentaire ne sera créé."
       @submit="submit"
     >
       <UFormField label="Domaine source" :error="errors.source">

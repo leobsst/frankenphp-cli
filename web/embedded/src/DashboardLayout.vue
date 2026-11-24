@@ -35,7 +35,7 @@ onBeforeUnmount(() => {
           <UAlert
             v-if="state.error"
             color="error" variant="soft" icon="i-lucide-wifi-off" class="mb-5"
-            title="Le daemon ne répond pas" :description="state.error"
+            title="Le daemon ne répond pas" :description="`${state.error} Nouvelle tentative automatique en cours…`"
             :actions="[{ label: 'Réessayer', color: 'error', variant: 'outline', onClick: () => void refresh() }]"
           />
           <div v-if="!state.loaded" class="flex flex-col gap-4">

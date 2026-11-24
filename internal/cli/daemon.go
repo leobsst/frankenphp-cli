@@ -225,6 +225,7 @@ func (a *app) runDaemon(ctx context.Context) error {
 	srv.Logf = func(format string, args ...any) { fmt.Fprintf(a.errOut, format+"\n", args...) }
 	srv.UI = web.Dashboard()
 	srv.HTTPSPort = httpsPort
+	srv.Updater = a.deps.Updater(dir, a.log)
 	err = srv.Serve(ctx, socket, local, dash)
 	a.log.Info(i18n.T("Dashboard API stopped."))
 	return err

@@ -6,6 +6,7 @@ import StatusDot from '../components/StatusDot.vue'
 import DomainActions from '../components/DomainActions.vue'
 import DeviceModal from '../components/DeviceModal.vue'
 import StopStackModal from '../components/StopStackModal.vue'
+import DockerAlert from '../components/DockerAlert.vue'
 import {
   DEPRECATED_PHP, LIVE_NOISE, S3_DOMAIN, actions, active, domainIcon, domainStatus, envLabel, phpVersions, running, servedPath, serviceEnabled, state,
   type ContainerKind, type Domain,
@@ -77,6 +78,7 @@ const statCard = { body: 'p-0 sm:p-0 h-[112px] px-[15px] py-[13px] sm:px-[15px] 
       @click="stopOpen = true"
     />
   </PageHeader>
+  <DockerAlert />
 
   <!-- Indicators -->
   <div class="mt-6 grid grid-cols-2 gap-2.5 md:gap-4 xl:mt-[30px] xl:grid-cols-4 *:min-w-0">

@@ -21,6 +21,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/leobsst/frankenphp-cli/internal/core/compose"
 	"github.com/leobsst/frankenphp-cli/internal/core/phpversions"
@@ -511,8 +512,35 @@ func (s Statuses) Get(name string) Status {
 // Running reports whether name is running.
 func (s Statuses) Running(name string) bool { return s[name].State == "running" }
 
+// Bounds of the reads that must answer quickly, even when Docker hangs
+// (Docker Desktop starting or stuck).
+var (
+	// reachTimeout bounds Reachable.
+	reachTimeout = 3 * time.Second
+	// statusesTimeout bounds ContainerStatuses.
+	statusesTimeout = 15 * time.Second
+)
+
+// Reachable reports whether the Docker engine answers, within a few
+// seconds: false when Docker is stopped, not installed or stuck.
+func (m *Manager) Reachable(ctx context.Context) bool {
+	ctx, cancel := context.WithTimeout(ctx, reachTimeout)
+	defer cancel()
+	if e := m.engine(ctx); e != nil {
+		if e.ping(ctx) {
+			return true
+		}
+		forgetEngine()
+	}
+	// Without the Engine API: `docker version` fails when the client cannot
+	// reach the server
+	return m.ok(ctx, "version", "--format", "{{.Server.Version}}")
+}
+
 // ContainerStatuses lists every container, stopped ones included.
 func (m *Manager) ContainerStatuses(ctx context.Context) Statuses {
+	ctx, cancel := context.WithTimeout(ctx, statusesTimeout)
+	defer cancel()
 	if e := m.engine(ctx); e != nil {
 		if st, err := e.statuses(ctx); err == nil {
 			return st

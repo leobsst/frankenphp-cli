@@ -1,10 +1,11 @@
 /**
- * Dashboard store, connected version: same exports as the POC's simulated store (frankenmanager-gui-poc), but the
- * state comes from the daemon API of the chosen instance, and the main actions call it. The other POC features
- * (DNS, SSL, Redis, S3, databases, configuration, access) are not part of this demo.
+ * Dashboard store: same exports as the POC's simulated store (frankenmanager-gui-poc), but the state comes from the
+ * daemon API of the connected instance (`/api/v1`, see api/openapi.yaml), kept up to date by its event stream, and
+ * the actions call it. When the daemon stops answering, the store retries with backoff and reopens its streams once
+ * it is back; `state.docker` follows whether the daemon reaches Docker.
  */
 import { computed, nextTick, reactive, ref } from 'vue'
-import { ApiError, client, lastMessage, type Instance, type Client, type Container as ApiContainer, type HostInfo, type Operation, type Stat, type Status } from '../lib/api'
+import { ApiError, client, lastMessage, type Instance, type Client, type Container as ApiContainer, type HostInfo, type Operation, type Stat, type Status, type ApiResponse, type LogLine, type OpEvent, type Schema } from '../lib/api'
 import { defaultRoot } from './caddyfile'
 
 export type Php = '8.2' | '8.3' | '8.4' | '8.5'
@@ -260,6 +261,11 @@ let events: EventSource | null = null
 let logStream: EventSource | null = null
 let timers: ReturnType<typeof setInterval>[] = []
 let refreshSoon: ReturnType<typeof setTimeout> | undefined
+/** Retry after a failed refresh (daemon gone): sooner than the 30 s poll, backing off up to RETRY_MAX. */
+let retryTimer: ReturnType<typeof setTimeout> | undefined
+let retryDelay = 0
+const RETRY_MIN = 2_000
+const RETRY_MAX = 30_000
 let logSeq = 0
 /** Last timestamp read per container: a reopened stream sends back its last lines, already displayed. */
 let lastLogAt: Record<string, string> = {}
@@ -295,7 +301,7 @@ export async function refresh() {
       api.get<HostInfo>('/api/v1/host'),
       api.get<Status>('/api/v1/status'),
       api.get<ApiContainer[]>('/api/v1/containers'),
-      api.get<{ domain: string; kind: string; php?: string }[]>('/api/v1/hosts/archived'),
+      api.get<ApiResponse<'/api/v1/hosts/archived'>>('/api/v1/hosts/archived'),
       api.get<ApiSetting[]>('/api/v1/settings?show_secrets=true'),
     ])
     // In place: some pages keep a reference to state.config.
@@ -309,11 +315,20 @@ export async function refresh() {
     state.app.version = host.version
     state.dns.ip = host.lan_ip ?? ''
     state.dns.port = Number(state.config.DNS_PORT) || 53
-    state.docker = true
+    // A daemon without the field (older release) is assumed to reach Docker.
+    state.docker = status.docker !== false
+    const recovering = !!state.error || retryDelay > 0
     state.error = ''
+    clearTimeout(retryTimer)
+    retryTimer = undefined
+    retryDelay = 0
+    reopenStreams(recovering)
     void refreshExtras()
   } catch (e) {
+    // 401: the session is gone, the host signs in again (setUnauthorizedHandler).
+    if (e instanceof ApiError && e.status === 401) return
     state.error = e instanceof Error ? e.message : String(e)
+    scheduleRetry()
   } finally {
     state.loaded = true
   }
@@ -323,9 +338,9 @@ export async function refresh() {
 async function refreshExtras() {
   if (!api) return
   const [dns, clients, ca] = await Promise.all([
-    api.get<{ enabled: boolean; running: boolean }>('/api/v1/dns').catch(() => null),
-    api.get<{ connected: number }>('/api/v1/dns/clients').catch(() => null),
-    api.get<{ sharing: boolean; port?: number }>('/api/v1/ca').catch(() => null),
+    api.get<ApiResponse<'/api/v1/dns'>>('/api/v1/dns').catch(() => null),
+    api.get<ApiResponse<'/api/v1/dns/clients'>>('/api/v1/dns/clients').catch(() => null),
+    api.get<ApiResponse<'/api/v1/ca'>>('/api/v1/ca').catch(() => null),
   ])
   if (dns) Object.assign(state.dns, { enabled: dns.enabled, status: dns.running ? 'running' : 'stopped' })
   if (clients) state.dns.connected = clients.connected
@@ -362,11 +377,75 @@ function openLogs() {
   if (!api || state.stack !== 'running') return
   logStream = new EventSource(api.streamUrl('/api/v1/logs', { tail: '30' }))
   logStream.addEventListener('log', (e) => {
-    const l = JSON.parse((e as MessageEvent).data) as { container: string; time: string; line: string }
+    const l = JSON.parse((e as MessageEvent).data) as LogLine
     const last = lastLogAt[l.container]
     if (last && l.time && l.time <= last) return
     if (l.time) lastLogAt[l.container] = l.time
     if (state.prefs.autoRefresh) parseLine(l.container, l.line, l.time)
+  })
+}
+
+/** The daemon did not answer: refresh again after a growing delay (2 s, 4 s… 30 s). */
+function scheduleRetry() {
+  if (!api || retryTimer) return
+  retryDelay = Math.min(retryDelay ? retryDelay * 2 : RETRY_MIN, RETRY_MAX)
+  retryTimer = setTimeout(() => {
+    retryTimer = undefined
+    void refresh()
+  }, retryDelay)
+}
+
+/**
+ * Reopens the event stream when closed for good; after an outage (daemon restarted, updated), also the streams still
+ * reconnecting, and the log stream.
+ */
+function reopenStreams(recovering: boolean) {
+  if (!api) return
+  if (!events || events.readyState === EventSource.CLOSED || (recovering && events.readyState !== EventSource.OPEN)) openEvents()
+  if (recovering && state.stack === 'running' && logStream?.readyState !== EventSource.OPEN) openLogs()
+}
+
+/** Daemon event stream: operations, container and Docker changes. */
+function openEvents() {
+  events?.close()
+  if (!api) return
+  const es = new EventSource(api.streamUrl('/api/v1/events'))
+  events = es
+  // Set by an error: messages may have been missed, the state is read again once reconnected.
+  let stale = false
+  es.onopen = () => {
+    state.live = true
+    if (stale) void refresh()
+    stale = false
+  }
+  es.onerror = () => {
+    state.live = false
+    stale = true
+    // Closed for good (daemon restarted without the session…), or reconnecting: either way, check the daemon.
+    if (es.readyState === EventSource.CLOSED && events === es) events = null
+    scheduleRetry()
+  }
+  es.addEventListener('containers', (e) => {
+    const list = JSON.parse((e as MessageEvent).data) as ApiContainer[]
+    state.containers = list.map((c) => toContainer(c, state.containers.find((x) => x.id === c.name)))
+  })
+  es.addEventListener('docker', (e) => {
+    const { reachable } = JSON.parse((e as MessageEvent).data) as Schema<'DockerState'>
+    if (reachable === state.docker) return
+    state.docker = reachable
+    // Stack state and log stream follow Docker.
+    void refresh().then(openLogs)
+  })
+  es.addEventListener('operation', (e) => {
+    const op = JSON.parse((e as MessageEvent).data) as Operation
+    if (op.status === 'succeeded' || op.status === 'failed') {
+      clearTimeout(refreshSoon)
+      refreshSoon = setTimeout(() => { void refresh().then(openLogs) }, 400)
+    }
+  })
+  es.addEventListener('event', (e) => {
+    const ev = JSON.parse((e as MessageEvent).data) as OpEvent
+    if (ev.message && ev.kind !== 'output') pushLog(ev.level === 'error' ? 'ERROR' : ev.level === 'warning' ? 'WARN' : 'INFO', 'FrankenManager', ev.message)
   })
 }
 
@@ -380,6 +459,7 @@ export function connect(inst: Instance, opts: { mode?: 'local' | 'remote'; clien
   state.connection.mode = opts.mode ?? 'remote'
   state.connection.client = opts.client ?? 'App FrankenManager'
   api = client(inst)
+  resetUpdates()
   resume()
 }
 
@@ -387,26 +467,20 @@ export function connect(inst: Instance, opts: { mode?: 'local' | 'remote'; clien
 export function resume() {
   if (!api) return
   pause()
+  openEvents()
   void refresh().then(() => { openLogs(); void refreshStats() })
-  events = new EventSource(api.streamUrl('/api/v1/events'))
-  events.onopen = () => { state.live = true }
-  events.onerror = () => { state.live = false }
-  events.addEventListener('containers', (e) => {
-    const list = JSON.parse((e as MessageEvent).data) as ApiContainer[]
-    state.containers = list.map((c) => toContainer(c, state.containers.find((x) => x.id === c.name)))
-  })
-  events.addEventListener('operation', (e) => {
-    const op = JSON.parse((e as MessageEvent).data) as Operation
-    if (op.status === 'succeeded' || op.status === 'failed') {
-      clearTimeout(refreshSoon)
-      refreshSoon = setTimeout(() => { void refresh().then(openLogs) }, 400)
-    }
-  })
-  events.addEventListener('event', (e) => {
-    const ev = JSON.parse((e as MessageEvent).data) as { kind: string; level: string; message?: string }
-    if (ev.message && ev.kind !== 'output') pushLog(ev.level === 'error' ? 'ERROR' : ev.level === 'warning' ? 'WARN' : 'INFO', 'FrankenManager', ev.message)
-  })
   timers = [setInterval(refreshStats, 5_000), setInterval(refresh, 30_000)]
+  void loadUpdates()
+  timers.push(setInterval(() => void loadUpdates(), UPDATE_POLL_MS))
+}
+
+/**
+ * Same instance, new session (local re-sign-in after a daemon restart lost it): the state is kept, the requests and
+ * streams go on with the new token.
+ */
+export function reconnect(inst: Instance) {
+  api = client(inst)
+  resume()
 }
 
 /** Suspends the streams (background) without forgetting the instance. */
@@ -418,6 +492,9 @@ export function pause() {
   timers.forEach(clearInterval)
   timers = []
   clearTimeout(refreshSoon)
+  clearTimeout(retryTimer)
+  retryTimer = undefined
+  retryDelay = 0
 }
 
 export function disconnect() {
@@ -480,7 +557,10 @@ async function restartStack() {
 
 async function restartContainer(id: string, opts: { rebuild?: boolean; action?: 'restart' | 'stop' | 'start' } = {}) {
   if (opts.rebuild) {
-    toast('info', 'Non disponible dans la démo', 'La reconstruction des images PHP passe par le CLI : frankenmanager restart --build.')
+    // `frankenmanager restart --caddy --build`: the images of every active PHP version are rebuilt, their containers
+    // recreated, then the FrankenPHP containers and the reverse proxy restart; the other services keep running.
+    for (const c of state.containers) if (c.kind === 'php') c.status = 'restarting'
+    await operate('Reconstruction des images PHP', (cl) => cl.post('/api/v1/stack/restart', { targets: ['caddy'], build: true }), 'Images PHP reconstruites, conteneurs recréés.')
     return
   }
   const action = opts.action ?? 'restart'
@@ -582,7 +662,7 @@ export interface ConfigDef {
   generated?: boolean
   validate?: (v: string) => string | null
 }
-interface ApiSetting { key: string; value: string; default: string; description: string; values?: string[]; secret: boolean; apply: string; applies: string; hint?: string }
+type ApiSetting = Schema<'Setting'>
 
 const GROUPS: [RegExp, string][] = [
   [/^(DB_|MARIADB_|MYSQL_|POSTGRES_|PMA_|PGADMIN_)/, 'Bases de données'], [/^REDIS_/, 'Cache Redis'], [/^SOKETI_/, 'WebSocket (Soketi)'],
@@ -615,7 +695,7 @@ export async function loadPage(name: string) {
 
 async function loadDns() {
   if (!api) return
-  const r = await api.get<{ devices: { ip: string; name: string; mac: string; last_seen: string; queries: number; randomized_mac: boolean }[] }>('/api/v1/dns/clients?all=true')
+  const r = await api.get<ApiResponse<'/api/v1/dns/clients'>>('/api/v1/dns/clients?all=true')
   state.dnsClients = r.devices.map((d) => ({ ip: d.ip, name: d.name || undefined, mac: d.mac || undefined, privateMac: d.randomized_mac, lastSeen: Date.parse(d.last_seen), queries: d.queries }))
   Object.assign(state.dns, { listen: state.config.DNS_LISTEN_IP || '0.0.0.0', upstream: state.config.DNS_UPSTREAM ?? '', ip: state.config.DNS_IP || state.dns.ip })
   await refreshExtras()
@@ -624,7 +704,7 @@ async function loadDns() {
 const TYPE_SIZE: Record<string, string> = { string: 'chaîne', hash: 'hash', list: 'liste', set: 'ensemble', zset: 'ensemble trié', stream: 'flux' }
 async function loadRedis(pattern = '*', count = 200) {
   if (!api || !serviceEnabled('redis')) return
-  const st = await api.get<{ running: boolean; info?: { version: string; used_memory: string; connected_clients: number; keys: number; hits: number; misses: number } }>('/api/v1/redis')
+  const st = await api.get<ApiResponse<'/api/v1/redis'>>('/api/v1/redis')
   const i = st.info
   // In place: RedisPage keeps a reference to state.redis.
   Object.assign(state.redis, {
@@ -633,7 +713,7 @@ async function loadRedis(pattern = '*', count = 200) {
     hit: i && i.hits + i.misses ? Math.round((i.hits / (i.hits + i.misses)) * 100) : 0,
   })
   if (!st.running) { state.redis.sample = []; return }
-  const page = await api.get<{ keys: { name: string; type: string; ttl: number }[] }>(`/api/v1/redis/keys?pattern=${encodeURIComponent(pattern || '*')}&count=${count}`)
+  const page = await api.get<ApiResponse<'/api/v1/redis/keys'>>(`/api/v1/redis/keys?pattern=${encodeURIComponent(pattern || '*')}&count=${count}`)
   state.redis.sample = page.keys.map((k) => ({ key: k.name, type: k.type, size: TYPE_SIZE[k.type] ?? k.type, ttl: k.ttl }))
 }
 /** `SCAN MATCH` pattern: `*` and `?` as glob (local filter of the keys already read). */
@@ -646,7 +726,7 @@ const ENGINE_LABEL: Record<string, DbEngine> = { mariadb: 'MariaDB', mysql: 'MyS
 const engineId = (e: DbEngine) => ({ MariaDB: 'mariadb', MySQL: 'mysql', PostgreSQL: 'postgresql' })[e]
 async function loadDatabases() {
   if (!api) return
-  const r = await api.get<{ servers: { engine: string; running: boolean; databases: string[]; users: { name: string; host?: string }[] }[]; admin_url?: string }>('/api/v1/databases')
+  const r = await api.get<ApiResponse<'/api/v1/databases'>>('/api/v1/databases')
   state.databases = (r.servers ?? []).flatMap((s) => (s.databases ?? []).map((name) => ({ name, engine: ENGINE_LABEL[s.engine] ?? 'MariaDB', size: 0, user: '' })))
   state.dbUsers = (r.servers ?? []).flatMap((s) => (s.users ?? []).map((u) => ({ name: u.name, engine: ENGINE_LABEL[s.engine] ?? 'MariaDB', host: u.host ?? '' })))
   state.adminUrl = r.admin_url ?? ''
@@ -663,20 +743,20 @@ export function validateBucket(name: string): string | null {
 async function loadS3() {
   if (!api || !serviceEnabled('s3') || !s3Up()) return
   const [buckets, keys] = await Promise.all([
-    api.get<{ name: string; public: boolean; objects: number; public_objects: number; bytes: number }[]>('/api/v1/s3/buckets'),
-    api.get<{ id: string; name: string; global: boolean; grants: { bucket: string; write: boolean }[] }[]>('/api/v1/s3/keys'),
+    api.get<ApiResponse<'/api/v1/s3/buckets'>>('/api/v1/s3/buckets'),
+    api.get<ApiResponse<'/api/v1/s3/keys'>>('/api/v1/s3/keys'),
   ])
   // In place: S3Page keeps a reference to state.s3.
   state.s3.buckets = buckets.map((b) => ({ name: b.name, public: b.public, objects: b.objects, publicObjects: b.public_objects, size: Math.round((b.bytes / 1e6) * 10) / 10 }))
   const own = keys.filter((k) => !k.global && k.grants.length)
-  const secrets = await Promise.all(own.map((k) => api!.get<{ secret?: string }>(`/api/v1/s3/keys/${k.id}`).catch(() => ({ secret: '' }))))
+  const secrets = await Promise.all(own.map((k) => api!.get<ApiResponse<'/api/v1/s3/keys/{id}'>>(`/api/v1/s3/keys/${k.id}`).catch(() => ({ secret: '' }))))
   state.s3.keys = own.map((k, i) => ({ id: k.id, name: k.name, bucket: k.grants[0]!.bucket, readOnly: !k.grants[0]!.write, secret: secrets[i]!.secret ?? '' }))
 }
 
 /** A bucket folder (`?prefix=`): its objects, and its subfolders as "folder/" entries. */
 export async function loadObjects(bucket: string, prefix: string) {
   if (!api || !bucket) return
-  const page = await api.get<{ folders: string[]; objects: { key: string; size: number; last_modified: string; public: boolean; url?: string }[] }>(
+  const page = await api.get<ApiResponse<'/api/v1/s3/buckets/{bucket}/objects'>>(
     `/api/v1/s3/buckets/${encodeURIComponent(bucket)}/objects?prefix=${encodeURIComponent(prefix)}`)
   state.s3.objects[bucket] = [
     ...(page.folders ?? []).map((f) => ({ key: f.endsWith('/') ? f : `${f}/`, size: 0, modified: 0, public: false })),
@@ -688,7 +768,7 @@ export const objectPublic = (bucket: string, o: S3Object) => !!state.s3.buckets.
 /** Public URL of a public object, otherwise a presigned link valid for `expires` seconds (`…/object/link`). */
 export async function objectLink(bucket: string, o: S3Object, expires = 3600) {
   if (!api) throw new Error('Aucune instance.')
-  const l = await api.get<{ url: string; public: boolean; expires_at?: string }>(
+  const l = await api.get<ApiResponse<'/api/v1/s3/buckets/{bucket}/object/link'>>(
     `/api/v1/s3/buckets/${encodeURIComponent(bucket)}/object/link?key=${encodeURIComponent(o.key)}&expires=${expires}`)
   return { url: l.url, public: l.public, expiresAt: l.expires_at ? Date.parse(l.expires_at) : null }
 }
@@ -698,9 +778,9 @@ export const objectDownloadUrl = (bucket: string, key: string) => api?.streamUrl
 async function loadAccess() {
   if (!api) return
   const [auth, sessions, log, host] = await Promise.all([
-    api.get<{ password_set: boolean; remote_active: boolean }>('/api/v1/auth'),
-    api.get<{ id: string; device: string; ip: string; remote: boolean; created: string; last_seen: string; current: boolean }[]>('/api/v1/auth/sessions'),
-    api.get<{ at: string; ip: string; event: string; device?: string; remote: boolean }[]>('/api/v1/auth/log?limit=100'),
+    api.get<ApiResponse<'/api/v1/auth'>>('/api/v1/auth'),
+    api.get<ApiResponse<'/api/v1/auth/sessions'>>('/api/v1/auth/sessions'),
+    api.get<ApiResponse<'/api/v1/auth/log'>>('/api/v1/auth/log?limit=100'),
     api.get<HostInfo>('/api/v1/host'),
   ])
   Object.assign(state.access, {
@@ -721,7 +801,7 @@ export const defaultCaddyfile = (name: string) => state.siteFiles[name]?.templat
 export const isCaddyfileCustom = (name: string) => !!state.siteFiles[name]?.modified
 export async function loadCaddyfile(name: string) {
   if (!api) return
-  const f = await api.get<{ path: string; content: string; template: string; modified: boolean }>(`/api/v1/hosts/${encodeURIComponent(name)}/caddyfile`)
+  const f = await api.get<ApiResponse<'/api/v1/hosts/{name}/caddyfile'>>(`/api/v1/hosts/${encodeURIComponent(name)}/caddyfile`)
   state.siteFiles[name] = f
 }
 
@@ -740,7 +820,7 @@ async function setWebsocket(name: string, on: boolean) {
 async function checkCaddyfile(name: string, text: string): Promise<{ line: number; message: string } | null> {
   if (!api) return { line: 1, message: 'Aucune instance.' }
   try {
-    await api.post<{ valid: boolean }>(`/api/v1/hosts/${encodeURIComponent(name)}/caddyfile/validate`, { content: text })
+    await api.post<ApiResponse<'/api/v1/hosts/{name}/caddyfile/validate', 'post'>>(`/api/v1/hosts/${encodeURIComponent(name)}/caddyfile/validate`, { content: text })
     return null
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
@@ -932,4 +1012,52 @@ export const actions = {
   signIn: async (_password: string): Promise<string | null> => null,
   /** The domain only resolves on a device that uses the instance's LAN DNS. */
   openSite: (name: string) => { window.open(`https://${name}`, '_blank') },
+}
+
+// ---------- FrankenManager updates (GET /api/v1/update) ----------
+/** A release newer than the instance's daemon, with its GitHub notes (Markdown). */
+export type ReleaseNotes = Schema<'ReleaseNotes'>
+/** `GET /api/v1/update`: installed and latest versions, notes of the newer releases. */
+export type UpdateInfo = ApiResponse<'/api/v1/update'>
+
+/** The daemon caches the lookup (one hour): polling it rarely is enough. */
+const UPDATE_POLL_MS = 30 * 60_000
+const blankUpdates = () => ({ info: null as UpdateInfo | null, checking: false, error: '' })
+/** Lookup of the instance's daemon; `error`: no answer at all (GitHub unreachable, rate limit). */
+export const updates = reactive(blankUpdates())
+export const updateAvailable = computed(() => !!updates.info?.update_available)
+
+function resetUpdates() {
+  Object.assign(updates, blankUpdates())
+}
+
+/** Reads the lookup; `refresh` bypasses the daemon's cache. Returns the error, null when answered. */
+async function loadUpdates(refresh = false): Promise<string | null> {
+  if (!api) return 'Aucune instance.'
+  const c = api
+  updates.checking = true
+  try {
+    const info = await c.get<UpdateInfo>(`/api/v1/update${refresh ? '?refresh=true' : ''}`)
+    if (c !== api) return null
+    updates.info = info
+    updates.error = ''
+    state.app.latest = info.latest
+    return null
+  } catch (e) {
+    const err = e instanceof Error ? e.message : String(e)
+    if (c === api) updates.error = err
+    return err
+  } finally {
+    if (c === api) updates.checking = false
+  }
+}
+
+/** "Vérifier": looks up GitHub again (`frankenmanager update --check`). */
+export async function checkUpdate() {
+  const err = await loadUpdates(true)
+  const info = updates.info
+  if (err || !info) toast('error', 'Vérification impossible', err ?? undefined)
+  else if (info.error) toast('warning', 'Vérification impossible', info.error)
+  else if (info.update_available) toast('info', 'Mise à jour disponible', `FrankenManager ${info.latest} est disponible.`)
+  else toast('success', 'FrankenManager est à jour', `Version ${info.version}.`)
 }

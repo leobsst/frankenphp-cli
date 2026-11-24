@@ -104,8 +104,10 @@ type Updater struct {
 	Exe           string // real path of the running executable
 	Client        *http.Client
 	APIURL        string
-	Log           Logger
-	Now           func() time.Time
+	// ReleasesURL lists the releases with their notes (Changelog)
+	ReleasesURL string
+	Log         Logger
+	Now         func() time.Time
 	// Spawn starts exe with args, detached (the cache refresh).
 	Spawn func(exe string, args ...string) error
 	// RunSync runs exe's SyncResourcesCommand and returns its exit code.
@@ -133,6 +135,7 @@ func New(dataDir string, log Logger) *Updater {
 		Exe:           exe,
 		Client:        http.DefaultClient,
 		APIURL:        APIURL,
+		ReleasesURL:   ReleasesURL,
 		Log:           log,
 		Now:           time.Now,
 		Spawn:         spawn,
