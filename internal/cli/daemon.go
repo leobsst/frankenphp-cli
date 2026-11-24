@@ -222,6 +222,7 @@ func (a *app) runDaemon(ctx context.Context) error {
 	srv.LoadAccess = func() (daemon.AccessConfig, error) { return loadAccess(dir) }
 	srv.RemoteCert = func(cfg daemon.AccessConfig) (string, string, error) { return a.remoteCert(ctx, dir, cfg) }
 	srv.LANIP = a.deps.LANIP
+	srv.RootCAPath = func(ctx context.Context) (string, error) { return ssl.RootCAPath(ctx, a.deps.Command) }
 	srv.Logf = func(format string, args ...any) { fmt.Fprintf(a.errOut, format+"\n", args...) }
 	srv.UI = web.Dashboard()
 	srv.HTTPSPort = httpsPort

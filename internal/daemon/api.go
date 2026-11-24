@@ -70,6 +70,8 @@ func (s *Server) routeTable() []route {
 		{"GET /api/v1/auth", s.authState},
 		{"POST /api/v1/auth/login", s.login},
 		{"POST /api/v1/auth/local", s.localLogin},
+		{"POST /api/v1/auth/pairing", s.createPairing},
+		{"POST /api/v1/auth/pair", s.pair},
 		{"POST /api/v1/auth/logout", s.logout},
 		{"PUT /api/v1/auth/password", s.setPassword},
 		{"GET /api/v1/auth/sessions", s.sessions},
@@ -173,6 +175,8 @@ var destructive = map[string]func(*http.Request) bool{
 	"POST /api/v1/redis/flush":                        always,
 	"POST /api/v1/databases/{engine}/delete":          always,
 	"POST /api/v1/databases/{engine}/users/delete":    always,
+	// A pairing code opens a session without the password
+	"POST /api/v1/auth/pairing": always,
 	// The access settings could open the dashboard wider
 	"PUT /api/v1/settings/{key}": func(r *http.Request) bool {
 		return strings.HasPrefix(strings.ToUpper(r.PathValue("key")), "DASHBOARD_")

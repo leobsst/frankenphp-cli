@@ -17,7 +17,8 @@ info:
       is set: the address must be allowed (`DASHBOARD_ALLOWED_IPS`), the `Origin`
       must be the address itself, and a session is required (`fm_session` cookie,
       or `Authorization: Bearer <session token>` for an app). Sign in with
-      `POST /api/v1/auth/login`. There, the destructive actions (marked
+      `POST /api/v1/auth/login`, or pair the mobile app with a one-time code
+      (`POST /api/v1/auth/pairing`, then `POST /api/v1/auth/pair`). There, the destructive actions (marked
       **Destructive**) need the password again in the `X-FM-Password` header
       (`428` without it, `403` when wrong). Five wrong passwords lock the address
       for 15 minutes (`429`).
@@ -154,7 +155,8 @@ paths:
         when Docker reports a change (one event stream shared by every client),
         `event: docker` with a `DockerState` when Docker stops or comes back answering
         (checked every 5 s while it does not answer), and `event: s3.objects` with
-        `{bucket}` after an upload. Comments (`: ping`) keep
+        `{bucket}` after an upload, and `event: paired` with a `PairedEvent` when a device
+        uses a pairing code. Comments (`: ping`) keep
         the stream open every 25 s.
         A slow client may miss messages: read the operation again.
 
@@ -1107,6 +1109,70 @@ paths:
         "409": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/Error" }
 
+  /api/v1/auth/pairing:
+    post:
+      tags: [auth]
+      summary: Make a one-time code to pair a device
+      description: |
+        **Destructive** (remotely, the password again: the code opens a session without it).
+        Makes a pairing code for the mobile app: the dashboard shows `qr` as a QR code, the
+        app scans it and exchanges the code at `POST /api/v1/auth/pair`, on the remote access.
+
+        The code holds 128 random bits (URL-safe base64), is valid 5 minutes and once, and is
+        kept hashed in the memory of the daemon only (a restart invalidates it); at most 5
+        codes are valid at once, a new one replaces the oldest. When a device uses it, the
+        event stream sends `event: paired` with a `PairedEvent`.
+
+        The QR text is `frankenmanager://pair?v=1&url=<url>&code=<code>&name=<name>&ca=<ca_fingerprint>`
+        (URL-encoded values, `ca` left out without fingerprint).
+
+        `409` when the remote access is closed (`DASHBOARD_ACCESS=local`), does not run (no
+        password, no certificate) or has no known address: a phone could not reach it.
+      responses:
+        "200":
+          description: The code, and the QR text to show.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Pairing" }
+        "409": { $ref: "#/components/responses/Error" }
+        "428": { $ref: "#/components/responses/Confirm" }
+
+  /api/v1/auth/pair:
+    post:
+      tags: [auth]
+      summary: Exchange a pairing code for a session
+      description: |
+        On the remote access only (the allowed addresses of `DASHBOARD_ALLOWED_IPS`; elsewhere
+        `404`), across origins for the mobile app like `POST /api/v1/auth/login`. Opens a
+        revocable session named `device` (the User-Agent when empty), logged as `paired`, and
+        consumes the code. A wrong, expired or used code answers `401` and counts as a wrong
+        password: five lock the address for 15 minutes (`429`), the login too.
+      security: [{}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string }
+                device: { type: string, description: Shown in the sessions; the User-Agent when empty. }
+      responses:
+        "200":
+          description: Paired, signed in.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, session]
+                properties:
+                  token: { type: string }
+                  session: { $ref: "#/components/schemas/Session" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+
   /api/v1/auth/logout:
     post:
       tags: [auth]
@@ -1883,7 +1949,7 @@ components:
         ip: { type: string }
         event:
           type: string
-          enum: [login, login_failed, logout, revoked, refused, confirm_failed, password_failed, password_changed]
+          enum: [login, login_failed, logout, revoked, refused, confirm_failed, password_failed, password_changed, paired, pair_failed]
         device: { type: string }
         remote: { type: boolean }
 
@@ -1898,7 +1964,35 @@ components:
         lan_ip: { type: string }
         remote: { type: boolean, description: The request came through the remote access (badge Local / Remote). }
         mode: { type: string, enum: [local, lan, internet] }
-        remote_url: { type: string, description: Where the remote access answers, when on. }
+        remote_url:
+          type: string
+          description: >-
+            Where the remote access answers, when on: the LAN address of this machine, or the first name of the
+            certificate of DASHBOARD_TLS_CERT.
+
+    Pairing:
+      type: object
+      required: [id, code, expires_at, url, name, qr]
+      properties:
+        id: { type: string, description: Tells which code a `paired` event is about; not secret. }
+        code: { type: string, description: The one-time code, to type when the QR code cannot be scanned. }
+        expires_at: { type: string, format: date-time }
+        url: { type: string, description: "Base URL of the remote access, e.g. https://192.168.1.10:9443." }
+        name: { type: string, description: The name of this machine. }
+        ca_fingerprint:
+          type: string
+          description: >-
+            Lowercase hex SHA-256 of the mkcert root CA certificate (DER) that signed the certificate of the
+            remote access. Left out with DASHBOARD_TLS_CERT, or when the CA cannot be read.
+        qr: { type: string, description: "The text of the QR code: frankenmanager://pair?v=1&url=…&code=…&name=…&ca=…" }
+
+    PairedEvent:
+      type: object
+      required: [id, device, session]
+      properties:
+        id: { type: string, description: The `id` of the code used. }
+        device: { type: string }
+        session: { type: string, description: The id of the new session. }
 
     UpdateInfo:
       type: object
