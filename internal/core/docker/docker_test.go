@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // call is one docker invocation seen by fakeRunner.
@@ -306,6 +307,47 @@ not json
 	m.Runner = &fakeRunner{respond: func([]string) (Result, error) { return Result{ExitCode: 1}, nil }}
 	if s := m.ContainerStatuses(context.Background()); len(s) != 0 {
 		t.Errorf("unreachable Docker = %v", s)
+	}
+}
+
+// blockingRunner is a docker that never answers, until the context ends.
+type blockingRunner struct{}
+
+func (blockingRunner) Run(ctx context.Context, _ string, _ map[string]string, _ ...string) (Result, error) {
+	<-ctx.Done()
+	return Result{ExitCode: -1}, ctx.Err()
+}
+
+// Reachable asks the server version: false when the client cannot reach
+// it, and within its bound when Docker hangs.
+func TestReachable(t *testing.T) {
+	m, r, _ := newManager(t, nil)
+	if !m.Reachable(context.Background()) {
+		t.Error("answering Docker is not reachable")
+	}
+	if want := []string{"version --format {{.Server.Version}}"}; !slices.Equal(r.argLines(), want) {
+		t.Errorf("calls = %v", r.argLines())
+	}
+
+	m.Runner = &fakeRunner{respond: func([]string) (Result, error) { return Result{ExitCode: 1}, nil }}
+	if m.Reachable(context.Background()) {
+		t.Error("stopped Docker is reachable")
+	}
+	m.Runner = &fakeRunner{respond: func([]string) (Result, error) { return Result{ExitCode: -1}, errors.New("no docker") }}
+	if m.Reachable(context.Background()) {
+		t.Error("missing docker command is reachable")
+	}
+
+	prev := reachTimeout
+	reachTimeout = 20 * time.Millisecond
+	t.Cleanup(func() { reachTimeout = prev })
+	m.Runner = blockingRunner{}
+	start := time.Now()
+	if m.Reachable(context.Background()) {
+		t.Error("hung Docker is reachable")
+	}
+	if d := time.Since(start); d > 2*time.Second {
+		t.Errorf("Reachable took %v with a hung Docker", d)
 	}
 }
 

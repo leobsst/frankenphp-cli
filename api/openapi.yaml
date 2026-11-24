@@ -93,6 +93,10 @@ paths:
     get:
       tags: [stack]
       summary: State of the stack, hosts and optional services
+      description: |
+        Answers within a few seconds even when Docker is stopped or stuck: `docker`
+        is then false and the stack reported stopped. The dashboard tells "Docker
+        unreachable" (200, `docker: false`) from "daemon gone" (no answer) by it.
       responses:
         "200":
           description: The current state.
@@ -109,8 +113,10 @@ paths:
         Sends `event: operation` with an `Operation` when one is queued, starts or
         finishes, and `event: event` with an `Event` for each step or message of a
         running operation, `event: containers` with the `Container` list of the stack
-        when Docker reports a change (one event stream shared by every client), and
-        `event: s3.objects` with `{bucket}` after an upload. Comments (`: ping`) keep
+        when Docker reports a change (one event stream shared by every client),
+        `event: docker` with a `DockerState` when Docker stops or comes back answering
+        (checked every 5 s while it does not answer), and `event: s3.objects` with
+        `{bucket}` after an upload. Comments (`: ping`) keep
         the stream open every 25 s.
         A slow client may miss messages: read the operation again.
 
@@ -194,6 +200,7 @@ paths:
     get:
       tags: [stack]
       summary: The containers of the stack and their state
+      description: When Docker does not answer, every container is `not found` (see `Status.docker`).
       responses:
         "200":
           description: The containers the configuration runs.
@@ -1287,15 +1294,23 @@ components:
 
     Status:
       type: object
-      required: [running, hosts, services]
+      required: [running, docker, hosts, services]
       properties:
         running: { type: boolean }
+        docker: { type: boolean, description: The Docker engine answers. When false, `running` is false. }
         hosts:
           type: array
           items: { $ref: "#/components/schemas/Host" }
         services:
           type: array
           items: { $ref: "#/components/schemas/Service" }
+
+    DockerState:
+      type: object
+      required: [reachable]
+      description: Message `docker` of the event stream.
+      properties:
+        reachable: { type: boolean, description: The Docker engine answers. }
 
     Domain:
       type: object
@@ -1350,7 +1365,13 @@ components:
             enum: [caddy, database, cache, phpmyadmin, dns, soketi, s3]
           description: Empty restarts everything.
         force_ssl: { type: boolean }
-        build: { type: boolean }
+        build:
+          type: boolean
+          description: |
+            Rebuild the images of the active PHP versions first, and recreate their
+            containers on them (needs DEFAULT_PROJECT_PATH or a path known from the
+            last start). With `targets: [caddy]`, only the FrankenPHP containers and
+            the reverse proxy restart: what the dashboard's "rebuild" does.
 
     AddHostsRequest:
       type: object
