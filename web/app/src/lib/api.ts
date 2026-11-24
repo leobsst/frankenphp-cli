@@ -43,6 +43,8 @@ export interface Service {
 }
 export interface Status {
   running: boolean
+  /** The daemon reaches Docker; when false, the stack is reported stopped. */
+  docker: boolean
   hosts: Host[]
   services: Service[]
 }

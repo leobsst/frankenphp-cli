@@ -1,5 +1,5 @@
 import { reactive } from 'vue'
-import { connect, disconnect } from '@app/composables/useFm'
+import { connect, disconnect, reconnect } from '@app/composables/useFm'
 import { setUnauthorizedHandler, type Instance } from '@app/lib/api'
 
 /**
@@ -36,6 +36,12 @@ export const session = reactive({
 
 const bearer = (token: string): Record<string, string> => (token ? { Authorization: `Bearer ${token}` } : {})
 
+/** Token of the session in use: a 401 on an older one (request sent before a re-sign-in) is ignored. */
+let current = ''
+/** Automatic retry of boot() while the daemon does not answer: 2 s, 4 s… 30 s. */
+let bootRetry: ReturnType<typeof setTimeout> | undefined
+let bootDelay = 0
+
 /** Is the `token` session (or the cookie, without a token) recognized? */
 async function recognized(token: string) {
   const r = await fetch(`${session.base}/api/v1/auth`, { headers: bearer(token) })
@@ -44,15 +50,35 @@ async function recognized(token: string) {
   return !a.session_required || a.authenticated
 }
 
+const instance = (token: string): Instance => ({ id: 'dashboard', url: session.base, token })
+
 function start(token: string) {
-  const inst: Instance = { id: 'dashboard', url: session.base, token }
+  const inst = instance(token)
+  current = token
+  bootDelay = 0
   connect(inst, { mode: session.mode, client: session.mode === 'local' ? 'Navigateur de cette machine' : 'Navigateur' })
   session.phase = 'ready'
 }
 
+/**
+ * Opens a passwordless session on this machine and keeps its token; null when the password is required here too
+ * (403, DASHBOARD_LOCAL_AUTH).
+ */
+async function localSession(): Promise<string | null> {
+  const r = await fetch(`${session.base}/api/v1/auth/local`, { method: 'POST' })
+  if (r.ok) {
+    const { token } = (await r.json()) as { token: string }
+    write(token)
+    return token
+  }
+  if (r.status === 403) return null
+  throw new Error(`Connexion locale refusée (${r.status}).`)
+}
+
 export async function boot() {
-  session.phase = 'loading'
-  session.error = ''
+  clearTimeout(bootRetry)
+  // While retrying, the error screen stays up instead of blinking with the loader.
+  if (session.phase !== 'error') session.phase = 'loading'
   try {
     const res = await fetch('config.json', { cache: 'no-store' })
     if (!res.ok) throw new Error(`config.json : ${res.status}`)
@@ -63,19 +89,17 @@ export async function boot() {
     if (await recognized(token)) return start(token)
     write('')
     if (cfg.mode === 'local') {
-      const r = await fetch(`${session.base}/api/v1/auth/local`, { method: 'POST' })
-      if (r.ok) {
-        const { token: fresh } = (await r.json()) as { token: string }
-        write(fresh)
-        return start(fresh)
-      }
-      // 403: DASHBOARD_LOCAL_AUTH, the password is required here too
-      if (r.status !== 403) throw new Error(`Connexion locale refusée (${r.status}).`)
+      const fresh = await localSession()
+      if (fresh) return start(fresh)
     }
     session.phase = 'login'
+    session.error = ''
   } catch (e) {
     session.phase = 'error'
     session.error = e instanceof Error ? e.message : String(e)
+    // The daemon is not there (yet): try again, the page recovers without a reload.
+    bootDelay = Math.min(bootDelay ? bootDelay * 2 : 2_000, 30_000)
+    bootRetry = setTimeout(() => void boot(), bootDelay)
   }
 }
 
@@ -96,9 +120,29 @@ export async function signIn(password: string): Promise<string | null> {
   return null
 }
 
-// Session revoked or expired: forget the token and start over (new local session, or password).
-setUnauthorizedHandler(() => {
-  write('')
-  disconnect()
-  void boot()
+/**
+ * Session revoked, expired, or lost by a restarted daemon: forget the token. On this machine, a new local session is
+ * opened in place, keeping the page as is; otherwise (or when it fails), start over (password, or error screen).
+ */
+let resigning = false
+setUnauthorizedHandler(async (inst) => {
+  // Requests and streams sent in parallel fail together: one re-sign-in, and none for an already replaced token.
+  if (resigning || inst.token !== current) return
+  resigning = true
+  try {
+    write('')
+    if (session.mode === 'local') {
+      const fresh = await localSession().catch(() => null)
+      if (fresh) {
+        current = fresh
+        reconnect(instance(fresh))
+        return
+      }
+    }
+    current = ''
+    disconnect()
+    await boot()
+  } finally {
+    resigning = false
+  }
 })
