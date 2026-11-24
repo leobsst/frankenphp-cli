@@ -82,6 +82,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Installed version, latest release and the notes in between
+         * @description Looks up the releases on GitHub: the latest stable one (drafts and pre-releases
+         *     are skipped) and the notes of every release newer than the daemon, among the last
+         *     30 published. The answer is cached one hour (a failure, ten minutes): the
+         *     dashboards may poll it. A development build reports the latest release but never
+         *     an update.
+         *
+         *     The update is not installed through the API: the binary lives in a system
+         *     directory (e.g. `/usr/local/lib/frankenmanager`) that the daemon, run as the
+         *     user, cannot write. Run `command` in a terminal of the host.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Look up GitHub again, bypassing the cache. */
+                    refresh?: boolean;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The releases. When a lookup failed after an earlier one succeeded, the earlier answer, with `error`. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["UpdateInfo"];
+                    };
+                };
+                /** @description GitHub could not be reached, or its rate limit was reached, and no earlier answer is known. */
+                502: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+                /** @description This daemon does not check for updates. */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/status": {
         parameters: {
             query?: never;
@@ -89,7 +157,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** State of the stack, hosts and optional services */
+        /**
+         * State of the stack, hosts and optional services
+         * @description Answers within a few seconds even when Docker is stopped or stuck: `docker`
+         *     is then false and the stack reported stopped. The dashboard tells "Docker
+         *     unreachable" (200, `docker: false`) from "daemon gone" (no answer) by it.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -131,8 +204,10 @@ export interface paths {
          * @description Sends `event: operation` with an `Operation` when one is queued, starts or
          *     finishes, and `event: event` with an `Event` for each step or message of a
          *     running operation, `event: containers` with the `Container` list of the stack
-         *     when Docker reports a change (one event stream shared by every client), and
-         *     `event: s3.objects` with `{bucket}` after an upload. Comments (`: ping`) keep
+         *     when Docker reports a change (one event stream shared by every client),
+         *     `event: docker` with a `DockerState` when Docker stops or comes back answering
+         *     (checked every 5 s while it does not answer), and `event: s3.objects` with
+         *     `{bucket}` after an upload. Comments (`: ping`) keep
          *     the stream open every 25 s.
          *     A slow client may miss messages: read the operation again.
          *
@@ -353,7 +428,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The containers of the stack and their state */
+        /**
+         * The containers of the stack and their state
+         * @description When Docker does not answer, every container is `not found` (see `Status.docker`).
+         */
         get: {
             parameters: {
                 query?: never;
@@ -2673,8 +2751,15 @@ export interface components {
         };
         Status: {
             running: boolean;
+            /** @description The Docker engine answers. When false, `running` is false. */
+            docker: boolean;
             hosts: components["schemas"]["Host"][];
             services: components["schemas"]["Service"][];
+        };
+        /** @description Message `docker` of the event stream. */
+        DockerState: {
+            /** @description The Docker engine answers. */
+            reachable: boolean;
         };
         Domain: {
             name: string;
@@ -2709,6 +2794,12 @@ export interface components {
             /** @description Empty restarts everything. */
             targets?: ("caddy" | "database" | "cache" | "phpmyadmin" | "dns" | "soketi" | "s3")[];
             force_ssl?: boolean;
+            /**
+             * @description Rebuild the images of the active PHP versions first, and recreate their
+             *     containers on them (needs DEFAULT_PROJECT_PATH or a path known from the
+             *     last start). With `targets: [caddy]`, only the FrankenPHP containers and
+             *     the reverse proxy restart: what the dashboard's "rebuild" does.
+             */
             build?: boolean;
         };
         AddHostsRequest: {
@@ -3075,6 +3166,35 @@ export interface components {
             mode: "local" | "lan" | "internet";
             /** @description Where the remote access answers */
             remote_url?: string;
+        };
+        UpdateInfo: {
+            /** @description The version of the daemon. */
+            version: string;
+            /** @description The latest stable release, null when GitHub lists none. */
+            latest: string | null;
+            update_available: boolean;
+            /** @description The releases newer than `version`, newest first. */
+            releases: components["schemas"]["ReleaseNotes"][];
+            /**
+             * @description The command installing the update in a terminal of the host (it needs administrator rights).
+             * @example sudo frankenmanager update
+             */
+            command: string;
+            /** Format: date-time */
+            checked_at: string;
+            /** @description The failure of the last lookup, when this answer comes from an earlier one. */
+            error?: string;
+        };
+        ReleaseNotes: {
+            /** @example 0.13.1 */
+            version: string;
+            name: string;
+            /** Format: date-time */
+            published_at: string;
+            /** @description The page of the release on GitHub. */
+            url: string;
+            /** @description The body of the GitHub release (Markdown). */
+            notes: string;
         };
     };
     responses: {

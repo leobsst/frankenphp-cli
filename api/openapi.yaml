@@ -1336,7 +1336,7 @@ components:
       required: [running, docker, hosts, services]
       properties:
         running: { type: boolean }
-        docker: { type: boolean, description: The Docker engine answers. When false, `running` is false. }
+        docker: { type: boolean, description: "The Docker engine answers. When false, `running` is false." }
         hosts:
           type: array
           items: { $ref: "#/components/schemas/Host" }
