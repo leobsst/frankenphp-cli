@@ -71,8 +71,9 @@ const groups = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() => {
     </div>
 
     <USlideover v-model:open="menuOpen" side="left" title="Navigation" description="Pages de frankenmanager" :ui="{ content: 'w-[280px] max-w-[85vw]' }">
+      <!-- The slideover itself keeps out of the safe areas (shared theme). -->
       <template #content>
-        <nav class="flex h-full flex-col overflow-y-auto px-3 pt-[calc(1.25rem+var(--sat))] pb-safe">
+        <nav class="flex h-full flex-col overflow-y-auto px-3 pt-5">
           <SidebarContent>
             <template #header-trailing>
               <UButton color="neutral" variant="ghost" icon="i-lucide-x" class="ml-auto" aria-label="Fermer le menu" @click="menuOpen = false" />

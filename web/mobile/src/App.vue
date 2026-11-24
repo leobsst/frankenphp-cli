@@ -61,8 +61,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <!-- Notifications below the top safe area (notch, status bar), not behind it. -->
-  <UApp :locale="fr" :toaster="{ position: 'top-center', max: 3, ui: { viewport: 'top-[calc(1rem+var(--sat))]' } }">
+  <!-- Notifications at the top, below the safe area (notch, status bar): the shared theme (web/app/src/theme.ts) offsets them. -->
+  <UApp :locale="fr" :toaster="{ position: 'top-center', max: 3 }">
     <RouterView />
     <ConfirmPassword />
   </UApp>

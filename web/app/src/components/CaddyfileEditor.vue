@@ -99,7 +99,7 @@ async function reset() {
 <template>
   <USlideover
     v-model:open="open" side="right" :title="`Caddyfile · ${domain}`" :description="path"
-    :ui="{ content: 'w-full sm:max-w-[760px] pt-safe pb-safe', body: 'flex flex-col gap-4 sm:p-5', description: 'font-mono text-[11px] truncate', footer: 'flex-wrap gap-2' }"
+    :ui="{ content: 'w-full sm:max-w-[760px]', body: 'flex flex-col gap-4 sm:p-5', description: 'font-mono text-[11px] truncate', footer: 'flex-wrap gap-2' }"
   >
     <template #body>
       <div class="flex flex-wrap items-center gap-2">
