@@ -1,15 +1,18 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import type { DomainStatus } from '../composables/useFm'
 
-const props = withDefaults(defineProps<{ value: DomainStatus | 'warn' | 'archived' | 'disabled'; ok?: string }>(), { ok: 'En ligne' })
+// `ok`: label of the online state (e.g. "Approved"), "Online" by default.
+const props = defineProps<{ value: DomainStatus | 'warn' | 'archived' | 'disabled'; ok?: string }>()
+const { t } = useI18n()
 
 const MAP = {
-  online: { color: 'primary', label: () => props.ok },
-  warn: { color: 'warning', label: () => 'À migrer' },
-  restarting: { color: 'warning', label: () => 'Redémarrage…' },
-  offline: { color: 'error', label: () => 'Hors ligne' },
-  archived: { color: 'neutral', label: () => 'Archivé' },
-  disabled: { color: 'neutral', label: () => 'Désactivé' },
+  online: { color: 'primary', label: () => props.ok ?? t('stateBadge.online') },
+  warn: { color: 'warning', label: () => t('stateBadge.warn') },
+  restarting: { color: 'warning', label: () => t('stateBadge.restarting') },
+  offline: { color: 'error', label: () => t('stateBadge.offline') },
+  archived: { color: 'neutral', label: () => t('stateBadge.archived') },
+  disabled: { color: 'neutral', label: () => t('stateBadge.disabled') },
 } as const
 </script>
 

@@ -3,7 +3,10 @@ import { computed, reactive, ref } from 'vue'
 import PageHeader from '../components/PageHeader.vue'
 import MiniStats from '../components/MiniStats.vue'
 import InfoBanner from '../components/InfoBanner.vue'
+import { useI18n } from 'vue-i18n'
 import { CONFIG_DEFS, GENERATED_CONFIG, actions, state, type ConfigDef } from '../composables/useFm'
+
+const { t } = useI18n()
 
 /**
  * Equivalent of `frankenmanager configuration set|reset <KEY> [value]`:
@@ -28,9 +31,9 @@ const groups = computed(() => {
 })
 
 const stats = computed(() => [
-  { label: 'Paramètres', value: CONFIG_DEFS.length, sub: 'Fichier .env' },
-  { label: 'Personnalisés', value: CONFIG_DEFS.filter(isChanged).length, sub: 'Différents du défaut' },
-  { label: 'En attente', value: state.configPending.length, sub: state.configPending.length ? 'Redémarrage requis' : 'Tout est appliqué' },
+  { label: t('configuration.stats.settings'), value: CONFIG_DEFS.length, sub: t('configuration.stats.settingsSub') },
+  { label: t('configuration.stats.custom'), value: CONFIG_DEFS.filter(isChanged).length, sub: t('configuration.stats.customSub') },
+  { label: t('configuration.stats.pending'), value: state.configPending.length, sub: state.configPending.length ? t('configuration.restartRequired') : t('configuration.stats.allApplied') },
 ])
 
 async function save(d: ConfigDef) {
@@ -63,9 +66,9 @@ const bools = Object.fromEntries(CONFIG_DEFS.filter((d) => d.type === 'bool').ma
 </script>
 
 <template>
-  <PageHeader title="Configuration" subtitle="Paramètres de frankenmanager, enregistrés dans le fichier .env du dossier de données.">
+  <PageHeader :title="t('nav.configuration')" :subtitle="t('configuration.subtitle')">
     <UButton
-      icon="i-lucide-rotate-cw" label="Redémarrer la stack" size="lg" class="md:w-[205px]"
+      icon="i-lucide-rotate-cw" :label="t('configuration.restartStack')" size="lg" class="md:w-[205px]"
       :disabled="!state.configPending.length || state.stack !== 'running' || !state.docker"
       @click="actions.restartStack()"
     />
@@ -75,14 +78,14 @@ const bools = Object.fromEntries(CONFIG_DEFS.filter((d) => d.type === 'bool').ma
   <UAlert
     v-if="state.configPending.length"
     class="mt-6" color="warning" variant="soft" icon="i-lucide-triangle-alert"
-    title="Redémarrage nécessaire"
-    :description="`${state.configPending.join(', ')} ${state.configPending.length > 1 ? 'seront appliqués' : 'sera appliqué'} au prochain démarrage de la stack.`"
+    :title="t('configuration.pendingAlert.title')"
+    :description="t('configuration.pendingAlert.description', { keys: state.configPending.join(', ') }, state.configPending.length)"
     :ui="{ root: 'px-5 py-4', title: 'text-xs', description: 'text-xs' }"
   />
 
   <div class="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center">
-    <UInput v-model="q" icon="i-lucide-search" placeholder="Filtrer par clé ou description…" size="lg" class="sm:w-80" />
-    <USwitch v-model="onlyChanged" label="Personnalisés uniquement" class="sm:ml-auto" />
+    <UInput v-model="q" icon="i-lucide-search" :placeholder="t('configuration.filter')" size="lg" class="sm:w-80" />
+    <USwitch v-model="onlyChanged" :label="t('configuration.onlyChanged')" class="sm:ml-auto" />
   </div>
 
   <div class="mt-4 flex flex-col gap-6">
@@ -98,18 +101,20 @@ const bools = Object.fromEntries(CONFIG_DEFS.filter((d) => d.type === 'bool').ma
           <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2">
               <code class="font-mono text-xs font-semibold text-highlighted">{{ d.key }}</code>
-              <UBadge v-if="isChanged(d)" label="Personnalisé" variant="soft" size="sm" />
-              <UBadge v-else-if="isGenerated(d)" label="Généré" color="neutral" variant="soft" size="sm" />
-              <UBadge v-if="d.type === 'secret'" label="Secret" color="neutral" variant="outline" size="sm" icon="i-lucide-lock" />
-              <UBadge v-if="state.configPending.includes(d.key)" label="Redémarrage requis" color="warning" variant="soft" size="sm" />
+              <UBadge v-if="isChanged(d)" :label="t('configuration.badges.custom')" variant="soft" size="sm" />
+              <UBadge v-else-if="isGenerated(d)" :label="t('configuration.badges.generated')" color="neutral" variant="soft" size="sm" />
+              <UBadge v-if="d.type === 'secret'" :label="t('configuration.badges.secret')" color="neutral" variant="outline" size="sm" icon="i-lucide-lock" />
+              <UBadge v-if="state.configPending.includes(d.key)" :label="t('configuration.restartRequired')" color="warning" variant="soft" size="sm" />
             </div>
             <p class="mt-1.5 text-xs text-muted">{{ d.help }}</p>
-            <p class="mt-1 text-[11px] text-dimmed">Défaut : <span class="font-mono">{{ d.generated ? 'généré au démarrage' : d.default || '(vide)' }}</span></p>
+            <i18n-t keypath="configuration.default" tag="p" scope="global" class="mt-1 text-[11px] text-dimmed">
+              <template #value><span class="font-mono">{{ d.generated ? t('configuration.generatedAtStartup') : d.default || t('configuration.emptyValue') }}</span></template>
+            </i18n-t>
           </div>
 
           <div class="flex min-w-0 flex-col gap-2">
             <UFormField :error="errors[d.key]" :ui="{ error: 'text-[11px]' }">
-              <USwitch v-if="d.type === 'bool'" v-model="bools[d.key].value" :label="draft[d.key] === 'true' ? 'Activé' : 'Désactivé'" />
+              <USwitch v-if="d.type === 'bool'" v-model="bools[d.key].value" :label="draft[d.key] === 'true' ? t('configuration.enabled') : t('configuration.disabled')" />
               <USelect v-else-if="d.type === 'select'" v-model="draft[d.key]" :items="d.options" class="w-full" :aria-label="d.key" />
               <UInput
                 v-else-if="d.type === 'secret'" v-model="draft[d.key]" class="w-full font-mono" :placeholder="d.placeholder" :aria-label="d.key"
@@ -119,7 +124,7 @@ const bools = Object.fromEntries(CONFIG_DEFS.filter((d) => d.type === 'bool').ma
                 <template #trailing>
                   <UButton
                     color="neutral" variant="link" size="sm" :icon="revealed[d.key] ? 'i-lucide-eye-off' : 'i-lucide-eye'"
-                    :aria-label="revealed[d.key] ? `Masquer ${d.key}` : `Afficher ${d.key}`" :aria-pressed="!!revealed[d.key]"
+                    :aria-label="revealed[d.key] ? t('configuration.hideKey', { key: d.key }) : t('configuration.showKey', { key: d.key })" :aria-pressed="!!revealed[d.key]"
                     @click="revealed[d.key] = !revealed[d.key]"
                   />
                 </template>
@@ -132,12 +137,12 @@ const bools = Object.fromEntries(CONFIG_DEFS.filter((d) => d.type === 'bool').ma
             </UFormField>
             <div v-if="isDirty(d) || isChanged(d) || isGenerated(d)" class="flex flex-wrap items-center gap-2">
               <template v-if="isDirty(d)">
-                <UButton label="Enregistrer" size="sm" @click="save(d)" />
-                <UButton label="Annuler" size="sm" color="neutral" variant="ghost" @click="cancel(d)" />
+                <UButton :label="t('common.save')" size="sm" @click="save(d)" />
+                <UButton :label="t('common.cancel')" size="sm" color="neutral" variant="ghost" @click="cancel(d)" />
               </template>
               <UButton
-                v-else icon="i-lucide-rotate-ccw" label="Réinitialiser" size="sm" color="neutral" variant="outline"
-                :aria-label="`Réinitialiser ${d.key}`" @click="reset(d)"
+                v-else icon="i-lucide-rotate-ccw" :label="t('configuration.reset')" size="sm" color="neutral" variant="outline"
+                :aria-label="t('configuration.resetKey', { key: d.key })" @click="reset(d)"
               />
             </div>
             <code v-if="isDirty(d) || isChanged(d) || isGenerated(d)" class="block truncate font-mono text-[10px] text-dimmed" :title="command(d)">$ {{ command(d) }}</code>
@@ -145,8 +150,12 @@ const bools = Object.fromEntries(CONFIG_DEFS.filter((d) => d.type === 'bool').ma
         </li>
       </ul>
     </UCard>
-    <p v-if="!groups.length" class="py-10 text-center text-xs text-muted">Aucun paramètre ne correspond.</p>
+    <p v-if="!groups.length" class="py-10 text-center text-xs text-muted">{{ t('configuration.empty') }}</p>
   </div>
 
-  <InfoBanner>Les secrets (mots de passe, app secret Soketi, secrets S3) sont masqués comme dans <code class="font-mono">configuration list</code>. Réinitialiser une valeur générée en génère une nouvelle au prochain démarrage.</InfoBanner>
+  <InfoBanner>
+    <i18n-t keypath="configuration.banner" scope="global">
+      <template #cmd><code class="font-mono">configuration list</code></template>
+    </i18n-t>
+  </InfoBanner>
 </template>

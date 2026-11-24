@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { sidebarCollapsed, toggleSidebar } from '../composables/useSidebar'
 import SidebarContent from './SidebarContent.vue'
+
+const { t } = useI18n()
 
 // Tablet: 72px icon bar by default; desktop: full 228px bar by default. The toggle switches between both, and the
 // choice is remembered per breakpoint (useSidebar).
@@ -13,12 +16,12 @@ import SidebarContent from './SidebarContent.vue'
   >
     <SidebarContent :collapsed="sidebarCollapsed">
       <template #header-trailing>
-        <UTooltip :text="sidebarCollapsed ? 'Déplier le menu' : 'Replier le menu'" :content="{ side: 'right' }">
+        <UTooltip :text="sidebarCollapsed ? t('sidebar.expand') : t('sidebar.collapse')" :content="{ side: 'right' }">
           <UButton
             color="neutral" variant="ghost" size="sm"
             :icon="sidebarCollapsed ? 'i-lucide-panel-left-open' : 'i-lucide-panel-left-close'"
             :class="!sidebarCollapsed && '-mr-1.5 ml-auto'"
-            :aria-label="sidebarCollapsed ? 'Déplier le menu' : 'Replier le menu'"
+            :aria-label="sidebarCollapsed ? t('sidebar.expand') : t('sidebar.collapse')"
             :aria-expanded="!sidebarCollapsed"
             @click="toggleSidebar"
           />

@@ -19,8 +19,8 @@ const { t } = useI18n()
 const main = computed<NavigationMenuItem[]>(() => NAV.map((n) => ({ label: t(n.labelKey), icon: n.icon, to: n.path, exact: n.path === '/', tooltip: props.collapsed })))
 const bottom = computed<NavigationMenuItem[]>(() => [
   { label: t(SETTINGS.labelKey), icon: SETTINGS.icon, to: SETTINGS.path, tooltip: props.collapsed },
-  ...(shell.switchTo ? [{ label: 'Changer d’instance', icon: 'i-lucide-server-cog', to: shell.switchTo, tooltip: props.collapsed }] : []),
-  { label: 'Documentation', icon: 'i-lucide-circle-help', to: 'https://github.com/leobsst/frankenphp-cli#readme', target: '_blank', tooltip: props.collapsed },
+  ...(shell.switchTo ? [{ label: t('sidebar.switchInstance'), icon: 'i-lucide-server-cog', to: shell.switchTo, tooltip: props.collapsed }] : []),
+  { label: t('sidebar.docs'), icon: 'i-lucide-circle-help', to: 'https://github.com/leobsst/frankenphp-cli#readme', target: '_blank', tooltip: props.collapsed },
 ])
 
 const router = useRouter()
@@ -31,9 +31,9 @@ const local = computed(() => state.connection.mode === 'local')
 
 const updateOpen = ref(false)
 const updateTooltip = computed(() => {
-  if (updateAvailable.value) return `FrankenManager ${state.app.latest} est disponible`
-  if (updates.info && !updates.info.error) return `FrankenManager ${state.app.version} est à jour`
-  return 'Rechercher une mise à jour'
+  if (updateAvailable.value) return t('sidebar.updateAvailable', { version: state.app.latest })
+  if (updates.info && !updates.info.error) return t('sidebar.upToDate', { version: state.app.version })
+  return t('sidebar.checkUpdate')
 })
 
 // Fade at the top / bottom of the page list, only when there is content left to scroll on that side.
@@ -58,7 +58,7 @@ const navUi = {
 <template>
   <!-- Logo, then the trailing control (sidebar toggle, menu close button): beside it, or below it on the icon bar. -->
   <div class="flex shrink-0 items-center" :class="collapsed ? 'flex-col gap-3' : 'h-8 px-2.5'">
-    <RouterLink to="/" class="flex items-center gap-2.5 rounded-lg" aria-label="frankenmanager : vue d’ensemble">
+    <RouterLink to="/" class="flex items-center gap-2.5 rounded-lg" :aria-label="t('sidebar.homeLabel')">
       <span class="grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-inverted">
         <UIcon name="i-lucide-square-terminal" class="size-5" />
       </span>
@@ -70,10 +70,10 @@ const navUi = {
   <!-- Managed machine and connection type: local (this machine) or remote (remote access, mobile app). -->
   <div v-if="!collapsed" class="mt-7 shrink-0">
     <div class="mx-3 mb-2 flex items-center justify-between gap-2">
-      <p class="text-[10px] font-semibold tracking-[1.4px] text-muted">MACHINE HÔTE</p>
-      <UBadge :label="local ? 'Local' : 'Distant'" :color="local ? 'primary' : 'warning'" variant="soft" size="sm" />
+      <p class="text-[10px] font-semibold tracking-[1.4px] text-muted">{{ t('sidebar.hostMachine') }}</p>
+      <UBadge :label="local ? t('common.local') : t('common.remote')" :color="local ? 'primary' : 'warning'" variant="soft" size="sm" />
     </div>
-    <UTooltip :text="shell.switchTo ? 'Changer d’instance' : `Machine pilotée : ${instName}`" :content="{ side: 'right' }">
+    <UTooltip :text="shell.switchTo ? t('sidebar.switchInstance') : t('sidebar.managedMachine', { name: instName })" :content="{ side: 'right' }">
       <button
         class="mx-1 flex h-14 w-[calc(100%-0.5rem)] items-center gap-2.5 rounded-lg border border-default bg-muted px-3 text-left text-muted"
         :class="shell.switchTo && 'hover:border-accented'"
@@ -104,7 +104,7 @@ const navUi = {
       <UIcon :name="updateAvailable ? 'i-lucide-download' : 'i-lucide-badge-check'" class="size-4 shrink-0" :class="updateAvailable && 'text-warning'" />
       <span v-if="!collapsed" class="min-w-0 truncate">
         <span class="font-mono">v{{ state.app.version || '…' }}</span>
-        <span v-if="updateAvailable" class="ml-1.5 font-medium text-warning">· v{{ state.app.latest }} disponible</span>
+        <span v-if="updateAvailable" class="ml-1.5 font-medium text-warning">{{ t('sidebar.latestAvailable', { version: state.app.latest }) }}</span>
       </span>
     </button>
   </UTooltip>
@@ -114,6 +114,6 @@ const navUi = {
     :class="[state.error ? 'text-error' : state.live ? 'text-primary' : 'text-muted', collapsed && 'justify-center']"
   >
     <span class="size-1.5 rounded-full bg-current" :class="!state.live && !state.error && 'animate-pulse'" />
-    <span v-if="!collapsed">{{ state.error ? 'Instance injoignable' : state.live ? 'En direct' : 'Connexion…' }}</span>
+    <span v-if="!collapsed">{{ state.error ? t('sidebar.unreachable') : state.live ? t('sidebar.live') : t('sidebar.connecting') }}</span>
   </div>
 </template>

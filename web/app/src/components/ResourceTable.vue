@@ -1,5 +1,6 @@
 <script setup lang="ts" generic="T extends Record<string, any>">
 import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { TableColumn } from '@nuxt/ui'
 import TablePagination from './TablePagination.vue'
 import { usePagination } from '../composables/usePagination'
@@ -14,6 +15,7 @@ import { usePagination } from '../composables/usePagination'
 const props = withDefaults(defineProps<{
   title: string; data: T[]; columns: TableColumn<T>[]; searchKey?: keyof T; empty?: string; storageKey?: string; paginate?: boolean
 }>(), { paginate: true })
+const { t } = useI18n()
 
 const q = ref('')
 const searching = ref(false)
@@ -32,15 +34,15 @@ const rows = computed(() => (props.paginate ? pager.rows.value : filtered.value)
     <template #header>
       <h2 class="text-[15px] font-semibold text-highlighted">{{ title }}</h2>
       <UInput
-        v-if="searching" v-model="q" autofocus size="sm" icon="i-lucide-search" placeholder="Filtrer…" class="w-48"
+        v-if="searching" v-model="q" autofocus size="sm" icon="i-lucide-search" :placeholder="t('resourceTable.filter')" class="w-48"
         @blur="!q && (searching = false)"
       />
-      <UButton v-else-if="searchKey" color="neutral" variant="ghost" icon="i-lucide-search" aria-label="Rechercher" @click="searching = true" />
+      <UButton v-else-if="searchKey" color="neutral" variant="ghost" icon="i-lucide-search" :aria-label="t('common.search')" @click="searching = true" />
     </template>
     <UTable
       :data="rows"
       :columns="columns"
-      :empty="empty ?? 'Aucun élément.'"
+      :empty="empty ?? t('resourceTable.empty')"
       :ui="{
         th: 'px-0 pr-4 py-2 text-[10px] font-semibold uppercase text-muted',
         td: 'px-0 pr-4 py-3 text-xs text-muted',

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, useTemplateRef, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import AppSidebar from '@app/components/AppSidebar.vue'
 import AppHeader from '@app/components/AppHeader.vue'
 import BottomNav from '@app/components/BottomNav.vue'
@@ -8,6 +9,7 @@ import { sidebarCollapsed } from '@app/composables/useSidebar'
 import { disconnect, loadPage, pause, refresh, resume, state } from '@app/composables/useFm'
 
 // Dashboard layout (POC), on the instance connected by session.ts.
+const { t } = useI18n()
 const route = useRoute()
 
 // The content scrolls in its own container, below the header: it is scrolled back to the top on page change.
@@ -36,8 +38,8 @@ onBeforeUnmount(() => {
           <UAlert
             v-if="state.error"
             color="error" variant="soft" icon="i-lucide-wifi-off" class="mb-5"
-            title="Le daemon ne répond pas" :description="`${state.error} Nouvelle tentative automatique en cours…`"
-            :actions="[{ label: 'Réessayer', color: 'error', variant: 'outline', onClick: () => void refresh() }]"
+            :title="t('app.daemonDown.short')" :description="t('app.daemonDown.retrying', { error: state.error })"
+            :actions="[{ label: t('common.retry'), color: 'error', variant: 'outline', onClick: () => void refresh() }]"
           />
           <div v-if="!state.loaded" class="flex flex-col gap-4">
             <USkeleton class="h-16 w-2/3" />

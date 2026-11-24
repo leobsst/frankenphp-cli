@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 // Preset color swatches, followed by a "custom" swatch that opens a color picker.
 const props = defineProps<{ presets: string[]; label: string }>()
 const model = defineModel<string>({ required: true })
+const { t } = useI18n()
 
 const selected = computed(() => model.value.toUpperCase())
 const custom = computed(() => !props.presets.includes(selected.value))
@@ -22,9 +24,9 @@ const custom = computed(() => !props.presets.includes(selected.value))
     </button>
 
     <UPopover :content="{ side: 'bottom', align: 'start' }">
-      <UTooltip :text="`${label} personnalisée`">
+      <UTooltip :text="t('colorSwatches.custom', { label })">
         <button
-          type="button" :aria-label="`${label} personnalisée`"
+          type="button" :aria-label="t('colorSwatches.custom', { label })"
           class="grid size-8 place-items-center rounded-lg text-white ring-offset-2 ring-offset-(--ui-bg)"
           :class="{ 'ring-2': custom }"
           :style="custom

@@ -1,21 +1,24 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import ResourceTable from './ResourceTable.vue'
 import NameCell from './NameCell.vue'
 import SideForm from './SideForm.vue'
 import ConfirmModal from './ConfirmModal.vue'
+import { formatBytes, formatDateTime, formatNumber } from '../i18n'
 import { actions, bucketObjects, loadObjects, objectDownloadUrl, objectLink, objectPublic, state, toast, type S3Object } from '../composables/useFm'
 
 // Object browser (v0.11.0): `GET /api/v1/s3/buckets/{bucket}/objects?prefix=` (one folder at a time),
 // `PUT|GET …/object?key=` (upload, streamed download), `…/object/link` (public URL or presigned link),
 // `…/objects/delete` and `…/objects/public` (public-read or private ACL).
 const bucket = defineModel<string>('bucket', { required: true })
+const { t } = useI18n()
 
 const prefix = ref('')
 watch(bucket, () => { prefix.value = '' })
 // The daemon lists one folder at a time: the open folder is reloaded on every change.
-watch([bucket, prefix], ([b, p]) => { void loadObjects(b, p).catch((e) => toast('error', 'Lecture impossible', String(e?.message ?? e))) }, { immediate: true })
+watch([bucket, prefix], ([b, p]) => { void loadObjects(b, p).catch((e) => toast('error', t('s3Objects.readFailed'), String(e?.message ?? e))) }, { immediate: true })
 const b = computed(() => state.s3.buckets.find((x) => x.name === bucket.value))
 
 interface Row { name: string; folder: boolean; obj?: S3Object; count: number }
@@ -37,10 +40,11 @@ const crumbs = computed(() => {
   return [{ label: bucket.value, to: '' }, ...parts.map((p, i) => ({ label: p, to: `${parts.slice(0, i + 1).join('/')}/` }))]
 })
 
-const size = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toLocaleString('fr-FR', { maximumFractionDigits: 1 })} Mo` : n >= 1000 ? `${Math.round(n / 1000)} Ko` : `${n} o`)
-const ago = (t: number) => {
-  const m = Math.round((Date.now() - t) / 60_000)
-  return m < 60 ? `il y a ${m} min` : m < 1440 ? `il y a ${Math.round(m / 60)} h` : `il y a ${Math.round(m / 1440)} j`
+const ago = (time: number) => {
+  const m = Math.round((Date.now() - time) / 60_000)
+  return m < 60
+    ? t('s3Objects.agoMinutes', { n: formatNumber(m) })
+    : m < 1440 ? t('s3Objects.agoHours', { n: formatNumber(Math.round(m / 60)) }) : t('s3Objects.agoDays', { n: formatNumber(Math.round(m / 1440)) })
 }
 
 // Object link: if public, its URL; if private, a presigned link valid for `expires`.
@@ -50,13 +54,18 @@ watch(() => [link.open, link.key, link.expires] as const, async ([open, key, exp
   linkFor.value = null
   const o = bucketObjects(bucket.value).find((x) => x.key === key)
   if (!open || !o) return
-  try { linkFor.value = await objectLink(bucket.value, o, expires) } catch (e) { toast('error', 'Lien impossible', e instanceof Error ? e.message : String(e)) }
+  try { linkFor.value = await objectLink(bucket.value, o, expires) } catch (e) { toast('error', t('s3Objects.linkFailed'), e instanceof Error ? e.message : String(e)) }
 })
 async function openObject(o: S3Object) {
-  try { window.open((await objectLink(bucket.value, o)).url, '_blank') } catch (e) { toast('error', 'Ouverture impossible', e instanceof Error ? e.message : String(e)) }
+  try { window.open((await objectLink(bucket.value, o)).url, '_blank') } catch (e) { toast('error', t('s3Objects.openFailed'), e instanceof Error ? e.message : String(e)) }
 }
-const expiries = [{ label: '15 minutes', value: 900 }, { label: '1 heure', value: 3600 }, { label: '1 jour', value: 86_400 }, { label: '7 jours (maximum)', value: 604_800 }]
-const copyLink = () => { navigator.clipboard?.writeText(linkFor.value!.url); toast('info', 'Lien copié', linkFor.value!.public ? 'URL publique.' : 'Lien temporaire pré-signé.') }
+const expiries = computed(() => [
+  { label: t('s3Objects.expiry15m'), value: 900 },
+  { label: t('s3Objects.expiry1h'), value: 3600 },
+  { label: t('s3Objects.expiry1d'), value: 86_400 },
+  { label: t('s3Objects.expiry7d'), value: 604_800 },
+])
+const copyLink = () => { navigator.clipboard?.writeText(linkFor.value!.url); toast('info', t('s3Objects.linkCopied'), linkFor.value!.public ? t('s3Objects.linkCopiedPublic') : t('s3Objects.linkCopiedPresigned')) }
 
 const drop = ref<string | null>(null)
 function menu(r: Row): DropdownMenuItem[][] {
@@ -64,25 +73,25 @@ function menu(r: Row): DropdownMenuItem[][] {
   const pub = objectPublic(bucket.value, o)
   return [
     [
-      { label: pub ? 'Copier l’URL publique' : 'Lien temporaire…', icon: pub ? 'i-lucide-link' : 'i-lucide-clock', onSelect: () => Object.assign(link, { open: true, key: o.key }) },
-      { label: 'Ouvrir', icon: 'i-lucide-external-link', onSelect: () => void openObject(o) },
-      { label: 'Télécharger', icon: 'i-lucide-download', onSelect: () => { window.open(objectDownloadUrl(bucket.value, o.key), '_blank') } },
+      { label: pub ? t('s3Objects.copyPublicUrl') : t('s3Objects.presignedLink'), icon: pub ? 'i-lucide-link' : 'i-lucide-clock', onSelect: () => Object.assign(link, { open: true, key: o.key }) },
+      { label: t('s3Objects.open'), icon: 'i-lucide-external-link', onSelect: () => void openObject(o) },
+      { label: t('s3Objects.download'), icon: 'i-lucide-download', onSelect: () => { window.open(objectDownloadUrl(bucket.value, o.key), '_blank') } },
     ],
     [
       o.public
-        ? { label: 'Rendre privé', icon: 'i-lucide-lock', onSelect: () => actions.setObjectsPublic(bucket.value, [o.key], false, prefix.value) }
-        : { label: 'Rendre public (public-read)', icon: 'i-lucide-globe', onSelect: () => actions.setObjectsPublic(bucket.value, [o.key], true, prefix.value) },
+        ? { label: t('s3Objects.makePrivate'), icon: 'i-lucide-lock', onSelect: () => actions.setObjectsPublic(bucket.value, [o.key], false, prefix.value) }
+        : { label: t('s3Objects.makePublic'), icon: 'i-lucide-globe', onSelect: () => actions.setObjectsPublic(bucket.value, [o.key], true, prefix.value) },
     ],
-    [{ label: 'Supprimer', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => { drop.value = o.key } }],
+    [{ label: t('common.delete'), icon: 'i-lucide-trash-2', color: 'error', onSelect: () => { drop.value = o.key } }],
   ]
 }
 
-const columns: TableColumn<Row>[] = [
-  { accessorKey: 'name', header: 'Objet / taille' },
-  { id: 'modified', header: 'Modifié', meta: { class: { th: 'w-28 max-md:hidden', td: 'max-md:hidden' } } },
-  { id: 'visibility', header: 'Visibilité', meta: { class: { th: 'w-28' } } },
+const columns = computed<TableColumn<Row>[]>(() => [
+  { accessorKey: 'name', header: t('s3Objects.columnName') },
+  { id: 'modified', header: t('s3Objects.columnModified'), meta: { class: { th: 'w-28 max-md:hidden', td: 'max-md:hidden' } } },
+  { id: 'visibility', header: t('s3Objects.columnVisibility'), meta: { class: { th: 'w-28' } } },
   { id: 'actions', header: '', meta: { class: { th: 'w-10', td: 'pr-0' } } },
-]
+])
 
 // Upload: the chosen files go into the current folder, streamed through the daemon.
 const upload = reactive({ public: false, busy: false })
@@ -102,25 +111,25 @@ async function submitUpload() {
 </script>
 
 <template>
-  <ResourceTable :title="`Objets de ${bucket}`" :paginate="false" :data="rows" :columns="columns" search-key="name" empty="Ce dossier est vide.">
+  <ResourceTable :title="t('s3Objects.title', { bucket })" :paginate="false" :data="rows" :columns="columns" search-key="name" :empty="t('s3Objects.empty')">
     <template #name-cell="{ row }">
       <button v-if="row.original.folder" type="button" class="text-left" @click="prefix += row.original.name">
-        <NameCell icon="i-lucide-folder" :name="row.original.name" :sub="row.original.count ? `${row.original.count} objet(s)` : 'Dossier'" />
+        <NameCell icon="i-lucide-folder" :name="row.original.name" :sub="row.original.count ? t('s3Objects.objects', { n: formatNumber(row.original.count) }, row.original.count) : t('s3Objects.folder')" />
       </button>
-      <NameCell v-else icon="i-lucide-file" :name="row.original.name" :sub="size(row.original.obj!.size)" />
+      <NameCell v-else icon="i-lucide-file" :name="row.original.name" :sub="formatBytes(row.original.obj!.size)" />
     </template>
-    <template #modified-cell="{ row }">{{ row.original.folder ? '—' : ago(row.original.obj!.modified) }}</template>
+    <template #modified-cell="{ row }">{{ row.original.folder ? t('common.none') : ago(row.original.obj!.modified) }}</template>
     <template #visibility-cell="{ row }">
       <template v-if="!row.original.folder">
         <UBadge
-          v-if="objectPublic(bucket, row.original.obj!)" :label="b?.public ? 'Public (bucket)' : 'Public'" color="warning" variant="soft"
+          v-if="objectPublic(bucket, row.original.obj!)" :label="b?.public ? t('s3Objects.publicBucket') : t('s3Objects.public')" color="warning" variant="soft"
         />
-        <UBadge v-else label="Privé" color="neutral" variant="soft" />
+        <UBadge v-else :label="t('s3Objects.private')" color="neutral" variant="soft" />
       </template>
     </template>
     <template #actions-cell="{ row }">
       <UDropdownMenu v-if="!row.original.folder" :items="menu(row.original)" :content="{ align: 'end' }">
-        <UButton color="neutral" variant="ghost" icon="i-lucide-ellipsis" aria-label="Actions" />
+        <UButton color="neutral" variant="ghost" icon="i-lucide-ellipsis" :aria-label="t('common.actions')" />
       </UDropdownMenu>
     </template>
   </ResourceTable>
@@ -130,7 +139,7 @@ async function submitUpload() {
       <UFormField label="Bucket">
         <USelect v-model="bucket" :items="state.s3.buckets.map((x) => x.name)" size="lg" class="w-full" />
       </UFormField>
-      <nav class="mt-4 flex flex-wrap items-center gap-1 font-mono text-[11px]" aria-label="Dossier">
+      <nav class="mt-4 flex flex-wrap items-center gap-1 font-mono text-[11px]" :aria-label="t('s3Objects.folder')">
         <template v-for="(cr, i) in crumbs" :key="cr.to">
           <UIcon v-if="i" name="i-lucide-chevron-right" class="size-3 text-dimmed" />
           <button type="button" class="rounded px-1 hover:bg-elevated" :class="cr.to === prefix ? 'text-highlighted' : 'text-muted'" @click="prefix = cr.to">{{ cr.label }}</button>
@@ -138,42 +147,42 @@ async function submitUpload() {
       </nav>
     </UCard>
     <SideForm
-      title="Téléverser"
-      :description="`Vers ${bucket}/${prefix}`"
-      hint="Le fichier passe en flux par le daemon, 5 Gio au plus. Privé, il se partage par un lien temporaire pré-signé."
+      :title="t('s3Objects.uploadTitle')"
+      :description="t('s3Objects.uploadTo', { path: `${bucket}/${prefix}` })"
+      :hint="t('s3Objects.uploadHint')"
       @submit="submitUpload"
     >
       <input ref="input" type="file" multiple class="hidden" @change="pick">
       <div class="flex items-center gap-3">
-        <UButton color="neutral" variant="outline" icon="i-lucide-paperclip" label="Choisir des fichiers" @click="input?.click()" />
-        <span class="truncate text-[11px] text-muted">{{ files.length ? files.map((f) => f.name).join(', ') : 'Aucun fichier choisi' }}</span>
+        <UButton color="neutral" variant="outline" icon="i-lucide-paperclip" :label="t('s3Objects.chooseFiles')" @click="input?.click()" />
+        <span class="truncate text-[11px] text-muted">{{ files.length ? files.map((f) => f.name).join(', ') : t('s3Objects.noFile') }}</span>
       </div>
-      <USwitch v-model="upload.public" label="Public (public-read)" description="Lisible par tous à son URL publique." />
-      <UButton type="submit" icon="i-lucide-upload" :label="files.length ? `Téléverser ${files.length} fichier(s)` : 'Choisir et téléverser'" size="lg" block :loading="upload.busy" />
+      <USwitch v-model="upload.public" :label="t('s3Objects.publicSwitch')" :description="t('s3Objects.publicSwitchHelp')" />
+      <UButton type="submit" icon="i-lucide-upload" :label="files.length ? t('s3Objects.uploadFiles', { n: formatNumber(files.length) }, files.length) : t('s3Objects.chooseAndUpload')" size="lg" block :loading="upload.busy" />
     </SideForm>
   </div>
 
-  <UModal v-model:open="link.open" :title="linkFor?.public ? 'URL publique' : 'Lien temporaire'" :description="link.key" :ui="{ content: 'sm:max-w-[480px]', description: 'font-mono text-[11px] truncate' }">
+  <UModal v-model:open="link.open" :title="linkFor?.public ? t('s3Objects.publicUrl') : t('s3Objects.temporaryLink')" :description="link.key" :ui="{ content: 'sm:max-w-[480px]', description: 'font-mono text-[11px] truncate' }">
     <template #body>
       <div v-if="linkFor" class="flex flex-col gap-4">
-        <UFormField v-if="!linkFor.public" label="Valable">
+        <UFormField v-if="!linkFor.public" :label="t('s3Objects.validFor')">
           <USelect v-model="link.expires" :items="expiries" class="w-full" />
         </UFormField>
         <pre class="max-h-32 overflow-auto rounded-lg bg-sage-950 p-3 font-mono text-[11px] break-all whitespace-pre-wrap text-sage-200">{{ linkFor.url }}</pre>
         <p class="text-[11px] text-muted">
-          <template v-if="linkFor.public">Objet public : cette URL ne change pas et n’expire pas.</template>
-          <template v-else>Lien pré-signé (SigV4){{ linkFor.expiresAt ? ` jusqu’au ${new Date(linkFor.expiresAt).toLocaleString('fr-FR')}` : '' }} ; la passerelle le refuse ensuite.</template>
+          <template v-if="linkFor.public">{{ t('s3Objects.publicHelp') }}</template>
+          <template v-else>{{ linkFor.expiresAt ? t('s3Objects.presignedUntil', { date: formatDateTime(linkFor.expiresAt) }) : t('s3Objects.presignedHelp') }}</template>
         </p>
-        <UButton icon="i-lucide-copy" label="Copier le lien" block @click="copyLink" />
+        <UButton icon="i-lucide-copy" :label="t('s3Objects.copyLink')" block @click="copyLink" />
       </div>
     </template>
   </UModal>
   <ConfirmModal
     :open="!!drop"
-    eyebrow="Action destructive"
-    :title="`Supprimer ${drop?.split('/').pop()} ?`"
-    :description="`L’objet ${drop} sera supprimé de ${bucket}. Cette action est irréversible.`"
-    confirm="Supprimer l’objet"
+    :eyebrow="t('s3Objects.deleteEyebrow')"
+    :title="t('s3Objects.deleteTitle', { name: drop?.split('/').pop() ?? '' })"
+    :description="t('s3Objects.deleteDescription', { key: drop ?? '', bucket })"
+    :confirm="t('s3Objects.deleteConfirm')"
     @update:open="(v: boolean) => { if (!v) drop = null }"
     @confirm="actions.deleteObjects(bucket, [drop!], prefix)"
   />

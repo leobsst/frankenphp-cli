@@ -11,7 +11,6 @@
     "retry": "Réessayer",
     "delete": "Supprimer",
     "edit": "Modifier",
-    "add": "Ajouter",
     "show": "Afficher",
     "hide": "Masquer",
     "name": "Nom",
@@ -47,6 +46,12 @@
     "access": "Accès distant",
     "logs": "Journaux",
     "settings": "Paramètres"
+  },
+  "tabs": {
+    "overview": "Aperçu",
+    "projects": "Projets",
+    "services": "Services",
+    "settings": "Réglages"
   },
   "settings": {
     "title": "Préférences du dashboard",
@@ -93,5 +98,1508 @@
   "languages": {
     "fr": "Français",
     "en": "English"
+  },
+  "aliasModal": {
+    "targetProxy": "{name} · proxy vers {target}",
+    "description": "Un alias sert le même site que sa cible : sa version PHP, ou l’upstream d’un proxy host.",
+    "eyebrow": "Formulaire",
+    "title": "Ajouter un alias",
+    "target": "Domaine cible",
+    "alias": "Nouvel alias",
+    "submit": "Créer l’alias"
+  },
+  "header": {
+    "connectionLocal": "Connexion locale à {host} ({address})",
+    "connectionRemote": "Connexion distante à {host} ({address}) · {client}",
+    "pages": "Pages",
+    "domains": "Domaines",
+    "archived": "Archivé",
+    "openMenu": "Ouvrir le menu",
+    "closeMenu": "Fermer le menu",
+    "localHost": "Hôte local",
+    "searchPlaceholder": "Rechercher un projet, un service…",
+    "navigation": "Navigation",
+    "navigationDescription": "Pages de frankenmanager",
+    "searchTitle": "Recherche",
+    "searchDescription": "Pages, domaines et conteneurs"
+  },
+  "sidebar": {
+    "expand": "Déplier le menu",
+    "collapse": "Replier le menu",
+    "switchInstance": "Changer d’instance",
+    "docs": "Documentation",
+    "updateAvailable": "FrankenManager {version} est disponible",
+    "upToDate": "FrankenManager {version} est à jour",
+    "checkUpdate": "Rechercher une mise à jour",
+    "homeLabel": "frankenmanager : vue d’ensemble",
+    "hostMachine": "MACHINE HÔTE",
+    "managedMachine": "Machine pilotée : {name}",
+    "latestAvailable": "· v{version} disponible",
+    "unreachable": "Instance injoignable",
+    "live": "En direct",
+    "connecting": "Connexion…"
+  },
+  "colorSwatches": {
+    "custom": "{label} personnalisée"
+  },
+  "confirmModal": {
+    "typeToConfirm": "Saisissez {value} pour confirmer",
+    "password": "Mot de passe du dashboard",
+    "wrongPassword": "Mot de passe erroné.",
+    "passwordHelp": "Demandé pour chaque action destructive depuis l’accès distant."
+  },
+  "confirmPassword": {
+    "title": "Mot de passe du dashboard",
+    "help": "À distance, cette action redemande le mot de passe du dashboard."
+  },
+  "deviceModal": {
+    "title": "Configurer un appareil",
+    "description": "Accédez à vos domaines .test depuis un téléphone ou une tablette du même réseau.",
+    "dnsHelp": "Dans les réglages Wi-Fi de l’appareil, définissez le DNS sur {ip}.",
+    "dnsDisabled": "Le serveur DNS est désactivé.",
+    "enable": "Activer",
+    "dnsClients": "{n} appareil connecté au DNS | {n} appareils connectés au DNS",
+    "waiting": "En attente d’un appareil…",
+    "caStep": "2. Autorité locale",
+    "caOpen": "Ouvrez {url} sur l’appareil pour télécharger la CA, puis installez-la.",
+    "caQrLabel": "QR code de téléchargement de la CA",
+    "caScan": "Scannez ce QR code avec l’appareil pour télécharger la CA, sans saisir l’adresse.",
+    "caNoAddress": "L’adresse de la machine sur le réseau local est inconnue : utilisez son IP et le port {port}.",
+    "stopSharing": "Arrêter le partage",
+    "caSharingHelp": "L’appareil télécharge la CA depuis cette machine, sur le réseau local, le temps de l’installer.",
+    "caSharingDisabled": "Le partage de la CA est désactivé : aucun QR code à scanner.",
+    "startSharing": "Activer le partage",
+    "trustStep": "3. Approuver",
+    "trustHelp": "iOS : Réglages › Général › Informations › Réglages des certificats. Désactivez le partage ensuite.",
+    "done": "Terminé"
+  },
+  "dockerAlert": {
+    "title": "Docker est injoignable",
+    "description": "Démarrez Docker Desktop (ou le service Docker) : les conteneurs ne peuvent pas être pilotés d’ici là. La page se met à jour d’elle-même dès son retour."
+  },
+  "domainActions": {
+    "open": "Ouvrir {url}",
+    "phpVersion": "Version PHP",
+    "editCaddyfile": "Modifier le Caddyfile",
+    "regenerateCert": "Régénérer le certificat",
+    "addAlias": "Ajouter un alias",
+    "restart": "Redémarrer {container}",
+    "deleteAlias": "Supprimer l’alias",
+    "archive": "Archiver le projet",
+    "archiveEyebrow": "Archivage du projet",
+    "archiveTitle": "Archiver {name} ?",
+    "archiveDescription": "Le domaine sera retiré du proxy et du DNS. Le projet et ses données resteront sur la machine.",
+    "archiveNote": "Vous pourrez restaurer ce domaine depuis les archives."
+  },
+  "caddyfileEditor": {
+    "readFailed": "Lecture impossible",
+    "websocketEdited": "Les blocs WebSocket du modèle ont été modifiés : éditez le fichier à la main (encode, {'@'}notWebsocket, {'@'}websocket).",
+    "unsaved": "Non enregistré",
+    "custom": "Personnalisé",
+    "generated": "Généré par le modèle",
+    "static": "Statique",
+    "staticSpa": "Statique · SPA",
+    "websocketHelp": "Proxy vers {address}, compression désactivée sur {path}",
+    "checkedStatic": "Caddy accepte ce fichier (caddy adapt dans le reverse proxy).",
+    "checkedPhp": "Caddy accepte ce fichier (frankenphp adapt dans {server}).",
+    "content": "Contenu du Caddyfile",
+    "lines": "{n} ligne | {n} lignes",
+    "helpStatic": "{lines} · Tab indente · ⌘S enregistre. Le fichier est vérifié par le Caddy du conteneur avant d’être enregistré, puis s’applique au rechargement du conteneur {server} ; servi en HTTPS par le reverse proxy, ce fichier garde sa ligne {tls}.",
+    "helpPhp": "{lines} · Tab indente · ⌘S enregistre. Le fichier est vérifié par le Caddy du conteneur avant d’être enregistré, puis s’applique au rechargement du conteneur {server} ; les autres domaines de cette version sont brièvement indisponibles.",
+    "confirmReset": "Confirmer : écraser avec le modèle",
+    "reset": "Rétablir le modèle",
+    "check": "Vérifier",
+    "save": "Enregistrer et recharger"
+  },
+  "pairingModal": {
+    "copied": "Code copié",
+    "singleUse": "Valable une seule fois.",
+    "title": "Appairer un appareil",
+    "description": "Scannez ce QR code avec l’app FrankenManager : elle se connecte sans saisir le mot de passe.",
+    "paired": "{device} est appairé.",
+    "pairedHelp": "Il apparaît dans les appareils connectés ; vous pouvez le déconnecter à tout moment.",
+    "failed": "Appairage impossible",
+    "qrLabel": "QR code d’appairage",
+    "expiredBadge": "Code expiré",
+    "expired": "Ce code a expiré : générez-en un nouveau.",
+    "validFor": "Valable une seule fois, encore {time}.",
+    "address": "Adresse",
+    "code": "Code",
+    "copyCode": "Copier le code",
+    "noCamera": "Sans appareil photo, saisissez l’adresse et le code dans l’app.",
+    "caCheck": "L’app vérifie l’empreinte de la CA avant de faire confiance au certificat.",
+    "pairAnother": "Appairer un autre appareil",
+    "newCode": "Nouveau code"
+  },
+  "resourceTable": {
+    "filter": "Filtrer…",
+    "empty": "Aucun élément."
+  },
+  "s3Objects": {
+    "readFailed": "Lecture impossible",
+    "agoMinutes": "il y a {n} min",
+    "agoHours": "il y a {n} h",
+    "agoDays": "il y a {n} j",
+    "linkFailed": "Lien impossible",
+    "openFailed": "Ouverture impossible",
+    "expiry15m": "15 minutes",
+    "expiry1h": "1 heure",
+    "expiry1d": "1 jour",
+    "expiry7d": "7 jours (maximum)",
+    "linkCopied": "Lien copié",
+    "linkCopiedPublic": "URL publique.",
+    "linkCopiedPresigned": "Lien temporaire pré-signé.",
+    "copyPublicUrl": "Copier l’URL publique",
+    "presignedLink": "Lien temporaire…",
+    "open": "Ouvrir",
+    "download": "Télécharger",
+    "makePrivate": "Rendre privé",
+    "makePublic": "Rendre public (public-read)",
+    "columnName": "Objet / taille",
+    "columnModified": "Modifié",
+    "columnVisibility": "Visibilité",
+    "title": "Objets de {bucket}",
+    "empty": "Ce dossier est vide.",
+    "objects": "{n} objet | {n} objets",
+    "folder": "Dossier",
+    "publicBucket": "Public (bucket)",
+    "public": "Public",
+    "private": "Privé",
+    "uploadTitle": "Téléverser",
+    "uploadTo": "Vers {path}",
+    "uploadHint": "Le fichier passe en flux par le daemon, 5 Gio au plus. Privé, il se partage par un lien temporaire pré-signé.",
+    "chooseFiles": "Choisir des fichiers",
+    "noFile": "Aucun fichier choisi",
+    "publicSwitch": "Public (public-read)",
+    "publicSwitchHelp": "Lisible par tous à son URL publique.",
+    "uploadFiles": "Téléverser {n} fichier | Téléverser {n} fichiers",
+    "chooseAndUpload": "Choisir et téléverser",
+    "publicUrl": "URL publique",
+    "temporaryLink": "Lien temporaire",
+    "validFor": "Valable",
+    "publicHelp": "Objet public : cette URL ne change pas et n’expire pas.",
+    "presignedUntil": "Lien pré-signé (SigV4) jusqu’au {date} ; la passerelle le refuse ensuite.",
+    "presignedHelp": "Lien pré-signé (SigV4) ; la passerelle le refuse ensuite.",
+    "copyLink": "Copier le lien",
+    "deleteEyebrow": "Action destructive",
+    "deleteTitle": "Supprimer {name} ?",
+    "deleteDescription": "L’objet {key} sera supprimé de {bucket}. Cette action est irréversible.",
+    "deleteConfirm": "Supprimer l’objet"
+  },
+  "stateBadge": {
+    "online": "En ligne",
+    "warn": "À migrer",
+    "restarting": "Redémarrage…",
+    "offline": "Hors ligne",
+    "archived": "Archivé",
+    "disabled": "Désactivé"
+  },
+  "statusDot": {
+    "online": "En ligne",
+    "offline": "Hors ligne",
+    "restarting": "Redémarrage…"
+  },
+  "stopStackModal": {
+    "eyebrow": "Confirmation",
+    "title": "Arrêter toute la stack ?",
+    "description": "Le conteneur sera arrêté. Les domaines locaux seront indisponibles jusqu’au prochain démarrage. | Les {n} conteneurs seront arrêtés. Les domaines locaux seront indisponibles jusqu’au prochain démarrage.",
+    "note": "Les volumes et les données seront conservés.",
+    "confirm": "Arrêter la stack"
+  },
+  "pagination": {
+    "perPage": "Par page",
+    "perPageLabel": "Éléments par page",
+    "range": "{from}–{to} sur {total}"
+  },
+  "updateModal": {
+    "hostFallback": "la machine hôte",
+    "copied": "Commande copiée",
+    "title": "Mise à jour de FrankenManager",
+    "description": "Dernière version publiée sur GitHub.",
+    "installed": "Version installée",
+    "latest": "Dernière version",
+    "unknown": "Inconnue",
+    "available": "Disponible",
+    "upToDate": "À jour",
+    "checkedAt": "Vérifié à {time}",
+    "checkFailed": "Vérification impossible",
+    "previousResult": "{error} Résultat de la vérification précédente.",
+    "whatsNew": "Nouveautés de la v{version}",
+    "installRunning": "L’installation se fait dans un terminal de {host} : elle demande les droits administrateur. Le serveur est démarré : il sera arrêté avant l’installation puis relancé sur la nouvelle version.",
+    "installStopped": "L’installation se fait dans un terminal de {host} : elle demande les droits administrateur. Le serveur est arrêté : il le restera après l’installation.",
+    "copyCommand": "Copier la commande",
+    "check": "Vérifier"
+  },
+  "overview": {
+    "title": "Votre stack, sous contrôle.",
+    "subtitle": "Tous vos environnements PHP, au même endroit.",
+    "restart": "Redémarrer",
+    "startStack": "Démarrer la stack",
+    "stopStack": "Arrêter la stack",
+    "starting": "Démarrage…",
+    "stopping": "Arrêt en cours…",
+    "types": {
+      "all": "Tous les types",
+      "php": "Projets PHP",
+      "static": "Sites statiques",
+      "proxy": "Reverse proxy",
+      "alias": "Alias"
+    },
+    "columns": {
+      "name": "Nom du domaine",
+      "env": "Environnement",
+      "status": "Statut"
+    },
+    "stats": {
+      "containers": "Conteneurs actifs",
+      "online": "En ligne",
+      "stopped": "Arrêtée",
+      "degraded": "Dégradé",
+      "allOperational": "Tous les services sont opérationnels",
+      "unavailable": "{n} service indisponible | {n} services indisponibles",
+      "domains": "Domaines locaux",
+      "phpProjects": "{n} projet PHP | {n} projets PHP",
+      "staticSites": "{n} statique | {n} statiques",
+      "proxies": "{n} reverse proxy | {n} reverse proxy",
+      "aliases": "{n} alias | {n} alias",
+      "certificates": "Certificats SSL",
+      "certificatesTrusted": "Certificats locaux approuvés",
+      "cpu": "Utilisation CPU",
+      "memory": "Mémoire : {used} / {total}"
+    },
+    "domainCount": "{n} domaine | {n} domaines",
+    "addProject": "Ajouter un projet",
+    "filterPlaceholder": "Filtrer par nom de domaine…",
+    "empty": "Aucun domaine ne correspond à ce filtre.",
+    "aliasOf": "alias de {name}",
+    "valid": "Valide",
+    "open": "Ouvrir {name}",
+    "seeAllDomains": "Voir les {n} domaines",
+    "devicesConnected": "{n} appareil connecté | {n} appareils connectés",
+    "infra": {
+      "title": "Infrastructure",
+      "containers": "{n} conteneur · Réseau local | {n} conteneurs · Réseau local",
+      "manage": "Gérer les conteneurs",
+      "stopped": "Service arrêté",
+      "container": "Conteneur {name}",
+      "php": {
+        "desc": "{n} version active · {versions} | {n} versions actives · {versions}",
+        "toMigrate": "PHP {versions} à migrer",
+        "upToDate": "Versions à jour"
+      },
+      "caddy": {
+        "desc": "Reverse proxy · ports {http} / {https}",
+        "routes": "{n} route HTTPS | {n} routes HTTPS"
+      },
+      "dns": {
+        "desc": "CoreDNS intégré · {address}"
+      },
+      "redis": {
+        "desc": "Cache partagé · port {port}"
+      },
+      "soketi": {
+        "meta": "API PHP sur {address}"
+      },
+      "s3": {
+        "meta": "Garage et sa passerelle ACL"
+      },
+      "db": {
+        "desc": "Base de données · port {port}",
+        "databases": "{n} base | {n} bases"
+      }
+    },
+    "activity": {
+      "title": "Activité récente",
+      "seeLogs": "Voir les journaux"
+    },
+    "devices": {
+      "title": "Testez sur tous vos appareils",
+      "localDns": "DNS local : {ip}",
+      "dnsDisabled": "désactivé",
+      "installCa": "Installez l’autorité locale pour activer HTTPS.",
+      "configure": "Configurer un appareil",
+      "caShared": "CA partagée · port {port}",
+      "caNotShared": "CA non partagée"
+    }
+  },
+  "projects": {
+    "subtitle": "Vos projets PHP, sites statiques, alias et domaines locaux sur cette machine.",
+    "add": "Ajouter un projet",
+    "tabs": {
+      "active": "Domaines actifs",
+      "archived": "Archives"
+    },
+    "types": {
+      "php": "Projet PHP",
+      "static": "Site statique"
+    },
+    "phpDeprecated": "PHP {version} (dépréciée)",
+    "aliasOf": "alias de {name}",
+    "stats": {
+      "domains": "Domaines",
+      "php": "{n} PHP",
+      "static": "{n} statique | {n} statiques",
+      "proxy": "{n} proxy",
+      "alias": "{n} alias",
+      "phpVersions": "Versions PHP",
+      "validCertificates": "Certificats valides"
+    },
+    "restore": {
+      "static": "Restaurer l’hôte statique",
+      "samePhp": "Restaurer en PHP {version}",
+      "otherVersion": "Restaurer avec une autre version"
+    },
+    "columns": {
+      "name": "Domaine / chemin",
+      "env": "Environnement"
+    },
+    "table": {
+      "active": "Domaines enregistrés",
+      "archived": "Domaines archivés",
+      "empty": "Aucun domaine.",
+      "emptyArchived": "Aucun domaine archivé."
+    },
+    "form": {
+      "domainArg": "<domaine>",
+      "titleStatic": "Nouveau site statique",
+      "titlePhp": "Nouveau projet PHP",
+      "descriptionStatic": "Un site HTML ou le build d’une app front, servi par le reverse proxy sans PHP.",
+      "descriptionPhp": "Créez un domaine local avec HTTPS automatique.",
+      "hintStatic": "Le Caddyfile du site est créé dans {path}, modifiable ensuite. Un hôte statique n’a pas d’alias.",
+      "hintPhp": "Les alias suivent la version PHP du domaine cible.",
+      "type": "Type de site",
+      "name": "Nom de domaine",
+      "root": "Dossier servi (facultatif)",
+      "rootHelp": "Relatif à {root} ; son premier dossier, le projet, doit exister.",
+      "php": "Version de PHP",
+      "alias": "Alias (facultatif)",
+      "spa": "Single-page app",
+      "spaHelp": "Les chemins inconnus renvoient {index} (routage côté client).",
+      "ssl": "Générer le certificat SSL",
+      "submitStatic": "Ajouter le site",
+      "submitPhp": "Créer le projet"
+    },
+    "banner": {
+      "archived": "Restaurez un projet PHP avec la version de votre choix ({command}), un site statique avec {flag} : son dossier servi et son repli SPA sont relus dans son Caddyfile.",
+      "deprecated": "PHP {versions} est déprécié. Passez {domains} à une version plus récente.",
+      "upToDate": "Toutes vos versions PHP sont à jour."
+    }
+  },
+  "containers": {
+    "subtitle": "Surveillez et pilotez les services Docker de la machine hôte.",
+    "startStack": "Démarrer la stack",
+    "restartStack": "Redémarrer la stack",
+    "tabs": {
+      "all": "Tous les services",
+      "services": "Services optionnels",
+      "images": "Images PHP"
+    },
+    "cpuUnderOne": "< {value}",
+    "enableService": "Activer {name}",
+    "actions": {
+      "start": "Démarrer",
+      "restart": "Redémarrer",
+      "stop": "Arrêter",
+      "rebuildBuild": "Reconstruire les images PHP ({flag})",
+      "rebuild": "Reconstruire les images PHP",
+      "select": "Sélectionner dans le formulaire"
+    },
+    "stats": {
+      "online": "En ligne",
+      "healthy": "Services sains",
+      "stopped": "{n} arrêté | {n} arrêtés",
+      "cpu": "CPU total",
+      "onMachine": "Sur la machine",
+      "memory": "Mémoire",
+      "outOf": "Sur {total}"
+    },
+    "toast": {
+      "title": "Détails de l’opération",
+      "sent": "Commande envoyée pour {name}. Consultez les Journaux pour la sortie."
+    },
+    "columns": {
+      "container": "Conteneur / image",
+      "resources": "Ressources",
+      "image": "Image",
+      "domains": "Domaines",
+      "service": "Service",
+      "enabled": "Activé"
+    },
+    "table": {
+      "docker": "Services Docker",
+      "images": "Images FrankenPHP"
+    },
+    "images": {
+      "deprecated": "Version dépréciée",
+      "supported": "Version supportée",
+      "domains": "{n} domaine | {n} domaines",
+      "upToDate": "À jour"
+    },
+    "form": {
+      "title": "Redémarrer des services",
+      "description": "Choisissez la cible sans interrompre les autres services.",
+      "hint": "Les domaines de ce conteneur seront brièvement indisponibles. Les données sont conservées.",
+      "target": "Service ciblé",
+      "stoppedTarget": "{name} (arrêté)",
+      "action": "Action",
+      "rebuild": "Reconstruction de l’image",
+      "rebuildNo": "Non · Utiliser l’image actuelle",
+      "rebuildYes": "Oui · Reconstruire les images PHP ({flag})",
+      "details": "Afficher les détails de l’opération",
+      "submitStop": "Arrêter le service",
+      "submitStart": "Démarrer le service",
+      "submitRestart": "Redémarrer le service"
+    },
+    "banner": {
+      "unreachable": "Docker est injoignable. Démarrez Docker Desktop pour piloter les conteneurs.",
+      "healthy": "Docker est connecté. Tous les contrôles de santé sont réussis.",
+      "unhealthy": "Docker est connecté. {n} service ne répond pas. | Docker est connecté. {n} services ne répondent pas."
+    }
+  },
+  "proxy": {
+    "subtitle": "Caddy gère le routage et la terminaison HTTPS de vos domaines.",
+    "addRoute": "Ajouter une route",
+    "tabs": {
+      "routes": "Routes",
+      "caddy": "Configuration Caddy"
+    },
+    "stats": {
+      "routes": "Routes",
+      "allActive": "Toutes actives",
+      "caddyStopped": "Caddy est arrêté",
+      "ports": "Ports publics",
+      "response": "Réponse",
+      "ms": "{n} ms",
+      "latency": "Latence moyenne"
+    },
+    "dest": {
+      "files": "Fichiers"
+    },
+    "kind": {
+      "proxy": "Proxy direct · HTTPS · WebSocket",
+      "proxyNoWs": "Proxy direct · HTTPS · WebSocket refusé",
+      "proxyAlias": "Alias de proxy · HTTPS",
+      "alias": "Alias · HTTPS",
+      "static": "Site statique · HTTPS",
+      "spa": "Site statique (SPA) · HTTPS",
+      "php": "Site PHP · HTTPS"
+    },
+    "columns": {
+      "source": "Domaine source",
+      "dest": "Destination"
+    },
+    "table": {
+      "title": "Règles de routage",
+      "active": "Active"
+    },
+    "menu": {
+      "editCaddyfile": "Modifier le Caddyfile",
+      "refuseWs": "Refuser le WebSocket",
+      "allowWs": "Autoriser le WebSocket",
+      "reload": "Recharger Caddy",
+      "deleteRoute": "Supprimer la route",
+      "archive": "Retirer du proxy (archiver)"
+    },
+    "sites": {
+      "title": "Caddyfiles des sites",
+      "description": "Un fichier par projet PHP (généré depuis {template}) et par hôte statique, puis modifiable.",
+      "custom": "Personnalisé",
+      "empty": "Aucun projet PHP ni hôte statique."
+    },
+    "main": {
+      "title": "Caddyfile du reverse proxy",
+      "description": "Lecture seule · régénéré à chaque ajout de domaine."
+    },
+    "form": {
+      "title": "Nouvelle route proxy",
+      "description": "Exposez un service local sans créer de conteneur PHP.",
+      "hint": "Caddy sera rechargé. Aucun conteneur PHP supplémentaire ne sera créé.",
+      "targetDomain": "Domaine cible",
+      "targetAddress": "Adresse de destination",
+      "chooseDomain": "Choisir un domaine…",
+      "type": "Type de route",
+      "typeAddress": "Proxy vers une adresse",
+      "typeAlias": "Alias d’un domaine existant",
+      "protocol": "Protocole public",
+      "https": "HTTPS automatique",
+      "httpOnly": "HTTP uniquement",
+      "websocket": "Autoriser les connexions WebSocket",
+      "websocketHelp": "Refusées, une demande d’upgrade reçoit 403 ({command}).",
+      "submit": "Ajouter la route"
+    },
+    "banner": "Les ports 80 et 443 sont exposés. Le trafic interne vers PHP utilise HTTP.",
+    "confirm": {
+      "title": "Retirer {name} ?",
+      "descriptionRoute": "La route sera supprimée de Caddy et du DNS, avec ses alias. Une route proxy n’a pas de Caddyfile à archiver.",
+      "descriptionSite": "Le site sera retiré de Caddy et du DNS ; son Caddyfile est archivé et pourra être restauré.",
+      "removeSite": "Retirer le site"
+    }
+  },
+  "dns": {
+    "subtitle": "Résolvez vos domaines {tld} depuis tous les appareils du réseau.",
+    "enable": "Activer le DNS",
+    "restart": "Redémarrer le DNS",
+    "copied": "Copié",
+    "tabs": {
+      "records": "Enregistrements",
+      "clients": "Appareils",
+      "lan": "Réseau local"
+    },
+    "stats": {
+      "lan": "Adresse LAN",
+      "fixed": "Fixée par {variable}",
+      "followsIp": "Suit les changements d’IP",
+      "domains": "Domaines",
+      "records": "Enregistrements A",
+      "devices": "Appareils connectés",
+      "lastMinutes": "Dans les 5 dernières minutes"
+    },
+    "ago": {
+      "now": "à l’instant",
+      "minutes": "il y a {n} min",
+      "hours": "il y a {n} h",
+      "days": "il y a {n} j"
+    },
+    "columns": {
+      "domain": "Domaine / type",
+      "target": "Adresse cible",
+      "device": "Appareil / IP",
+      "mac": "Adresse MAC",
+      "lastQuery": "Dernière requête"
+    },
+    "records": {
+      "title": "Zone locale {tld}",
+      "sub": "Enregistrement A · LAN",
+      "active": "Actif",
+      "copy": "Copier l’enregistrement"
+    },
+    "clients": {
+      "all": "Tous les appareils ({days} jours)",
+      "empty": "Aucun appareil n’a interrogé le serveur dans les 5 dernières minutes.",
+      "stopped": "Le serveur DNS est arrêté.",
+      "unknown": "Appareil inconnu",
+      "queries": "{n} requête | {n} requêtes",
+      "privateMacHelp": "Adresse privée : l’appareil en change selon le réseau",
+      "privateMac": "privée",
+      "connected": "Connecté",
+      "idle": "Inactif",
+      "showIdle": "Afficher les appareils inactifs",
+      "showIdleHelp": "Conservés {days} jours ({command})."
+    },
+    "lan": {
+      "interface": "Interface : {name}",
+      "ip": "Adresse IP : {ip} · Masque {mask}",
+      "gateway": "Passerelle : {ip}",
+      "upstream": "Résolveurs en amont : {list}",
+      "ipChange": "Si l’adresse IP change (nouveau réseau), FrankenManager met la zone à jour automatiquement."
+    },
+    "form": {
+      "title": "Configuration DNS",
+      "description": "Pris en compte en quelques secondes, sans redémarrage.",
+      "hint": "Configurez {ip} comme DNS sur vos appareils. Réservez une IP fixe dans le routeur.",
+      "ip": "Adresse IP des domaines",
+      "ipAuto": "Automatique · {ip}",
+      "ipLoopback": "Boucle locale · {ip}",
+      "listen": "Adresse d’écoute",
+      "port": "Port d’écoute",
+      "upstream": "Résolveurs en amont",
+      "enabled": "Activer le serveur DNS local",
+      "invalidPort": "Port invalide ({min}-{max})."
+    },
+    "banner": {
+      "disabled": "Le serveur DNS est désactivé : vos appareils ne résolvent pas les domaines {tld}.",
+      "process": "Le serveur DNS n’est pas un conteneur : il tourne dans un processus d’arrière-plan de FrankenManager, qui voit l’adresse réelle de chaque appareil."
+    }
+  },
+  "ssl": {
+    "subtitle": "Gérez les certificats locaux et la confiance HTTPS de vos appareils.",
+    "regenerateAll": "Régénérer les certificats",
+    "share": "Partager la CA sur le réseau local",
+    "tabs": {
+      "certs": "Certificats",
+      "ca": "Autorité locale"
+    },
+    "stats": {
+      "trusted": "Approuvés",
+      "authority": "Autorité locale mkcert",
+      "expiry": "Expiration",
+      "overOneYear": "> 1 an",
+      "noRenewal": "Aucun renouvellement requis",
+      "caSharing": "Partage CA",
+      "active": "Actif",
+      "inactive": "Inactif",
+      "port": "port {port}",
+      "offByDefault": "Désactivé par défaut"
+    },
+    "columns": {
+      "domain": "Domaine / émetteur",
+      "validity": "Validité"
+    },
+    "table": {
+      "title": "Certificats des domaines",
+      "issuer": "Autorité locale · mkcert",
+      "validity": "Valide · > 1 an",
+      "trusted": "Approuvé",
+      "regenerate": "Régénérer ce certificat"
+    },
+    "ca": {
+      "issuer": "Émetteur : {name}",
+      "installed": "Installée dans le trousseau système · approuvée",
+      "fingerprint": "Empreinte SHA-256 : {value}"
+    },
+    "form": {
+      "title": "Régénérer un certificat",
+      "description": "Le certificat existant sera remplacé pour ce domaine.",
+      "hint": "La clé privée de la CA n’est jamais partagée. Désactivez le partage après l’installation.",
+      "domain": "Domaine concerné",
+      "authority": "Autorité de certification",
+      "mkcert": "mkcert · Autorité locale",
+      "method": "Méthode",
+      "force": "Forcer la régénération",
+      "expired": "Seulement si expiré",
+      "port": "Port de partage de la CA",
+      "submit": "Régénérer le certificat"
+    },
+    "banner": {
+      "sharedUrl": "La CA est partagée sur {url}. Désactivez le partage une fois vos appareils configurés.",
+      "sharedPort": "La CA est partagée sur le port {port}. Désactivez le partage une fois vos appareils configurés.",
+      "notShared": "Sur un autre appareil, installez puis approuvez la CA locale pour éviter les avertissements HTTPS."
+    }
+  },
+  "redis": {
+    "subtitle": "Parcourez les clés du cache partagé et surveillez son utilisation.",
+    "enable": "Activer Redis",
+    "copied": "Copié",
+    "destructive": "Action destructive",
+    "tabs": {
+      "keys": "Clés du cache",
+      "server": "Serveur"
+    },
+    "keysMatching": "Clés {pattern}",
+    "empty": "Aucune clé ne correspond.",
+    "stats": {
+      "memory": "Mémoire",
+      "hitRate": "Taux de hits",
+      "hitsMisses": "{hits} hits · {misses} misses",
+      "keys": "Clés",
+      "allDatabases": "Toutes les bases Redis"
+    },
+    "ttl": {
+      "none": "Sans expiration",
+      "seconds": "{n} s",
+      "minutes": "{n} min"
+    },
+    "columns": {
+      "key": "Clé / type"
+    },
+    "menu": {
+      "copy": "Copier la clé",
+      "delete": "Supprimer la clé"
+    },
+    "server": {
+      "title": "Serveur Redis",
+      "version": "Version : {version} · uptime {uptime}",
+      "clients": "Clients connectés : {clients} · Mémoire utilisée : {memory}",
+      "hits": "Hits : {hits} · Misses : {misses}",
+      "listen": "Écoute sur {address} ({variable}) · conteneur {container}"
+    },
+    "form": {
+      "title": "Parcourir les clés",
+      "description": "Le daemon interroge Redis avec SCAN, sans bloquer le serveur.",
+      "hint": "{any} remplace n’importe quelle suite de caractères, {one} un seul caractère.",
+      "pattern": "Motif (SCAN MATCH)",
+      "count": "Clés par page (COUNT)",
+      "enabled": "Service Redis activé",
+      "enabledHelp": "Démarré ou arrêté immédiatement ({command})."
+    },
+    "banner": {
+      "disabled": "Redis est désactivé : le conteneur {container} n’existe pas. Activez-le pour utiliser le cache.",
+      "confirm": "Supprimer une clé ou vider le cache demande une confirmation, et le mot de passe du dashboard depuis l’accès distant."
+    },
+    "flush": {
+      "button": "Vider le cache",
+      "title": "Vider le cache Redis ?",
+      "description": "La {n} clé de toutes les bases Redis sera supprimée (FLUSHALL). Cette action est irréversible. | Les {n} clés de toutes les bases Redis seront supprimées (FLUSHALL). Cette action est irréversible.",
+      "word": "VIDER",
+      "hint": "Les bases SQL ne sont pas concernées."
+    },
+    "drop": {
+      "title": "Supprimer {key} ?",
+      "description": "La clé et sa valeur seront supprimées du cache (DEL)."
+    }
+  },
+  "s3": {
+    "subtitle": "Serveur S3 Garage pour les disques s3 de vos applications.",
+    "enable": "Activer S3",
+    "disable": "Désactiver S3",
+    "tabs": {
+      "buckets": "Buckets",
+      "objects": "Objets",
+      "keys": "Clés d’accès",
+      "laravel": "Laravel"
+    },
+    "stats": {
+      "online": "En ligne",
+      "stopped": "Arrêté",
+      "disabled": "Désactivé",
+      "onlineSub": "Garage + passerelle ACL",
+      "stoppedSub": "Démarrera avec la stack",
+      "endpoint": "Endpoint",
+      "endpointSub": "Applications : 127.0.0.1:{port} · {region}",
+      "bucketsSub": "{size} dans {dir}"
+    },
+    "copied": {
+      "url": "URL copié",
+      "id": "Identifiant copié",
+      "secret": "Secret copié"
+    },
+    "columns": {
+      "bucket": "Bucket / occupation",
+      "visibility": "Visibilité",
+      "keys": "Clés",
+      "key": "Clé / identifiant",
+      "permissions": "Droits"
+    },
+    "confirm": {
+      "destructive": "Action destructive",
+      "public": {
+        "eyebrow": "Exposition des données",
+        "title": "Rendre {bucket} public ?",
+        "confirm": "Rendre public",
+        "description": "Tous les objets de {bucket} pourront être lus et téléchargés sans identifiants par quiconque joint cette machine, y compris ceux stockés en privé.",
+        "hint": "Pour ne rendre publics que certains objets, gardez le bucket privé et utilisez l’ACL public-read (visibilité « public » de Laravel)."
+      },
+      "delete": {
+        "title": "Supprimer le bucket {bucket} ?",
+        "confirm": "Supprimer le bucket",
+        "description": "Le bucket contient {n} objet : il sera supprimé avant lui (--force), ainsi que ses {keys} clé(s) d’accès. | Le bucket contient {n} objets : ils seront supprimés avant lui (--force), ainsi que ses {keys} clé(s) d’accès.",
+        "descriptionEmpty": "Le bucket est vide. Ses {keys} clé(s) d’accès seront aussi supprimées.",
+        "hint": "Ses hôtes et enregistrements DNS sont retirés."
+      },
+      "empty": {
+        "title": "Vider le bucket {bucket} ?",
+        "confirm": "Vider le bucket",
+        "description": "L’objet de {bucket} sera supprimé. Cette action est irréversible. | Les {n} objets de {bucket} seront supprimés. Cette action est irréversible.",
+        "hint": "Le bucket et ses clés d’accès sont conservés."
+      }
+    },
+    "menu": {
+      "browse": "Parcourir les objets",
+      "copyUrl": "Copier l’URL",
+      "makePrivate": "Rendre privé",
+      "makePublic": "Rendre public",
+      "empty": "Vider",
+      "showSecret": "Afficher le secret",
+      "hideSecret": "Masquer le secret",
+      "copyId": "Copier l’identifiant",
+      "copySecret": "Copier le secret"
+    },
+    "empty": {
+      "buckets": "Aucun bucket. Créez-en un avec le formulaire.",
+      "keys": "Aucune clé : les applications utilisent la clé globale."
+    },
+    "bucketSub": "{n} objet · {size} | {n} objets · {size}",
+    "publicObjects": "{n} objet public | {n} objets publics",
+    "badges": {
+      "public": "Public",
+      "private": "Privé",
+      "readOnly": "Lecture seule",
+      "readWrite": "Lecture et écriture"
+    },
+    "bucketForm": {
+      "title": "Créer un bucket",
+      "description": "Accessible à la clé globale, servi en path style et en virtual-host style.",
+      "hint": "https://{domain}/<bucket> et https://<bucket>.{domain} : le certificat, les hosts et le DNS sont mis à jour.",
+      "name": "Nom du bucket",
+      "nameHelp": "3 à 63 minuscules, chiffres et tirets, sans point.",
+      "public": "Bucket public",
+      "publicHelp": "Tous les objets sont lisibles sans identifiants. Sinon, la visibilité se règle objet par objet (ACL).",
+      "submit": "Créer le bucket"
+    },
+    "keysTitle": "Clés limitées à un bucket",
+    "keyForm": {
+      "title": "Créer une clé d’accès",
+      "description": "Pour une application qui ne doit voir que son bucket.",
+      "hint": "La clé globale (S3_ACCESS_KEY_ID) reste autorisée sur tous les buckets. Supprimer un bucket supprime ses clés.",
+      "bucket": "Bucket",
+      "nameHelp": "Enregistrée sous {path}",
+      "readOnlyHelp": "La clé lit les objets sans pouvoir les écrire ni les supprimer.",
+      "submit": "Créer la clé"
+    },
+    "laravel": {
+      "title": "Variables pour Laravel",
+      "subtitle": "Disque s3 avec la clé globale, comme le montre s3 info.",
+      "note": "Les applications PHP résolvent aussi {domain} et font confiance à la CA mkcert : les URL signées ({method}) s’ouvrent dans le navigateur et sur les autres appareils.",
+      "copied": "Variables copiées",
+      "copiedHelp": "Collez-les dans le .env de votre projet Laravel."
+    },
+    "globalKey": {
+      "title": "Clé globale",
+      "subtitle": "Générée au premier démarrage, autorisée sur tous les buckets.",
+      "region": "Région",
+      "production": "Production (sans TLS)",
+      "edit": "Modifier dans Configuration",
+      "note": "Un port, la région ou un identifiant modifié s’applique au prochain stop / start. En ligne de commande : {aws} (AWS CLI préconfigurée) et {garage}."
+    },
+    "banner": {
+      "disabled": "S3 est désactivé. L’activer construit la passerelle ACL, démarre Garage et crée le certificat, les hosts, la route du reverse proxy et les enregistrements DNS de {domain} et des buckets. Les objets restent dans {dir} quand on le désactive.",
+      "enabled": "Les buckets sont privés par défaut. Comme sur AWS, un objet écrit avec l’ACL public-read (visibilité « public » de Laravel) se lit sans identifiants ; les autres répondent 403."
+    }
+  },
+  "websocket": {
+    "subtitle": "Serveur compatible Pusher pour Laravel Echo et le broadcasting.",
+    "enable": "Activer Soketi",
+    "disable": "Désactiver Soketi",
+    "stats": {
+      "online": "En ligne",
+      "stopped": "Arrêté",
+      "disabled": "Désactivé",
+      "stoppedSub": "Démarrera avec la stack",
+      "browsers": "Navigateurs",
+      "browsersSub": "wss:// · port 443 via Caddy",
+      "apps": "Applications PHP",
+      "appsSub": "API HTTP, sans TLS"
+    },
+    "env": {
+      "serverSide": "Côté serveur : PHP -> Soketi",
+      "browserSide": "Côté navigateur : Laravel Echo -> reverse proxy"
+    },
+    "laravel": {
+      "title": "Variables pour Laravel",
+      "subtitle": "Toutes les applications partagent l’app par défaut.",
+      "copied": "Variables copiées",
+      "copiedHelp": "Collez-les dans le .env de votre projet Laravel."
+    },
+    "defaultApp": {
+      "title": "App par défaut",
+      "subtitle": "Générés au démarrage s’ils sont vides.",
+      "edit": "Modifier dans Configuration",
+      "note": "Un identifiant modifié s’applique au prochain stop / start."
+    },
+    "banner": {
+      "disabled": "Soketi est désactivé. L’activer crée le conteneur, son certificat, l’entrée hosts, la route du reverse proxy et l’enregistrement DNS de {domain}.",
+      "enabled": "Les navigateurs passent par Caddy en wss:// sur le port 443 ; vos applications PHP publient les événements sur {address}."
+    }
+  },
+  "databases": {
+    "subtitle": "Gérez les bases et les utilisateurs de MariaDB et PostgreSQL sur la machine hôte.",
+    "tabs": {
+      "databases": "Bases",
+      "users": "Utilisateurs",
+      "connections": "Connexions"
+    },
+    "stats": {
+      "usersSub": "Comptes système exclus",
+      "engines": "Moteurs",
+      "allUp": "Tous opérationnels",
+      "oneDown": "Un moteur est arrêté"
+    },
+    "menu": {
+      "openAdmin": "Ouvrir {app}",
+      "copyUrl": "Copier la chaîne de connexion"
+    },
+    "copied": "Copié",
+    "columns": {
+      "database": "Base / moteur",
+      "size": "Taille",
+      "user": "Utilisateur / moteur",
+      "permissions": "Droits"
+    },
+    "empty": {
+      "users": "Aucun utilisateur."
+    },
+    "allOn": "Tous sur {database}",
+    "noDatabase": "Aucune base",
+    "conn": {
+      "host": "Depuis la machine hôte : 127.0.0.1",
+      "admin": "administration : phpMyAdmin et pgAdmin sur {url}"
+    },
+    "form": {
+      "engine": "Moteur de base de données"
+    },
+    "userForm": {
+      "title": "Créer un utilisateur",
+      "description": "Un compte avec tous les droits sur une base.",
+      "hint": "Sur MariaDB il se connecte de partout ('%'), vos applications tournant dans d’autres conteneurs ; sur PostgreSQL il devient propriétaire de la base.",
+      "database": "Base",
+      "noDatabase": "Aucune (droits plus tard)",
+      "submit": "Créer l’utilisateur"
+    },
+    "dbForm": {
+      "title": "Créer une base",
+      "description": "utf8mb4 sur MariaDB, UTF8 sur PostgreSQL.",
+      "hint": "Lettres, chiffres et _ uniquement. Les identifiants n’apparaissent ni dans les journaux ni en ligne de commande.",
+      "name": "Nom de la base",
+      "grant": "Créer aussi son utilisateur",
+      "grantHelp": "Avec tous les droits sur cette base.",
+      "submit": "Créer la base de données"
+    },
+    "banner": {
+      "system": "Les bases et comptes système (mysql, postgres, root…) ne sont ni listés ni supprimables.",
+      "admin": "Pour le reste, phpMyAdmin et pgAdmin restent sur {url}."
+    },
+    "destructive": "Action destructive",
+    "dropDb": {
+      "title": "Supprimer la base {name} ?",
+      "description": "La base {engine} et toutes ses tables seront supprimées. Cette action est irréversible.",
+      "typeToConfirm": "SUPPRIMER",
+      "confirm": "Supprimer la base"
+    },
+    "dropUser": {
+      "title": "Supprimer l’utilisateur {name} ?",
+      "description": "Le compte ne pourra plus se connecter à {engine}. Tous ses hôtes sont supprimés.",
+      "descriptionPostgres": "Le compte ne pourra plus se connecter à {engine}. Ses objets passent à l’administrateur.",
+      "confirm": "Supprimer l’utilisateur"
+    }
+  },
+  "configuration": {
+    "subtitle": "Paramètres de frankenmanager, enregistrés dans le fichier .env du dossier de données.",
+    "restartStack": "Redémarrer la stack",
+    "restartRequired": "Redémarrage requis",
+    "stats": {
+      "settings": "Paramètres",
+      "settingsSub": "Fichier .env",
+      "custom": "Personnalisés",
+      "customSub": "Différents du défaut",
+      "pending": "En attente",
+      "allApplied": "Tout est appliqué"
+    },
+    "pendingAlert": {
+      "title": "Redémarrage nécessaire",
+      "description": "{keys} sera appliqué au prochain démarrage de la stack. | {keys} seront appliqués au prochain démarrage de la stack."
+    },
+    "filter": "Filtrer par clé ou description…",
+    "onlyChanged": "Personnalisés uniquement",
+    "badges": {
+      "custom": "Personnalisé",
+      "generated": "Généré",
+      "secret": "Secret"
+    },
+    "default": "Défaut : {value}",
+    "generatedAtStartup": "généré au démarrage",
+    "emptyValue": "(vide)",
+    "enabled": "Activé",
+    "disabled": "Désactivé",
+    "showKey": "Afficher {key}",
+    "hideKey": "Masquer {key}",
+    "reset": "Réinitialiser",
+    "resetKey": "Réinitialiser {key}",
+    "empty": "Aucun paramètre ne correspond.",
+    "banner": "Les secrets (mots de passe, app secret Soketi, secrets S3) sont masqués comme dans {cmd}. Réinitialiser une valeur générée en génère une nouvelle au prochain démarrage."
+  },
+  "access": {
+    "subtitle": "Ouvrez le dashboard à vos autres appareils, en HTTPS et avec un mot de passe.",
+    "pair": "Appairer un appareil",
+    "tabs": {
+      "settings": "Réglages",
+      "devices": "Appareils",
+      "log": "Journal"
+    },
+    "modes": {
+      "local": {
+        "label": "Cette machine",
+        "description": "Le dashboard ne répond que sur 127.0.0.1. Le mot de passe est facultatif."
+      },
+      "lan": {
+        "label": "Réseau local",
+        "description": "Aussi les adresses privées (Wi-Fi, Ethernet, Tailscale), en HTTPS. Mot de passe obligatoire."
+      },
+      "internet": {
+        "label": "Internet",
+        "description": "Toute adresse, via une redirection de port ou un tunnel, en HTTPS. Mot de passe obligatoire."
+      }
+    },
+    "pairingHint": {
+      "local": "Ouvrez d’abord l’accès distant (Réseau local ou Internet) : le téléphone doit pouvoir joindre le dashboard."
+    },
+    "closedNoPassword": "L’accès distant est fermé tant que le dashboard n’a pas de mot de passe.",
+    "stats": {
+      "access": "Accès",
+      "localOnly": "127.0.0.1 seulement",
+      "httpsPassword": "HTTPS · mot de passe",
+      "closed": "Fermé : pas de mot de passe",
+      "remoteAddress": "Adresse distante",
+      "certProvided": "Certificat fourni",
+      "certMkcert": "Certificat mkcert",
+      "devicesSub": "{n} à distance · 30 jours sans usage au plus"
+    },
+    "justNow": "à l’instant",
+    "columns": {
+      "device": "Appareil / adresse",
+      "lastSeen": "Dernier usage",
+      "event": "Événement / appareil",
+      "address": "Adresse",
+      "when": "Quand"
+    },
+    "events": {
+      "login": "Connexion",
+      "loginFailed": "Mot de passe erroné",
+      "logout": "Déconnexion",
+      "revoked": "Appareil déconnecté",
+      "refused": "Adresse refusée",
+      "confirmFailed": "Confirmation refusée",
+      "passwordChanged": "Mot de passe changé",
+      "paired": "Appareil appairé",
+      "pairFailed": "Code d’appairage erroné"
+    },
+    "settings": {
+      "title": "Qui accède au dashboard",
+      "subtitle": "{key} · appliqué à chaud par le daemon, sans redémarrage.",
+      "port": "Port HTTPS",
+      "allowed": "Adresses autorisées (facultatif)",
+      "allowedHelp": "IPv4, IPv6 ou CIDR, séparés par des virgules ; vide : toutes.",
+      "customCert": "Utiliser mon propre certificat",
+      "customCertHelp": "Pour un nom public ou un tunnel ; sinon mkcert le génère pour l’IP du réseau local et le nom de la machine.",
+      "cert": "Certificat (PEM)",
+      "key": "Clé privée (PEM)",
+      "localAuth": "Exiger le mot de passe sur cette machine aussi",
+      "localAuthHelp": "{key} : sinon, 127.0.0.1 n’a besoin que du jeton du daemon.",
+      "save": "Enregistrer l’accès"
+    },
+    "sessions": {
+      "title": "Appareils connectés",
+      "empty": "Aucun appareil connecté.",
+      "thisDevice": "{ip} · cet appareil",
+      "revoke": "Déconnecter l’appareil"
+    },
+    "log": {
+      "title": "Journal des connexions",
+      "empty": "Aucune connexion."
+    },
+    "password": {
+      "mismatch": "Les mots de passe diffèrent.",
+      "change": "Changer le mot de passe",
+      "set": "Définir le mot de passe",
+      "description": "Stocké haché (PBKDF2-SHA256), jamais en clair.",
+      "hint": "Le changer déconnecte les autres appareils. En ligne de commande : {cmd}. Cinq mots de passe erronés verrouillent une adresse 15 minutes.",
+      "current": "Mot de passe actuel",
+      "new": "Nouveau mot de passe",
+      "newHelp": "Au moins 10 caractères.",
+      "save": "Enregistrer le mot de passe"
+    },
+    "banner": {
+      "remote": "Ouvrez {url} sur l’autre appareil après y avoir installé la CA racine (Certificats SSL › partager la CA). À distance, les actions destructives redemandent le mot de passe.",
+      "closed": "L’accès distant reste fermé tant que le dashboard n’a pas de mot de passe.",
+      "local": "Le dashboard ne répond que sur cette machine ({address}, avec le jeton du daemon)."
+    },
+    "confirmSettings": {
+      "eyebrow": "Réglage sensible",
+      "title": "Modifier l’accès au dashboard ?",
+      "description": "Ces réglages peuvent ouvrir le dashboard plus largement : confirmez avec le mot de passe."
+    },
+    "confirmRevoke": {
+      "title": "Déconnecter {device} ?",
+      "description": "Sa session est révoquée : il devra saisir de nouveau le mot de passe.",
+      "confirm": "Déconnecter"
+    }
+  },
+  "logs": {
+    "subtitle": "Suivez en direct les événements de vos services.",
+    "export": "Exporter les journaux",
+    "exported": "Export terminé",
+    "exportedLines": "{n} ligne exportée. | {n} lignes exportées.",
+    "tabs": {
+      "live": "Flux en direct",
+      "history": "Historique"
+    },
+    "levels": {
+      "info": "Information",
+      "warn": "Avertissement",
+      "error": "Erreur"
+    },
+    "periods": {
+      "last30": "Les 30 dernières minutes",
+      "lastHour": "La dernière heure",
+      "last24": "Les dernières 24 heures"
+    },
+    "allServices": "Tous les services",
+    "stats": {
+      "events": "Événements",
+      "eventsSub": "Depuis l’ouverture",
+      "warnings": "Avertissements",
+      "noWarnings": "Aucun avertissement",
+      "errors": "Erreurs",
+      "noErrors": "Aucune erreur récente"
+    },
+    "fresh": "{n} nouveau | {n} nouveaux",
+    "backToLatest": "Revenir aux événements les plus récents",
+    "pause": "Mettre en pause",
+    "resume": "Reprendre",
+    "autoRefresh": "Actualisation automatique",
+    "paused": "Flux en pause",
+    "empty": "Aucun événement pour ces filtres.",
+    "filters": {
+      "title": "Filtres du journal",
+      "description": "Affinez le flux sans interrompre vos services.",
+      "hint": "Le flux se met à jour automatiquement. Les secrets et mots de passe sont masqués.",
+      "service": "Service",
+      "level": "Niveau minimum",
+      "period": "Période",
+      "search": "Recherche dans le message",
+      "searchPlaceholder": "Rechercher un événement…",
+      "autoscroll": "Faire défiler automatiquement",
+      "apply": "Appliquer les filtres"
+    },
+    "banner": "Le flux affiche les événements de la machine hôte. Export disponible au format texte."
+  },
+  "app": {
+    "update": {
+      "title": "Nouvelle version disponible",
+      "description": "Rechargez pour passer à la nouvelle version du tableau de bord.",
+      "reload": "Recharger"
+    },
+    "daemonDown": {
+      "title": "Le daemon FrankenManager ne répond pas",
+      "help": "Lancez {cmd}, qui démarre le daemon s’il ne tourne pas. La page se reconnecte d’elle-même dès qu’il répond.",
+      "short": "Le daemon ne répond pas",
+      "retrying": "{error} Nouvelle tentative automatique en cours…"
+    },
+    "errors": {
+      "config": "config.json : {status}",
+      "localRefused": "Connexion locale refusée ({status})."
+    },
+    "client": {
+      "local": "Navigateur de cette machine",
+      "remote": "Navigateur"
+    }
+  },
+  "signIn": {
+    "localHint": "Mot de passe demandé sur cette machine ({env})",
+    "remoteAccess": "Accès distant",
+    "password": "Mot de passe du dashboard",
+    "error": "Erreur {status}"
+  },
+  "mobile": {
+    "device": {
+      "name": "App FrankenManager",
+      "nameWithModel": "App FrankenManager · {device}"
+    },
+    "session": {
+      "expired": "Session expirée",
+      "expiredHelp": "Reconnectez-vous à cette instance."
+    },
+    "layout": {
+      "unreachable": "{name} ne répond pas"
+    },
+    "errors": {
+      "forbidden": "{message} Vérifiez DASHBOARD_ACCESS et DASHBOARD_ALLOWED_IPS."
+    },
+    "instances": {
+      "title": "Instances",
+      "refresh": "Actualiser",
+      "empty": "Aucune instance",
+      "emptyHelp": "Sur la machine qui fait tourner FrankenManager, ouvrez l’accès distant ({env}), puis scannez le QR code d’appairage de son dashboard (Accès distant), ou ajoutez son adresse avec le mot de passe du dashboard.",
+      "addWithPassword": "Ajouter avec le mot de passe",
+      "stackOnline": "Stack en ligne",
+      "stackStopped": "Stack arrêtée",
+      "domains": "{n} domaine | {n} domaines",
+      "expired": "Session expirée : se reconnecter",
+      "unreachable": "Injoignable",
+      "reconnect": "Se reconnecter",
+      "remove": "Retirer de l’app",
+      "version": "FrankenManager mobile {version} ({build})"
+    },
+    "form": {
+      "add": "Ajouter une instance",
+      "scanHelp": "Affichez le QR code d’appairage dans le dashboard de la machine (Accès distant).",
+      "orPassword": "ou avec le mot de passe",
+      "address": "Adresse de l’accès distant",
+      "addressHelp": "IP ou nom de la machine, port 9443 par défaut (DASHBOARD_REMOTE_PORT).",
+      "nameHelp": "Par défaut, le nom de la machine.",
+      "wrongPassword": "Mot de passe incorrect.",
+      "firstTime": {
+        "title": "Première connexion depuis ce téléphone",
+        "access": "Sur la machine : {access} et un mot de passe avec {password}.",
+        "ca": "Partagez la CA ({trustCa}) et installez-la depuis le téléphone, en suivant la page du QR code.",
+        "ios": "iOS : Réglages › Général › Informations › Réglages des certificats, activez la confiance complète."
+      },
+      "errors": {
+        "addressRequired": "Saisissez l’adresse de l’instance.",
+        "invalidAddress": "Adresse invalide."
+      }
+    },
+    "pair": {
+      "scan": "Appairer avec un QR code",
+      "title": "Appairer une instance",
+      "unnamed": "Machine sans nom",
+      "fingerprint": "Empreinte SHA-256 de la CA",
+      "noFingerprint": "Non communiquée par l’instance.",
+      "verify": "Vérifiez que ce nom et cette adresse sont bien ceux affichés par le dashboard de la machine. Le certificat de l’accès distant doit être signé par cette CA, installée et approuvée sur le téléphone.",
+      "verifyWithCa": "Vérifiez que ce nom et cette adresse sont bien ceux affichés par le dashboard de la machine. Le certificat de l’accès distant doit être signé par cette CA, installée et approuvée sur le téléphone : comparez l’empreinte avec celle du certificat installé.",
+      "existing": "« {name} » est déjà dans l’app à cette adresse : sa session sera remplacée.",
+      "confirm": "Appairer",
+      "impossible": "Appairage impossible",
+      "backToList": "Retour aux instances",
+      "scanner": {
+        "instructions": "Visez le QR code d’appairage affiché par le dashboard (Accès distant).",
+        "torchOn": "Éteindre la lampe",
+        "torchOff": "Allumer la lampe"
+      },
+      "errors": {
+        "invalidLink": "Ce QR code n’est pas un code d’appairage FrankenManager.",
+        "unsupportedVersion": "Ce code d’appairage vient d’une version de FrankenManager que l’app ne gère pas : mettez l’app à jour.",
+        "notHttps": "Code d’appairage refusé : l’adresse de l’instance n’est pas en HTTPS.",
+        "cameraDenied": "L’app n’a pas accès à l’appareil photo : autorisez-le dans les réglages du téléphone.",
+        "scanFailed": "Scan impossible : {message}",
+        "unreachable": "{message} Le téléphone doit aussi être sur le même réseau que la machine.",
+        "invalidCode": "Code d’appairage invalide, expiré ou déjà utilisé : affichez-en un nouveau dans le dashboard.",
+        "notSupported": "Cette instance ne propose pas l’appairage par QR code : mettez FrankenManager à jour sur la machine.",
+        "tooMany": "Trop de tentatives : patientez quelques minutes avant de réessayer."
+      }
+    }
+  },
+  "store": {
+    "done": "Terminé.",
+    "confirmAction": "Confirmer cette action",
+    "deleteAction": "Supprimer {name}",
+    "loadFailed": "Lecture impossible",
+    "progress": {
+      "sending": "Envoi…",
+      "queued": "En file…",
+      "running": "En cours…"
+    },
+    "stack": {
+      "start": "Démarrage de la stack",
+      "started": "La stack a démarré.",
+      "stop": "Arrêt de la stack",
+      "stopAction": "Arrêter la stack",
+      "stopped": "Les volumes et les données sont conservés.",
+      "restart": "Redémarrage de la stack",
+      "restarted": "La stack a redémarré."
+    },
+    "rebuild": {
+      "title": "Reconstruction des images PHP",
+      "done": "Images PHP reconstruites, conteneurs recréés."
+    },
+    "container": {
+      "restart": "Redémarrage de {id}",
+      "stop": "Arrêt de {id}",
+      "start": "Démarrage de {id}",
+      "stopAction": "Arrêter {id}"
+    },
+    "project": {
+      "addStatic": "Ajout de l’hôte statique",
+      "create": "Création du projet",
+      "ready": "{name} est prêt en HTTPS."
+    },
+    "alias": {
+      "add": "Ajout de l’alias",
+      "added": "{alias} pointe vers {target}.",
+      "remove": "Suppression de l’alias"
+    },
+    "domain": {
+      "archive": "Archivage",
+      "archiveAction": "Archiver {name}",
+      "archived": "{name} est archivé.",
+      "restore": "Restauration",
+      "restored": "{name} est de nouveau en ligne."
+    },
+    "php": {
+      "switch": "Changement de version PHP",
+      "switched": "{name} utilise désormais PHP {php}."
+    },
+    "ssl": {
+      "regenerate": "Régénération SSL",
+      "allRegenerated": "Tous les certificats sont régénérés.",
+      "regenerated": "Certificat de {name} régénéré."
+    },
+    "service": {
+      "enable": "Activation : {service}",
+      "disable": "Désactivation : {service}"
+    },
+    "route": {
+      "add": "Ajout de la route",
+      "added": "{source} est exposé en HTTPS."
+    },
+    "websocket": {
+      "allowed": "WebSocket autorisé",
+      "refused": "WebSocket refusé",
+      "relays": "{name} relaie les connexions WebSocket.",
+      "upgradeRefused": "Une demande d’upgrade vers {name} reçoit 403."
+    },
+    "caddyfile": {
+      "saved": "Caddyfile enregistré",
+      "reloaded": "Vérifié par Caddy, le conteneur a été rechargé.",
+      "reset": "Retour au modèle",
+      "resetAction": "Rétablir le Caddyfile de {name}",
+      "regenerated": "Caddyfile régénéré depuis le modèle."
+    },
+    "setting": {
+      "title": "Réglage {key}",
+      "saved": "{key} enregistré."
+    },
+    "dns": {
+      "restart": "Redémarrage du DNS",
+      "restarted": "Le serveur DNS a relu sa configuration."
+    },
+    "ca": {
+      "share": "Partage de la CA",
+      "stopSharing": "Arrêt du partage",
+      "shared": "Désactivez le partage après l’installation.",
+      "unshared": "La CA n’est plus exposée."
+    },
+    "redis": {
+      "flush": "Vidage du cache",
+      "flushAction": "Vider Redis",
+      "flushed": "Toutes les clés sont supprimées.",
+      "deleteKeys": "Suppression de clés",
+      "deleteKeysAction": "Supprimer des clés",
+      "keysDeleted": "{n} clés."
+    },
+    "db": {
+      "create": "Création de la base",
+      "created": "{name} ({engine}) est prête.",
+      "drop": "Suppression de la base",
+      "dropped": "{name} a été supprimée."
+    },
+    "dbUser": {
+      "create": "Création de l’utilisateur",
+      "granted": "{name} a tous les droits sur {database}.",
+      "created": "{name} est créé.",
+      "drop": "Suppression de l’utilisateur",
+      "dropped": "{name} ne peut plus se connecter."
+    },
+    "bucket": {
+      "create": "Création du bucket",
+      "createdPublic": "Public : ses objets sont lisibles sans identifiants.",
+      "createdPrivate": "Privé.",
+      "public": "Bucket public",
+      "private": "Bucket privé",
+      "empty": "Vidage du bucket",
+      "emptyAction": "Vider {name}",
+      "emptied": "{name} est vide.",
+      "delete": "Suppression du bucket",
+      "deleted": "{name} et ses clés sont supprimés."
+    },
+    "s3Key": {
+      "create": "Création de la clé",
+      "created": "Clé créée pour {bucket}.",
+      "delete": "Suppression de la clé"
+    },
+    "objects": {
+      "upload": "Téléversement",
+      "delete": "Suppression d’objets",
+      "deleteAction": "Supprimer des objets",
+      "deleted": "{n} objet supprimé. | {n} objets supprimés.",
+      "public": "Objet public | Objets publics",
+      "private": "Objet privé | Objets privés"
+    },
+    "config": {
+      "saved": "Configuration enregistrée",
+      "editAction": "Modifier {key}",
+      "reset": "Valeur par défaut rétablie",
+      "resetAction": "Rétablir {key}"
+    },
+    "password": {
+      "changed": "Mot de passe changé",
+      "signedOut": "Tous les appareils sont déconnectés, celui-ci aussi : reconnectez-vous."
+    },
+    "session": {
+      "revoked": "Appareil déconnecté",
+      "revokedDesc": "Il devra se reconnecter.",
+      "revokeFailed": "Déconnexion impossible"
+    },
+    "update": {
+      "checkFailed": "Vérification impossible",
+      "available": "Mise à jour disponible",
+      "availableDesc": "FrankenManager {version} est disponible.",
+      "upToDate": "FrankenManager est à jour",
+      "version": "Version {version}."
+    },
+    "pairing": {
+      "action": "Appairer un appareil",
+      "paired": "Appareil appairé"
+    }
+  },
+  "errors": {
+    "noInstance": "Aucune instance.",
+    "failed": "Échec.",
+    "wrongPassword": "Mot de passe erroné.",
+    "unreachable": "Instance injoignable. Vérifiez que le daemon FrankenManager tourne ; depuis un autre appareil, que l’accès distant est ouvert ({setting}) et que la CA de FrankenManager y est installée et approuvée.",
+    "http": "Erreur {status}",
+    "cancelled": "Action annulée.",
+    "operationTooLong": "L’opération dure trop longtemps.",
+    "domain": {
+      "test": "Utilisez un domaine local en .test (ex. {example}).",
+      "exists": "Ce domaine existe déjà. Choisissez un autre nom."
+    },
+    "route": {
+      "target": "Adresse attendue au format hôte:port (ex. 127.0.0.1:5173)."
+    },
+    "bucket": {
+      "required": "Le nom du bucket est requis.",
+      "invalid": "3 à 63 minuscules, chiffres et tirets, sans point.",
+      "exists": "Le bucket {name} existe déjà."
+    },
+    "s3Key": {
+      "bucketRequired": "Choisissez un bucket existant."
+    },
+    "db": {
+      "name": "Lettres, chiffres et _ uniquement, 63 au plus.",
+      "passwordRequired": "Un mot de passe est obligatoire."
+    },
+    "config": {
+      "unknownKey": "Clé inconnue.",
+      "invalidPort": "Port invalide (1-65535).",
+      "allowedValues": "Valeurs possibles : {values}."
+    },
+    "password": {
+      "tooShort": "Au moins {n} caractères."
+    },
+    "caddyfile": {
+      "empty": "Le Caddyfile est vide.",
+      "brotli": "Encodage br non pris en charge par le reverse proxy (ligne {line}) : utilisez encode zstd gzip.",
+      "unopened": "Accolade fermante sans ouverture (ligne {line}).",
+      "unclosed": "Accolade ouverte ligne {line} jamais fermée."
+    }
+  },
+  "services": {
+    "dns": {
+      "label": "Serveur DNS LAN",
+      "desc": "CoreDNS intégré à FrankenManager · résout les .test pour le réseau local"
+    },
+    "redis": {
+      "label": "Cache Redis",
+      "desc": "Conteneur franken_redis"
+    },
+    "s3": {
+      "label": "Stockage S3 (Garage)",
+      "desc": "Conteneurs franken_s3 et franken_s3_gateway · {url}"
+    },
+    "soketi": {
+      "label": "WebSocket (Soketi)",
+      "desc": "Conteneur franken_soketi · {url}"
+    }
+  },
+  "labels": {
+    "appClient": "App FrankenManager",
+    "emptyValue": "(vide)",
+    "env": {
+      "proxy": "Proxy HTTP",
+      "static": "Statique",
+      "staticSpa": "Statique · SPA"
+    },
+    "containers": {
+      "s3Gateway": "Passerelle ACL S3"
+    },
+    "redisTypes": {
+      "string": "chaîne",
+      "hash": "hash",
+      "list": "liste",
+      "set": "ensemble",
+      "zset": "ensemble trié",
+      "stream": "flux"
+    },
+    "configGroups": {
+      "databases": "Bases de données",
+      "redis": "Cache Redis",
+      "websocket": "WebSocket (Soketi)",
+      "s3": "Stockage S3 (Garage)",
+      "dns": "Serveur DNS",
+      "dashboard": "Dashboard",
+      "web": "Serveur web",
+      "phpImages": "Images PHP",
+      "general": "Général"
+    }
   }
 }

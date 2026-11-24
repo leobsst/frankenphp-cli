@@ -13,9 +13,13 @@ import {
   DNS_CLIENT_WINDOW_MS, actions, active, clock, dnsClientsConnected, isServiceBusy, state, toast,
   type DnsClient, type Domain,
 } from '../composables/useFm'
+import { formatNumber } from '../i18n'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
 
 const tab = ref('records')
-const tabs = [{ label: 'Enregistrements', value: 'records' }, { label: 'Appareils', value: 'clients' }, { label: 'Réseau local', value: 'lan' }]
+const tabs = computed(() => [{ label: t('dns.tabs.records'), value: 'records' }, { label: t('dns.tabs.clients'), value: 'clients' }, { label: t('dns.tabs.lan'), value: 'lan' }])
 const form = reactive({ ip: state.dns.ip, listen: state.dns.listen, upstream: state.dns.upstream, enabled: state.dns.enabled, port: String(state.dns.port) })
 const error = ref<string>()
 const showIdle = ref(false)
@@ -23,21 +27,21 @@ const showIdle = ref(false)
 const busy = computed(() => state.dns.status === 'restarting' || isServiceBusy('dns'))
 const up = computed(() => state.dns.enabled && state.dns.status === 'running')
 const stats = computed(() => [
-  { label: 'Adresse LAN', value: state.dns.ip, sub: state.config.DNS_IP ? 'Fixée par DNS_IP' : 'Suit les changements d’IP' },
-  { label: 'Domaines', value: active.value.length, sub: 'Enregistrements A' },
-  { label: 'Appareils connectés', value: up.value ? dnsClientsConnected.value.length : 0, sub: 'Dans les 5 dernières minutes' },
+  { label: t('dns.stats.lan'), value: state.dns.ip, sub: state.config.DNS_IP ? t('dns.stats.fixed', { variable: 'DNS_IP' }) : t('dns.stats.followsIp') },
+  { label: t('dns.stats.domains'), value: active.value.length, sub: t('dns.stats.records') },
+  { label: t('dns.stats.devices'), value: up.value ? dnsClientsConnected.value.length : 0, sub: t('dns.stats.lastMinutes') },
 ])
 
 function submit() {
   const port = Number(form.port)
-  if (!Number.isInteger(port) || port < 1 || port > 65535) { error.value = 'Port invalide (1-65535).'; return }
+  if (!Number.isInteger(port) || port < 1 || port > 65535) { error.value = t('dns.form.invalidPort', { min: 1, max: 65535 }); return }
   actions.saveDns({ ...form, port })
 }
 
 function copy(d: Domain) {
   const rec = `${d.name}. IN A ${state.dns.ip}`
   navigator.clipboard?.writeText(rec)
-  toast('info', 'Copié', rec)
+  toast('info', t('dns.copied'), rec)
 }
 
 // ---------- Devices (`frankenmanager dns-clients [--all]`) ----------
@@ -47,103 +51,106 @@ const clientIcon = (c: DnsClient) => (/iphone|pixel|galaxy|android/i.test(c.name
 
 function ago(ts: number) {
   const s = Math.max(0, Math.round((clock.value - ts) / 1000))
-  if (s < 60) return 'à l’instant'
-  if (s < 3600) return `il y a ${Math.round(s / 60)} min`
-  if (s < 86_400) return `il y a ${Math.round(s / 3600)} h`
-  return `il y a ${Math.round(s / 86_400)} j`
+  if (s < 60) return t('dns.ago.now')
+  if (s < 3600) return t('dns.ago.minutes', { n: formatNumber(Math.round(s / 60)) })
+  if (s < 86_400) return t('dns.ago.hours', { n: formatNumber(Math.round(s / 3600)) })
+  return t('dns.ago.days', { n: formatNumber(Math.round(s / 86_400)) })
 }
 
-const recordColumns: TableColumn<Domain>[] = [
-  { accessorKey: 'name', header: 'Domaine / type' },
-  { id: 'ip', header: 'Adresse cible', meta: { class: { th: 'w-36 max-md:hidden', td: 'max-md:hidden' } } },
-  { id: 'state', header: 'État', meta: { class: { th: 'w-28' } } },
+const recordColumns = computed<TableColumn<Domain>[]>(() => [
+  { accessorKey: 'name', header: t('dns.columns.domain') },
+  { id: 'ip', header: t('dns.columns.target'), meta: { class: { th: 'w-36 max-md:hidden', td: 'max-md:hidden' } } },
+  { id: 'state', header: t('common.status'), meta: { class: { th: 'w-28' } } },
   { id: 'actions', header: '', meta: { class: { th: 'w-10', td: 'pr-0' } } },
-]
-const clientColumns: TableColumn<DnsClient>[] = [
-  { accessorKey: 'ip', header: 'Appareil / IP' },
-  { id: 'mac', header: 'Adresse MAC', meta: { class: { th: 'w-40 max-lg:hidden', td: 'max-lg:hidden font-mono' } } },
-  { id: 'seen', header: 'Dernière requête', meta: { class: { th: 'w-32 max-md:hidden', td: 'max-md:hidden' } } },
-  { id: 'state', header: 'État', meta: { class: { th: 'w-28' } } },
-]
+])
+const clientColumns = computed<TableColumn<DnsClient>[]>(() => [
+  { accessorKey: 'ip', header: t('dns.columns.device') },
+  { id: 'mac', header: t('dns.columns.mac'), meta: { class: { th: 'w-40 max-lg:hidden', td: 'max-lg:hidden font-mono' } } },
+  { id: 'seen', header: t('dns.columns.lastQuery'), meta: { class: { th: 'w-32 max-md:hidden', td: 'max-md:hidden' } } },
+  { id: 'state', header: t('common.status'), meta: { class: { th: 'w-28' } } },
+])
 </script>
 
 <template>
-  <PageHeader title="Serveur DNS" subtitle="Résolvez vos domaines .test depuis tous les appareils du réseau.">
-    <UButton v-if="!state.dns.enabled" icon="i-lucide-power" label="Activer le DNS" size="lg" class="md:w-[205px]" :loading="busy" @click="actions.setService('dns', true)" />
-    <UButton v-else icon="i-lucide-rotate-cw" label="Redémarrer le DNS" size="lg" class="md:w-[205px]" :loading="busy" :disabled="state.stack !== 'running'" @click="actions.restartDns()" />
+  <PageHeader :title="t('nav.dns')" :subtitle="t('dns.subtitle', { tld: '.test' })">
+    <UButton v-if="!state.dns.enabled" icon="i-lucide-power" :label="t('dns.enable')" size="lg" class="md:w-[205px]" :loading="busy" @click="actions.setService('dns', true)" />
+    <UButton v-else icon="i-lucide-rotate-cw" :label="t('dns.restart')" size="lg" class="md:w-[205px]" :loading="busy" :disabled="state.stack !== 'running'" @click="actions.restartDns()" />
   </PageHeader>
   <MiniStats :items="stats" />
   <UTabs v-model="tab" :items="tabs" :content="false" variant="link" class="mt-5 mb-2" :ui="{ trigger: 'text-xs px-0 me-4 md:me-16 pb-2.5' }" />
 
   <TwoColumns>
-    <ResourceTable v-if="tab === 'records'" storage-key="dns-records" title="Zone locale .test" :data="active" :columns="recordColumns" search-key="name">
-      <template #name-cell="{ row }"><NameCell icon="i-lucide-globe" :name="row.original.name" sub="Enregistrement A · LAN" /></template>
+    <ResourceTable v-if="tab === 'records'" storage-key="dns-records" :title="t('dns.records.title', { tld: '.test' })" :data="active" :columns="recordColumns" search-key="name">
+      <template #name-cell="{ row }"><NameCell icon="i-lucide-globe" :name="row.original.name" :sub="t('dns.records.sub')" /></template>
       <template #ip-cell>{{ state.dns.ip }}</template>
-      <template #state-cell><StateBadge :value="up ? 'online' : busy ? 'restarting' : 'offline'" ok="Actif" /></template>
+      <template #state-cell><StateBadge :value="up ? 'online' : busy ? 'restarting' : 'offline'" :ok="t('dns.records.active')" /></template>
       <template #actions-cell="{ row }">
-        <UDropdownMenu :items="[{ label: 'Copier l’enregistrement', icon: 'i-lucide-copy', onSelect: () => copy(row.original) }]" :content="{ align: 'end' }">
-          <UButton color="neutral" variant="ghost" icon="i-lucide-ellipsis" aria-label="Actions" />
+        <UDropdownMenu :items="[{ label: t('dns.records.copy'), icon: 'i-lucide-copy', onSelect: () => copy(row.original) }]" :content="{ align: 'end' }">
+          <UButton color="neutral" variant="ghost" icon="i-lucide-ellipsis" :aria-label="t('common.actions')" />
         </UDropdownMenu>
       </template>
     </ResourceTable>
 
     <ResourceTable
-        v-else-if="tab === 'clients'" storage-key="dns-clients" :title="showIdle ? 'Tous les appareils (30 jours)' : 'Appareils connectés'" :data="clients" :columns="clientColumns" search-key="ip"
-        :empty="up ? 'Aucun appareil n’a interrogé le serveur dans les 5 dernières minutes.' : 'Le serveur DNS est arrêté.'"
+        v-else-if="tab === 'clients'" storage-key="dns-clients" :title="showIdle ? t('dns.clients.all', { days: 30 }) : t('dns.stats.devices')" :data="clients" :columns="clientColumns" search-key="ip"
+        :empty="up ? t('dns.clients.empty') : t('dns.clients.stopped')"
       >
         <template #ip-cell="{ row }">
-          <NameCell :icon="clientIcon(row.original)" :name="row.original.name ?? 'Appareil inconnu'" :sub="`${row.original.ip} · ${row.original.queries.toLocaleString('fr-FR')} requêtes`" />
+          <NameCell :icon="clientIcon(row.original)" :name="row.original.name ?? t('dns.clients.unknown')" :sub="`${row.original.ip} · ${t('dns.clients.queries', { n: formatNumber(row.original.queries) }, row.original.queries)}`" />
         </template>
         <template #mac-cell="{ row }">
           <span v-if="row.original.mac" class="inline-flex items-center gap-1.5">
             {{ row.original.mac }}
-            <UTooltip v-if="row.original.privateMac" text="Adresse privée : l’appareil en change selon le réseau">
-              <UBadge label="privée" color="neutral" variant="soft" size="sm" />
+            <UTooltip v-if="row.original.privateMac" :text="t('dns.clients.privateMacHelp')">
+              <UBadge :label="t('dns.clients.privateMac')" color="neutral" variant="soft" size="sm" />
             </UTooltip>
           </span>
           <span v-else class="text-dimmed">—</span>
         </template>
         <template #seen-cell="{ row }">{{ ago(row.original.lastSeen) }}</template>
         <template #state-cell="{ row }">
-          <UBadge v-if="isConnected(row.original)" label="Connecté" variant="soft" class="min-w-[57px] justify-center" />
-          <UBadge v-else label="Inactif" color="neutral" variant="soft" class="min-w-[57px] justify-center" />
+          <UBadge v-if="isConnected(row.original)" :label="t('dns.clients.connected')" variant="soft" class="min-w-[57px] justify-center" />
+          <UBadge v-else :label="t('dns.clients.idle')" color="neutral" variant="soft" class="min-w-[57px] justify-center" />
         </template>
       </ResourceTable>
 
     <UCard v-else :ui="{ body: 'p-5 sm:p-5 flex flex-col gap-3 text-xs text-muted' }">
-      <h2 class="text-[15px] font-semibold text-highlighted">Réseau local</h2>
-      <p>Interface : en0 · Wi-Fi</p>
-      <p>Adresse IP : <b class="text-highlighted">{{ state.dns.ip }}</b> · Masque 255.255.255.0</p>
-      <p>Passerelle : 192.168.1.1</p>
-      <p>Résolveurs en amont : {{ state.dns.upstream }}</p>
-      <p class="text-[11px]">Si l’adresse IP change (nouveau réseau), FrankenManager met la zone à jour automatiquement.</p>
+      <h2 class="text-[15px] font-semibold text-highlighted">{{ t('dns.tabs.lan') }}</h2>
+      <p>{{ t('dns.lan.interface', { name: 'en0 · Wi-Fi' }) }}</p>
+      <i18n-t keypath="dns.lan.ip" tag="p" scope="global">
+        <template #ip><b class="text-highlighted">{{ state.dns.ip }}</b></template>
+        <template #mask>255.255.255.0</template>
+      </i18n-t>
+      <p>{{ t('dns.lan.gateway', { ip: '192.168.1.1' }) }}</p>
+      <p>{{ t('dns.lan.upstream', { list: state.dns.upstream }) }}</p>
+      <p class="text-[11px]">{{ t('dns.lan.ipChange') }}</p>
     </UCard>
 
     <div class="flex flex-col gap-6">
       <UCard v-if="tab === 'clients'" :ui="{ body: 'p-5 sm:p-5 flex flex-col gap-3' }">
-        <USwitch v-model="showIdle" label="Afficher les appareils inactifs" description="Conservés 30 jours (dns-clients --all)." />
+        <USwitch v-model="showIdle" :label="t('dns.clients.showIdle')" :description="t('dns.clients.showIdleHelp', { days: 30, command: 'dns-clients --all' })" />
         <code class="truncate font-mono text-[10px] text-dimmed">$ frankenmanager dns-clients{{ showIdle ? ' --all' : '' }}</code>
       </UCard>
       <SideForm
-        title="Configuration DNS"
-        description="Pris en compte en quelques secondes, sans redémarrage."
-        :hint="`Configurez ${form.ip} comme DNS sur vos appareils. Réservez une IP fixe dans le routeur.`"
+        :title="t('dns.form.title')"
+        :description="t('dns.form.description')"
+        :hint="t('dns.form.hint', { ip: form.ip })"
         @submit="submit"
       >
-        <UFormField label="Adresse IP des domaines">
-          <USelect v-model="form.ip" size="lg" class="w-full" :items="[{ label: 'Automatique · 192.168.1.42', value: '192.168.1.42' }, { label: 'Boucle locale · 127.0.0.1', value: '127.0.0.1' }]" />
+        <UFormField :label="t('dns.form.ip')">
+          <USelect v-model="form.ip" size="lg" class="w-full" :items="[{ label: t('dns.form.ipAuto', { ip: '192.168.1.42' }), value: '192.168.1.42' }, { label: t('dns.form.ipLoopback', { ip: '127.0.0.1' }), value: '127.0.0.1' }]" />
         </UFormField>
-        <UFormField label="Adresse d’écoute"><UInput v-model="form.listen" size="lg" class="w-full" /></UFormField>
-        <UFormField label="Port d’écoute" :error="error">
+        <UFormField :label="t('dns.form.listen')"><UInput v-model="form.listen" size="lg" class="w-full" /></UFormField>
+        <UFormField :label="t('dns.form.port')" :error="error">
           <UInput v-model="form.port" inputmode="numeric" size="lg" class="w-full" @update:model-value="error = undefined" />
         </UFormField>
-        <UFormField label="Résolveurs en amont"><UInput v-model="form.upstream" size="lg" class="w-full" /></UFormField>
-        <USwitch v-model="form.enabled" label="Activer le serveur DNS local" />
-        <UButton type="submit" label="Enregistrer" size="lg" block :loading="busy" />
+        <UFormField :label="t('dns.form.upstream')"><UInput v-model="form.upstream" size="lg" class="w-full" /></UFormField>
+        <USwitch v-model="form.enabled" :label="t('dns.form.enabled')" />
+        <UButton type="submit" :label="t('common.save')" size="lg" block :loading="busy" />
       </SideForm>
     </div>
   </TwoColumns>
 
-  <InfoBanner v-if="!state.dns.enabled" tone="warning">Le serveur DNS est désactivé : vos appareils ne résolvent pas les domaines .test.</InfoBanner>
-  <InfoBanner v-else>Le serveur DNS n’est pas un conteneur : il tourne dans un processus d’arrière-plan de FrankenManager, qui voit l’adresse réelle de chaque appareil.</InfoBanner>
+  <InfoBanner v-if="!state.dns.enabled" tone="warning">{{ t('dns.banner.disabled', { tld: '.test' }) }}</InfoBanner>
+  <InfoBanner v-else>{{ t('dns.banner.process') }}</InfoBanner>
 </template>

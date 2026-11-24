@@ -1,10 +1,14 @@
 <script setup lang="ts">
-const items = [
-  { label: 'Aperçu', icon: 'i-lucide-layout-grid', to: '/' },
-  { label: 'Projets', icon: 'i-lucide-globe', to: '/projets' },
-  { label: 'Services', icon: 'i-lucide-box', to: '/conteneurs' },
-  { label: 'Réglages', icon: 'i-lucide-sliders-horizontal', to: '/parametres' },
-]
+import { computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+
+const { t } = useI18n()
+const items = computed(() => [
+  { label: t('tabs.overview'), icon: 'i-lucide-layout-grid', to: '/' },
+  { label: t('tabs.projects'), icon: 'i-lucide-globe', to: '/projets' },
+  { label: t('tabs.services'), icon: 'i-lucide-box', to: '/conteneurs' },
+  { label: t('tabs.settings'), icon: 'i-lucide-sliders-horizontal', to: '/parametres' },
+])
 </script>
 
 <template>
