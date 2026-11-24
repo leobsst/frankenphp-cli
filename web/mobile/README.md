@@ -31,8 +31,48 @@ It is a member of the `web/` pnpm workspace: the pages, components and store com
   Liquid Glass from iOS 26 on (classic blurred look before). It replaces the HTML bar (Aperçu, Projets, Services,
   Réglages, with SF Symbols), follows the open page, takes the primary colour of the app, and hides while a modal or
   the menu is open. On Android, in the browser and on iPad (sidebar), the bar stays in HTML.
+- **Demo mode**: "Try the demo" on the instance list (see below).
 - Left out of the app: updating FrankenManager (`sudo frankenmanager update` on the machine). Changing the dashboard
   password signs the app out too: sign in again, or pair again.
+
+## Demo mode
+
+"Try the demo" ("Essayer la démo"), on the empty instance list and below the list, adds a **Demo** instance and opens
+it: the whole app can be tried without a machine running FrankenManager, App Review included. The instance shows a
+Demo badge and "Simulated data" instead of an address; it is removed like any other (⋯ › Remove from the app), and
+added again fresh.
+
+- **Seam**: its address uses the reserved `demo:` scheme (`demo://frankenmanager`). `main.ts` registers a client for
+  that scheme (`registerClientScheme`, `web/app/src/lib/api.ts`), so `client(inst)` returns the demo client and the
+  store (`useFm.ts`) and every page run unchanged. The store opens its streams through `client.stream()`: an
+  `EventSource` for a daemon, an in-memory stand-in (`src/demo/stream.ts`) for the demo.
+- **Fake daemon** (`src/demo/server.ts`): answers the routes the store calls with fictional data (`src/demo/fixtures.ts`:
+  shop.test, api.test, legacy.test, studio.test, front.test, docs.test, their containers, Redis keys, databases, S3
+  buckets, LAN DNS devices, sessions), typed from the generated API types. Actions are operations that go from queued
+  to running to succeeded, then change the data (add a project, switch PHP, stop or start the stack or a container,
+  toggle a service, create a bucket…). Stats vary, the log stream emits plausible lines, and the event stream
+  announces operations, containers and a simulated pairing. Data is English like a daemon's; the interface texts
+  stay in the catalogs.
+- **No network, no secrets**: nothing leaves the phone; the demo instance has no token and never touches the secure
+  store; destructive actions ask for no password (the demo is treated as a local connection). Remote access shows as
+  open on a fictional address (`192.168.1.20`). The data resets when the app restarts.
+- In the browser, `pnpm --dir web mobile:dev` then "Try the demo" works the same.
+
+### Screenshot builds
+
+`pnpm build:screenshots` (inside `web/mobile`: `vite build --mode screenshots`, then `cap sync ios`) adds a hook for
+the App Store screenshots, left out of the other builds: a link opens a page of the demo, in a language, after tapping
+buttons by their label. In the iOS Simulator, write it to the app preferences (no confirmation prompt, unlike
+`xcrun simctl openurl`):
+
+```bash
+xcrun simctl spawn <device> defaults write dev.frankenmanager.mobile CapacitorStorage.fm-screenshot \
+  'frankenmanager://demo/projets?lang=fr&tap=Ajouter%20un%20projet&n=1'   # change n to replay the same link
+xcrun simctl io <device> screenshot shot.png
+```
+
+The shots of `store/screenshots/` were taken this way (iPhone 17 Pro Max and iPad Pro 13-inch simulators, status bar
+set with `xcrun simctl status_bar … override --time 9:41`).
 
 ## Session tokens
 

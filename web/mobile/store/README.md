@@ -34,7 +34,10 @@ The app only uses the encryption built into iOS (HTTPS, Keychain): exempt. `ITSA
 
 ## App Review
 
-The app is useless without a FrankenManager instance, and the reviewer has none: App Review (guideline 2.1) needs a way in. `metadata/review_information/notes.txt` expects a **demo instance** reachable from the Internet (`DASHBOARD_ACCESS=internet`, a public name with its own certificate, a password): replace `<DEMO_INSTANCE_URL>` and `<DEMO_PASSWORD>` before submitting, and keep that instance up during the review. A built-in demo mode (simulated data, as in the dashboard prototype) would remove that dependency.
+The app needs a FrankenManager instance, and the reviewer has none: the built-in **demo mode** is the way in (guideline
+2.1). "Try the demo" on the first screen opens a simulated instance, with fictional projects and services, that runs
+entirely on the device: no server to keep up during the review, no account or password to hand over.
+`metadata/review_information/notes.txt` walks the reviewer through it.
 
 Contact information (first name, last name, phone, email) is entered in App Store Connect only: it is not stored here.
 
@@ -44,14 +47,18 @@ Contact information (first name, last name, phone, email) is entered in App Stor
 
 ## Screenshots (`screenshots/<locale>/`)
 
-The app runs on iPhone and iPad, so both sets are required, portrait, 1 to 10 per locale:
+The app runs on iPhone and iPad, so both sets are required, portrait, 1 to 10 per locale. Six per device and locale,
+taken from the demo mode (fictional data only) in the iOS Simulator, with the native tab bar on iPhone:
 
-| Device | Size (pixels) |
-|---|---|
-| iPhone 6.9" | 1320 × 2868 |
-| iPad 13" | 2064 × 2752 |
+| Device | Simulator | Size (pixels) | Files |
+|---|---|---|---|
+| iPhone 6.9" | iPhone 17 Pro Max | 1320 × 2868 | `iphone69_0N_*.png` |
+| iPad 13" | iPad Pro 13-inch (M5) | 2064 × 2752 | `ipad13_0N_*.png` |
 
-Apple scales them down for the smaller devices. Use fictional projects only: never a real machine's domains.
+`01_overview`, `02_projects`, `03_containers`, `04_add_project`, `05_pairing`, `06_ssl`, in `en-US` and `fr-FR`.
+fastlane deliver tells the device from the image size; the number sets the order. Apple scales them down for the
+smaller devices. To take them again, see "Screenshot builds" in [`../README.md`](../README.md). Never use a real
+machine's domains.
 
 ## Version
 

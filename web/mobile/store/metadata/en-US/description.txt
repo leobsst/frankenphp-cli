@@ -3,6 +3,9 @@ FrankenManager runs your local PHP development environment — FrankenPHP, Caddy
 Pair once, in seconds
 Open "Remote access" in the dashboard of your machine, tap "Pair a device" and scan the QR code. The app connects without typing a password, and keeps its session in the iOS Keychain. Each code works once and expires after 5 minutes.
 
+Try it first
+No instance yet? "Try the demo" opens a simulated instance: browse every page and run actions on fictional projects, without a server.
+
 Every instance in one place
 Add as many machines as you like — your workstation, a teammate's, a test server — and switch between them in a tap.
 
