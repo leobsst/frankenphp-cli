@@ -97,7 +97,8 @@ const blank = () => ({
   memTotalGo: 0,
   dns: { enabled: false, status: 'stopped' as 'running' | 'stopped' | 'restarting', ip: '', port: 53, connected: 0, listen: '0.0.0.0', upstream: '' },
   dnsClients: [] as DnsClient[],
-  ssl: { caShared: false, caPort: 0, regenerating: null as string | null },
+  /** caUrl: where the other devices download the root CA while it is shared (daemon's caserver, any path serves it). */
+  ssl: { caShared: false, caPort: 0, caUrl: '', regenerating: null as string | null },
   config: {} as Record<string, string>,
   /** Modified keys waiting for a stack restart. */
   configPending: [] as string[],
@@ -344,7 +345,12 @@ async function refreshExtras() {
   ])
   if (dns) Object.assign(state.dns, { enabled: dns.enabled, status: dns.running ? 'running' : 'stopped' })
   if (clients) state.dns.connected = clients.connected
-  if (ca) Object.assign(state.ssl, { caShared: ca.sharing, caPort: ca.port ?? 0 })
+  if (ca) {
+    // The daemon gives the URL (its LAN address); an older one only the port: same URL, on the host's LAN address.
+    const port = ca.port ?? 0
+    const url = ca.url || (ca.sharing && port && state.connection.address ? `http://${state.connection.address}:${port}/` : '')
+    Object.assign(state.ssl, { caShared: ca.sharing, caPort: port, caUrl: ca.sharing ? url : '' })
+  }
   Object.assign(state.dns, { listen: state.config.DNS_LISTEN_IP || '0.0.0.0', upstream: state.config.DNS_UPSTREAM ?? '' })
 }
 

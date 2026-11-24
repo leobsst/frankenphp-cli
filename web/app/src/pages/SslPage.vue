@@ -22,7 +22,7 @@ const domains = computed(() => active.value.map((d) => d.name))
 const stats = computed(() => [
   { label: 'Approuvés', value: `${active.value.length} / ${active.value.length}`, sub: 'Autorité locale mkcert' },
   { label: 'Expiration', value: '> 1 an', sub: 'Aucun renouvellement requis' },
-  { label: 'Partage CA', value: state.ssl.caShared ? 'Actif' : 'Inactif', sub: state.ssl.caShared ? `http://${state.dns.ip}:${state.ssl.caPort}` : 'Désactivé par défaut' },
+  { label: 'Partage CA', value: state.ssl.caShared ? 'Actif' : 'Inactif', sub: state.ssl.caShared ? state.ssl.caUrl || `port ${state.ssl.caPort}` : 'Désactivé par défaut' },
 ])
 const share = (on: boolean) => actions.setCaShared(on, Number(port.value) || 9080)
 
@@ -80,7 +80,7 @@ const columns: TableColumn<Domain>[] = [
   </TwoColumns>
 
   <InfoBanner v-if="state.ssl.caShared" tone="warning">
-    La CA est partagée sur http://{{ state.dns.ip }}:{{ state.ssl.caPort }}. Désactivez le partage une fois vos appareils configurés.
+    La CA est partagée sur {{ state.ssl.caUrl || `le port ${state.ssl.caPort}` }}. Désactivez le partage une fois vos appareils configurés.
   </InfoBanner>
   <InfoBanner v-else>Sur un autre appareil, installez puis approuvez la CA locale pour éviter les avertissements HTTPS.</InfoBanner>
 </template>

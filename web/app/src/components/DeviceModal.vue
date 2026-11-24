@@ -1,12 +1,21 @@
 <script setup lang="ts">
-import { watch } from 'vue'
+import { ref, watch } from 'vue'
 import { actions, dnsClientsConnected, loadPage, state } from '../composables/useFm'
 import QrCode from './QrCode.vue'
 
-// POC: temporary link. For real: `http://${state.dns.ip}:${state.ssl.caPort}` (CA download).
-const CA_DOWNLOAD_URL = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=RDdQw4w9WgXcQ'
-
 const open = defineModel<boolean>('open', { default: false })
+
+// The CA is downloaded from the daemon's sharing server (state.ssl.caUrl, on the host's LAN address): the phone
+// opens that URL and receives the certificate file. Off: no QR code, the sharing is offered instead.
+const toggling = ref(false)
+async function share(on: boolean) {
+  toggling.value = true
+  try {
+    await actions.setCaShared(on, state.ssl.caPort)
+  } finally {
+    toggling.value = false
+  }
+}
 
 // The LAN DNS devices and the CA sharing state are reloaded on open.
 watch(open, (o) => { if (o) void loadPage('dns') })
@@ -33,12 +42,26 @@ watch(open, (o) => { if (o) void loadPage('dns') })
         </li>
         <li>
           <p class="font-medium text-highlighted">2. Autorité locale</p>
-          <p class="text-xs text-muted">Partagez la CA puis ouvrez <code class="font-mono text-default">http://{{ state.dns.ip }}:{{ state.ssl.caPort }}</code> sur l’appareil pour l’installer.</p>
-          <USwitch class="mt-3" label="Partager la CA sur le réseau local" :model-value="state.ssl.caShared" @update:model-value="actions.setCaShared($event, state.ssl.caPort)" />
-          <div v-if="state.ssl.caShared" class="mt-3 flex items-center gap-4 rounded-lg border border-default bg-muted p-3">
-            <QrCode :value="CA_DOWNLOAD_URL" label="QR code de téléchargement de la CA" class="size-28 shrink-0" />
-            <p class="text-xs text-muted">Scannez ce QR code avec l’appareil pour télécharger la CA, sans saisir l’adresse.</p>
-          </div>
+          <template v-if="state.ssl.caShared">
+            <template v-if="state.ssl.caUrl">
+              <p class="text-xs text-muted">Ouvrez <code class="font-mono break-all text-default">{{ state.ssl.caUrl }}</code> sur l’appareil pour télécharger la CA, puis installez-la.</p>
+              <div class="mt-3 flex items-center gap-4 rounded-lg border border-default bg-muted p-3">
+                <QrCode :value="state.ssl.caUrl" label="QR code de téléchargement de la CA" class="size-28 shrink-0" />
+                <p class="text-xs text-muted">Scannez ce QR code avec l’appareil pour télécharger la CA, sans saisir l’adresse.</p>
+              </div>
+            </template>
+            <p v-else class="mt-2 flex items-center gap-2 text-xs text-warning">
+              <UIcon name="i-lucide-triangle-alert" class="size-4 shrink-0" />L’adresse de la machine sur le réseau local est inconnue : utilisez son IP et le port {{ state.ssl.caPort }}.
+            </p>
+            <UButton class="mt-3" size="xs" color="neutral" variant="outline" icon="i-lucide-circle-stop" label="Arrêter le partage" :loading="toggling" @click="share(false)" />
+          </template>
+          <template v-else>
+            <p class="text-xs text-muted">L’appareil télécharge la CA depuis cette machine, sur le réseau local, le temps de l’installer.</p>
+            <p class="mt-2 flex flex-wrap items-center gap-2 text-xs text-warning">
+              <UIcon name="i-lucide-triangle-alert" class="size-4 shrink-0" />Le partage de la CA est désactivé : aucun QR code à scanner.
+              <UButton size="xs" variant="soft" label="Activer le partage" :loading="toggling" @click="share(true)" />
+            </p>
+          </template>
         </li>
         <li>
           <p class="font-medium text-highlighted">3. Approuver</p>
