@@ -1000,8 +1000,10 @@ The daemon serves the dashboard, built into the binary. On this machine, open it
 - Before the stack runs, `frankenmanager dashboard` opens `https://127.0.0.1:9444` itself.
 - When the daemon stops or restarts (`frankenmanager daemon stop`/`start`, an update), the open page keeps retrying and recovers by itself once it answers, signing in again on this machine if needed: no reload.
 - From another device, the dashboard answers at the [remote access](#remote-access-to-the-dashboard), with the password.
+- The dashboard speaks French or English: the language of the browser (of the phone in the mobile app) by default, or the one chosen in its Settings page ("Langue du système", Français, English), remembered on each device. Dates, numbers and sizes follow it. The messages written by the daemon itself (operation steps, API errors, setting descriptions) follow its `CLI_LANGUAGE` setting instead, like the CLI.
 - From the source, `make web` builds the pages (pnpm) before `make build`; without it, the daemon answers that the dashboard is not part of the build.
 - Its TypeScript types of the API (`web/app/src/lib/api.gen.ts`) are generated from `api/openapi.yaml` by `pnpm --dir web gen:api`: run it after changing the spec and commit the result, the CI fails when they differ.
+- Its texts live in `web/app/src/locales/fr.json` and `en.json` (vue-i18n, keys by page such as `overview.restart`). `pnpm --dir web i18n:check`, run by the CI, fails when the two files do not have the same keys, a message is empty or invalid, or a key used in the code is missing.
 
 #### Remote access to the dashboard
 
