@@ -165,11 +165,11 @@ export const login = (url: string, password: string, device: string) =>
   send<ApiResponse<'/api/v1/auth/login', 'post'>>(url, null, 'POST', '/api/v1/auth/login', { body: { password, device } })
 
 /**
- * Exchanges a one-time pairing code (QR code of the dashboard) for a session token, as a sign-in does: same response
- * as POST /api/v1/auth/login. 401: invalid, expired or already used code; 429: too many attempts.
+ * Exchanges a one-time pairing code (QR code of the dashboard) for a session token, as a sign-in does.
+ * 401: invalid, expired or already used code; 429: too many attempts.
  */
 export const pair = (url: string, code: string, device: string) =>
-  send<ApiResponse<'/api/v1/auth/login', 'post'>>(url, null, 'POST', '/api/v1/auth/pair', { body: { code, device }, timeout: 10_000 })
+  send<ApiResponse<'/api/v1/auth/pair', 'post'>>(url, null, 'POST', '/api/v1/auth/pair', { body: { code, device }, timeout: 10_000 })
 
 export const hostInfo = (url: string, token: string) => send<HostInfo>(url, token, 'GET', '/api/v1/host', { timeout: 8_000 })
 
