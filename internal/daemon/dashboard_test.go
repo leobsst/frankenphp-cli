@@ -149,3 +149,43 @@ func TestDashboardPages(t *testing.T) {
 		t.Errorf("POST page: %d", w.Code)
 	}
 }
+
+// The installable dashboard (PWA): the service worker and the manifest are
+// served with their type and revalidated on every load, and a missing
+// static file is a 404, never index.html (a browser would install or cache
+// the page as a service worker, a manifest or a script); the routes of the
+// page still fall back to index.html.
+func TestDashboardPWAFiles(t *testing.T) {
+	s := dashboardServer(t, AccessConfig{Mode: access.LAN})
+	remote := s.remoteGuard(s.routes())
+	for _, p := range []string{"/sw.js", "/manifest.webmanifest", "/assets/gone-123.js", "/icons/gone.png"} {
+		if w := remoteRequest(remote, http.MethodGet, p, "192.168.1.5", "", nil); w.Code != http.StatusNotFound {
+			t.Errorf("missing %s: %d %q", p, w.Code, w.Body)
+		}
+	}
+	if w := remoteRequest(remote, http.MethodGet, "/some/route", "192.168.1.5", "", nil); w.Code != http.StatusOK ||
+		!strings.Contains(w.Body.String(), "<title>dashboard</title>") {
+		t.Errorf("SPA fallback: %d %q", w.Code, w.Body)
+	}
+
+	s.UI = fstest.MapFS{
+		"index.html":           {Data: []byte("<!doctype html><title>dashboard</title>")},
+		"sw.js":                {Data: []byte("self.addEventListener('fetch', () => {})")},
+		"manifest.webmanifest": {Data: []byte(`{"name":"FrankenManager"}`)},
+	}
+	for _, f := range []struct{ path, typ string }{
+		{"/sw.js", "text/javascript"},
+		{"/manifest.webmanifest", "application/manifest+json"},
+	} {
+		w := remoteRequest(remote, http.MethodGet, f.path, "192.168.1.5", "", nil)
+		if w.Code != http.StatusOK || !strings.HasPrefix(w.Header().Get("Content-Type"), f.typ) {
+			t.Errorf("%s: %d %q", f.path, w.Code, w.Header().Get("Content-Type"))
+		}
+		if cc := w.Header().Get("Cache-Control"); cc != "no-cache" {
+			t.Errorf("%s: Cache-Control %q", f.path, cc)
+		}
+		if strings.Contains(w.Body.String(), "<title>") {
+			t.Errorf("%s answered index.html", f.path)
+		}
+	}
+}
