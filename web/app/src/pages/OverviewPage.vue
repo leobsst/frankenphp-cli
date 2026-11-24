@@ -7,6 +7,7 @@ import DomainActions from '../components/DomainActions.vue'
 import DeviceModal from '../components/DeviceModal.vue'
 import StopStackModal from '../components/StopStackModal.vue'
 import DockerAlert from '../components/DockerAlert.vue'
+import { NAV } from '../nav'
 import {
   DEPRECATED_PHP, LIVE_NOISE, S3_DOMAIN, actions, active, domainIcon, domainStatus, envLabel, phpVersions, running, servedPath, serviceEnabled, state,
   type ContainerKind, type Domain,
@@ -25,6 +26,10 @@ const count = (k: Domain['kind']) => active.value.filter((d) => d.kind === k).le
 const cpu = computed(() => (stopped.value ? 0 : state.cpuHistory[state.cpuHistory.length - 1]))
 const maxCpu = computed(() => Math.max(...state.cpuHistory, 30))
 const rows = computed(() => active.value.filter((d) => d.name.includes(q.value.toLowerCase()) && (type.value === 'all' || d.kind === type.value)))
+/** The overview only previews the first domains of the filtered list; the full list lives on the Projects page. */
+const PREVIEW = 5
+const preview = computed(() => rows.value.slice(0, PREVIEW))
+const projectsPath = NAV.find((n) => n.name === 'projects')!.path
 const activity = computed(() => state.logs.filter((l) => !LIVE_NOISE.test(l.msg)).slice(0, 3))
 const deprecated = computed(() => phpVersions.value.filter((v) => DEPRECATED_PHP.includes(v)))
 const up = (kind: ContainerKind) => { const list = state.containers.filter((c) => c.kind === kind); return list.length > 0 && list.every((c) => c.status === 'running') }
@@ -128,14 +133,14 @@ const statCard = { body: 'p-0 sm:p-0 h-[112px] px-[15px] py-[13px] sm:px-[15px] 
     <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
       <h2 class="text-base font-semibold text-highlighted">Projets &amp; domaines</h2>
       <span class="text-xs text-muted">{{ active.length }} domaines</span>
-      <UButton icon="i-lucide-plus" label="Ajouter un projet" class="ml-auto md:w-[165px]" to="/projets" />
+      <UButton icon="i-lucide-plus" label="Ajouter un projet" class="ml-auto md:w-[165px]" :to="projectsPath" />
     </div>
     <div class="mt-3.5 flex flex-wrap gap-3">
       <UInput v-model="q" icon="i-lucide-search" placeholder="Filtrer par nom de domaine…" class="w-full md:w-[300px]" :ui="{ base: 'bg-muted' }" />
       <USelect v-model="type" :items="typeItems" class="w-40" />
     </div>
     <UTable
-      :data="rows" :columns="columns" class="mt-3" empty="Aucun domaine ne correspond à ce filtre."
+      :data="preview" :columns="columns" class="mt-3" empty="Aucun domaine ne correspond à ce filtre."
       :ui="{ th: 'px-0 pr-4 py-2 text-[10px] font-semibold uppercase text-muted', td: 'px-0 pr-4 py-2 text-xs', separator: 'bg-(--ui-border)' }"
     >
       <template #name-cell="{ row }">
@@ -164,6 +169,12 @@ const statCard = { body: 'p-0 sm:p-0 h-[112px] px-[15px] py-[13px] sm:px-[15px] 
         </div>
       </template>
     </UTable>
+    <div v-if="rows.length > PREVIEW" class="flex justify-center border-t border-default pt-2">
+      <UButton
+        color="neutral" variant="ghost" size="sm" trailing-icon="i-lucide-arrow-right" :to="projectsPath"
+        :label="`Voir les ${active.length} domaines`"
+      />
+    </div>
   </UCard>
 
   <!-- Infrastructure -->
