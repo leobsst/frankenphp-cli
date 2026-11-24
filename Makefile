@@ -20,9 +20,11 @@ export CGO_ENABLED := 0
 .PHONY: build build-all web test lint i18n hooks clean
 
 ## web: the dashboard in web/embedded/dist, embedded in the next Go build
-## (go:embed); without it, the daemon answers that the dashboard is not built
+## (go:embed); without it, the daemon answers that the dashboard is not built.
+## Only the dashboard and its dependencies are installed: the mobile app
+## (web/mobile) has its own commands (pnpm --dir web mobile:build...)
 web:
-	pnpm --dir web install --frozen-lockfile
+	pnpm --dir web install --frozen-lockfile --filter "frankenmanager-dashboard..."
 	pnpm --dir web build
 
 ## build: native binary in $(OUT)/frankenmanager

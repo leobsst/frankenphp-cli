@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">FrankenManager</string>
+    <string name="title_activity_main">FrankenManager</string>
+    <string name="package_name">dev.frankenmanager.mobile</string>
+    <string name="custom_url_scheme">dev.frankenmanager.mobile</string>
+</resources>

@@ -1033,6 +1033,10 @@ From the [remote access](#remote-access-to-the-dashboard), the dashboard install
 
 Each instance is its own app (one per address): install one per machine you manage. The app opens even when the daemon is stopped or the phone is off the network, showing that the daemon does not answer until it does. Only the pages are kept on the phone (the page and its scripts, styles and icons); the API answers, `/config.json` and any other site are never cached. When the daemon serves a new version (after `update`), the app offers **Recharger** instead of switching in the middle of what you are doing. The pages of this machine (https://frankenmanager.test, `https://127.0.0.1:9444`) install no offline cache: they always load the daemon's current version.
 
+#### Mobile app
+
+An iOS and Android app (Capacitor) manages several instances through their remote access, with the same pages as the dashboard. Pair it by scanning the QR code shown by the dashboard (or sign in with the address and the password); each session token is kept in the iOS Keychain or the Android Keystore. It lives in [`web/mobile`](web/mobile/README.md), next to the dashboard in the `web/` pnpm workspace, and is built apart from `make web`: `pnpm --dir web mobile:build`, `mobile:ios` and `mobile:android` prepare the web bundle and the native projects (signing and version come from environment variables, see its README). It is not published to the stores yet.
+
 ### Show version
 
 ```bash

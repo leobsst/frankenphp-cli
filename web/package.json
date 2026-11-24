@@ -5,8 +5,15 @@
   "scripts": {
     "build": "pnpm --filter frankenmanager-dashboard build",
     "dev": "pnpm --filter frankenmanager-dashboard dev",
-    "typecheck": "pnpm --filter frankenmanager-dashboard typecheck",
-    "gen:api": "pnpm --filter @frankenmanager/app gen:api"
+    "typecheck": "pnpm --filter frankenmanager-dashboard --filter frankenmanager-mobile typecheck",
+    "gen:api": "pnpm --filter @frankenmanager/app gen:api",
+    "mobile:dev": "pnpm --filter frankenmanager-mobile dev",
+    "mobile:build": "pnpm --filter frankenmanager-mobile build",
+    "mobile:ios": "pnpm --filter frankenmanager-mobile ios",
+    "mobile:android": "pnpm --filter frankenmanager-mobile android",
+    "mobile:sync": "pnpm --filter frankenmanager-mobile sync",
+    "mobile:assets": "pnpm --filter frankenmanager-mobile assets",
+    "mobile:typecheck": "pnpm --filter frankenmanager-mobile typecheck"
   },
   "packageManager": "pnpm@10.33.0"
 }

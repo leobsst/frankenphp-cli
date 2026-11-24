@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The FrankenManager remote access presents a certificate signed by the local mkcert CA, installed by the user on
+  the phone (frankenmanager trust-ca on). Since Android 7, an app only accepts such user CAs when it declares so:
+  that is what this file does. No cleartext traffic is allowed.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

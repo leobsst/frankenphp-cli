@@ -1,0 +1,7 @@
+// Signing of the iOS app. Default values, without a team: the simulator build works, not the device one. The real
+// values go to signing.local.xcconfig, not committed, written by `pnpm ios` (scripts/ios-signing.mjs) from
+// IOS_TEAM_ID and IOS_BUNDLE_ID.
+PRODUCT_BUNDLE_IDENTIFIER = dev.frankenmanager.mobile
+DEVELOPMENT_TEAM =
+
+#include? "signing.local.xcconfig"

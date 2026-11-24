@@ -4,6 +4,7 @@
 /* Classes of the shared pages and components, and of the application mounting them (embedded or mobile). */
 @source "../";
 @source "../../../embedded/src";
+@source "../../../mobile/src";
 
 /*
  * Palettes taken from the Figma mockup.
