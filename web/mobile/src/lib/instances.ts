@@ -1,6 +1,7 @@
 import { reactive } from 'vue'
 import { Preferences } from '@capacitor/preferences'
 import type { Instance as ApiInstance } from '@app/lib/api'
+import { t } from '@app/i18n'
 import { secureGet, secureRemove, secureSet } from './secureStore'
 
 /**
@@ -116,14 +117,14 @@ export const newId = () => Math.random().toString(36).slice(2, 10)
  */
 export function normalizeUrl(input: string): string {
   let s = input.trim()
-  if (!s) throw new Error('Saisissez l’adresse de l’instance.')
+  if (!s) throw new Error(t('mobile.form.errors.addressRequired'))
   s = s.replace(/^http:\/\//i, 'https://')
   if (!/^https:\/\//i.test(s)) s = `https://${s}`
   let u: URL
   try {
     u = new URL(s)
   } catch {
-    throw new Error('Adresse invalide.')
+    throw new Error(t('mobile.form.errors.invalidAddress'))
   }
   // Without a typed port, the remote access one; an explicit :443 (tunnel, public name) is kept.
   if (!u.port && !/^https:\/\/[^/]+:\d+/i.test(s)) u.port = String(DEFAULT_REMOTE_PORT)

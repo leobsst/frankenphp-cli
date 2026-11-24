@@ -1,0 +1,3 @@
+/* Localized Info.plist strings (English). */
+"NSLocalNetworkUsageDescription" = "FrankenManager connects to the instances on your local network to manage them.";
+"NSCameraUsageDescription" = "FrankenManager uses the camera to scan the pairing QR code shown by the dashboard.";

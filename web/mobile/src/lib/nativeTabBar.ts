@@ -3,6 +3,7 @@ import type { Router } from 'vue-router'
 import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core'
 import { state } from '@app/composables/useFm'
 import { draftPrefs } from '@app/composables/usePrefs'
+import { language, t } from '@app/i18n'
 import { splashDone } from './splash'
 
 /**
@@ -21,11 +22,14 @@ const NativeTabBar = registerPlugin<NativeTabBarPlugin>('NativeTabBar')
 
 /** The BottomNav tabs, with the SF Symbols closest to their Lucide icons; the id is the route. */
 const TABS = [
-  { id: '/', title: 'Aperçu', icon: 'square.grid.2x2' },
-  { id: '/projets', title: 'Projets', icon: 'globe' },
-  { id: '/conteneurs', title: 'Services', icon: 'shippingbox' },
-  { id: '/parametres', title: 'Réglages', icon: 'slider.horizontal.3' },
+  { id: '/', labelKey: 'tabs.overview', icon: 'square.grid.2x2' },
+  { id: '/projets', labelKey: 'tabs.projects', icon: 'globe' },
+  { id: '/conteneurs', labelKey: 'tabs.services', icon: 'shippingbox' },
+  { id: '/parametres', labelKey: 'tabs.settings', icon: 'slider.horizontal.3' },
 ]
+
+/** The tabs with their titles in the active language. */
+const items = () => TABS.map(({ id, labelKey, icon }) => ({ id, title: t(labelKey), icon }))
 
 /** The native bar is displayed: BottomNav hides and the content leaves its height free at the bottom. */
 export const nativeTabs = ref(false)
@@ -41,7 +45,7 @@ export async function mountNativeTabBar(router: Router): Promise<() => void> {
   const current = () => (TABS.some((t) => t.id === router.currentRoute.value.path) ? router.currentRoute.value.path : undefined)
   let height: number
   try {
-    ;({ height } = await NativeTabBar.show({ items: TABS, selected: current() }))
+    ;({ height } = await NativeTabBar.show({ items: items(), selected: current() }))
   } catch {
     return () => {}
   }
@@ -68,8 +72,15 @@ export async function mountNativeTabBar(router: Router): Promise<() => void> {
   const observer = new MutationObserver(sync)
   observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['role', 'data-state'] })
 
+  // Language changed (Settings): the bar is shown again with the new titles. show() reuses the bar and makes it
+  // visible, so the hidden state is synced again afterwards.
+  const stopLanguage = watch(language, () => {
+    void NativeTabBar.show({ items: items(), selected: current() }).then(() => { hidden = false; sync() }, () => {})
+  })
+
   return () => {
     observer.disconnect()
+    stopLanguage()
     stopRoute()
     stopAppearance()
     void tap.remove()

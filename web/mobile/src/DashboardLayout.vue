@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, useTemplateRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import type { PluginListenerHandle } from '@capacitor/core'
 import { App as CapApp } from '@capacitor/app'
 import AppSidebar from '@app/components/AppSidebar.vue'
@@ -9,11 +10,13 @@ import BottomNav from '@app/components/BottomNav.vue'
 import { sidebarCollapsed } from '@app/composables/useSidebar'
 import { connect, disconnect, loadPage, pause, refresh, resume, state, toast } from '@app/composables/useFm'
 import { shell } from '@app/lib/shell'
+import { deviceLabel } from './lib/device'
 import { currentInstance } from './lib/instances'
 import { mountNativeTabBar, nativeTabs } from './lib/nativeTabBar'
 import { INSTANCES } from './router'
 
 // Dashboard layout (web/app pages), on the instance chosen in the list.
+const { t } = useI18n()
 const router = useRouter()
 const inst = currentInstance()!
 
@@ -25,7 +28,7 @@ shell.switchTo = INSTANCES.path
 let appState: PluginListenerHandle | undefined
 let unmountTabBar: (() => void) | undefined
 onMounted(async () => {
-  connect(inst, { mode: 'remote', client: 'App FrankenManager' })
+  connect(inst, { mode: 'remote', client: deviceLabel() })
   // On iPhone, the native tab bar (Liquid Glass since iOS 26) replaces BottomNav.
   void mountNativeTabBar(router).then((fn) => { unmountTabBar = fn })
   // Streams paused when the app goes to the background, resumed on return.
@@ -50,7 +53,7 @@ watch([() => route.name, () => state.loaded], ([name, loaded]) => { if (loaded) 
 // Session revoked or expired (401, marked by main.ts): back to the sign-in.
 watch(() => inst.expired, (expired) => {
   if (!expired) return
-  toast('error', 'Session expirée', 'Reconnectez-vous à cette instance.')
+  toast('error', t('mobile.session.expired'), t('mobile.session.expiredHelp'))
   void router.replace(`/instances/${inst.id}/connexion`)
 })
 </script>
@@ -73,8 +76,8 @@ watch(() => inst.expired, (expired) => {
           <UAlert
             v-if="state.error"
             color="error" variant="soft" icon="i-lucide-wifi-off" class="mb-5"
-            :title="`${inst.name} ne répond pas`" :description="state.error"
-            :actions="[{ label: 'Réessayer', color: 'error', variant: 'outline', onClick: () => void refresh() }]"
+            :title="t('mobile.layout.unreachable', { name: inst.name })" :description="state.error"
+            :actions="[{ label: t('common.retry'), color: 'error', variant: 'outline', onClick: () => void refresh() }]"
           />
           <div v-if="!state.loaded" class="flex flex-col gap-4">
             <USkeleton class="h-16 w-2/3" />
