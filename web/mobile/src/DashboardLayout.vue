@@ -6,6 +6,7 @@ import { App as CapApp } from '@capacitor/app'
 import AppSidebar from '@app/components/AppSidebar.vue'
 import AppHeader from '@app/components/AppHeader.vue'
 import BottomNav from '@app/components/BottomNav.vue'
+import { sidebarCollapsed } from '@app/composables/useSidebar'
 import { connect, disconnect, loadPage, pause, refresh, resume, state, toast } from '@app/composables/useFm'
 import { shell } from '@app/lib/shell'
 import { currentInstance } from './lib/instances'
@@ -62,7 +63,7 @@ watch(() => inst.expired, (expired) => {
   -->
   <div class="flex h-dvh flex-col overflow-hidden">
     <AppSidebar />
-    <div class="flex min-h-0 flex-1 flex-col md:ml-[72px] xl:ml-[228px]">
+    <div class="flex min-h-0 flex-1 flex-col" :class="sidebarCollapsed ? 'md:ml-[72px]' : 'md:ml-[228px]'">
       <AppHeader />
       <div ref="scroller" class="min-h-0 flex-1 overflow-y-auto">
         <main

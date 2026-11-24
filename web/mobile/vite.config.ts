@@ -2,6 +2,7 @@ import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import ui from '@nuxt/ui/vite'
+import { uiTheme } from '../app/src/theme'
 // @ts-expect-error Node script without type declarations
 import { appVersion } from './scripts/app-version.mjs'
 
@@ -19,13 +20,7 @@ export default defineConfig({
   plugins: [
     vue(),
     ui({
-      ui: {
-        colors: { primary: 'brand', info: 'accent', success: 'brand', warning: 'amber', error: 'red', neutral: 'sage' as 'zinc' },
-        // Active navigation item: pale background + primary text (mockup).
-        navigationMenu: {
-          compoundVariants: [{ variant: 'pill', active: true, highlight: false, class: { link: 'before:bg-primary/10 font-semibold' } }],
-        },
-      },
+      ui: uiTheme,
       icon: { clientBundle: { scan: true } },
     }),
   ],

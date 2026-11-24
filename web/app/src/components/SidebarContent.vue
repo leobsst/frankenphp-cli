@@ -54,7 +54,8 @@ const navUi = {
 </script>
 
 <template>
-  <div class="flex h-8 shrink-0 items-center" :class="collapsed ? 'justify-center' : 'px-2.5'">
+  <!-- Logo, then the trailing control (sidebar toggle, menu close button): beside it, or below it on the icon bar. -->
+  <div class="flex shrink-0 items-center" :class="collapsed ? 'flex-col gap-3' : 'h-8 px-2.5'">
     <RouterLink to="/" class="flex items-center gap-2.5 rounded-lg" aria-label="frankenmanager : vue d’ensemble">
       <span class="grid size-8 shrink-0 place-items-center rounded-lg bg-primary text-inverted">
         <UIcon name="i-lucide-square-terminal" class="size-5" />

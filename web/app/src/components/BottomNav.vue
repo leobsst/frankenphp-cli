@@ -8,7 +8,7 @@ const items = [
 </script>
 
 <template>
-  <nav class="fixed inset-x-0 bottom-0 z-20 grid box-content h-16 grid-cols-4 border-t border-default bg-default pb-[max(0.875rem,var(--sab))] md:hidden">
+  <nav data-bottom-nav class="fixed inset-x-0 bottom-0 z-20 grid box-content h-16 grid-cols-4 border-t border-default bg-default pb-[max(0.875rem,var(--sab))] md:hidden">
     <RouterLink
       v-for="item in items" :key="item.to" :to="item.to"
       class="flex flex-col items-center justify-center gap-1.5 text-[10px] font-medium text-muted"
