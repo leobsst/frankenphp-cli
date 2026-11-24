@@ -59,9 +59,14 @@ func (s *Server) serveUI(w http.ResponseWriter, r *http.Request, cfg uiConfig) {
 		name = "index.html"
 	}
 	switch {
-	case name == "index.html", name == serviceWorker:
+	case name == "index.html":
 		// Checked on every load: the browser finds a new version of the
 		// pages (and of the installed app) as soon as the daemon serves it
+		h.Set("Cache-Control", "no-cache")
+	case name == serviceWorker:
+		// Set here, not guessed from the extension: the system's MIME table
+		// says application/javascript on some Linux systems
+		h.Set("Content-Type", "text/javascript; charset=utf-8")
 		h.Set("Cache-Control", "no-cache")
 	case name == webManifest:
 		h.Set("Content-Type", "application/manifest+json")
