@@ -20,7 +20,7 @@ const target = ref(state.containers[0]?.id ?? '')
 const action = ref<'restart' | 'stop' | 'start'>('restart')
 const rebuild = ref(false)
 const details = ref(true)
-// Un service désactivé retire son conteneur : la cible du formulaire revient alors au premier.
+// Disabling a service removes its container: the form target then falls back to the first one.
 const selected = computed(() => state.containers.find((c) => c.id === target.value) ?? state.containers[0] ?? { id: '', label: '', port: '', cpu: 0, mem: 0, status: 'stopped' as const, kind: 'admin' as const })
 watch(selected, (c) => { target.value = c.id })
 watch(() => selected.value.status, (s) => { action.value = s === 'stopped' ? 'start' : action.value === 'start' ? 'restart' : action.value }, { immediate: true })
@@ -72,7 +72,7 @@ const imageColumns: TableColumn<Container>[] = [
   { id: 'state', header: 'État', meta: { class: { th: 'w-28' } } },
   { id: 'actions', header: '', meta: { class: { th: 'w-10', td: 'pr-0' } } },
 ]
-// Services optionnels : `frankenmanager service enable|disable|status <dns|redis|s3|soketi>`.
+// Optional services: `frankenmanager service enable|disable|status <dns|redis|s3|soketi>`.
 interface ServiceRow { name: ServiceName; label: string; desc: string; icon: string; to: string }
 const services = computed<ServiceRow[]>(() => (Object.keys(SERVICES) as ServiceName[]).map((name) => ({ name, ...SERVICES[name] })))
 function serviceState(s: ServiceName): 'online' | 'offline' | 'restarting' | 'disabled' {

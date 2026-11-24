@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
-// Pastilles de couleurs prédéfinies, suivies d'une pastille « personnalisée » qui ouvre un sélecteur de couleur.
+// Preset color swatches, followed by a "custom" swatch that opens a color picker.
 const props = defineProps<{ presets: string[]; label: string }>()
 const model = defineModel<string>({ required: true })
 

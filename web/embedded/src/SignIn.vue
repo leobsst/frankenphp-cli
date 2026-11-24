@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import { session, signIn } from './session'
 
-// Mot de passe du dashboard : accès distant ouvert dans un navigateur, ou DASHBOARD_LOCAL_AUTH sur cette machine.
+// Dashboard password: remote access opened in a browser, or DASHBOARD_LOCAL_AUTH on this machine.
 const password = ref('')
 const error = ref('')
 const busy = ref(false)

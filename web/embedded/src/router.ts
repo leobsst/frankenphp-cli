@@ -1,7 +1,7 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { NAV, SETTINGS } from '@app/nav'
 
-/** Les pages du dashboard (web/app), en hash : le daemon sert une seule page, index.html. */
+/** The dashboard pages (web/app), in hash mode: the daemon serves a single page, index.html. */
 export const router = createRouter({
   history: createWebHashHistory(),
   routes: [

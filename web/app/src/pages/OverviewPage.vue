@@ -27,7 +27,7 @@ const rows = computed(() => active.value.filter((d) => d.name.includes(q.value.t
 const activity = computed(() => state.logs.filter((l) => !LIVE_NOISE.test(l.msg)).slice(0, 3))
 const deprecated = computed(() => phpVersions.value.filter((v) => DEPRECATED_PHP.includes(v)))
 const up = (kind: ContainerKind) => { const list = state.containers.filter((c) => c.kind === kind); return list.length > 0 && list.every((c) => c.status === 'running') }
-/** Moteurs de bases présents dans la stack (franken_mariadb, franken_mysql, franken_postgresql). */
+/** Database engines present in the stack (franken_mariadb, franken_mysql, franken_postgresql). */
 const dbs = computed(() => state.containers.filter((c) => c.kind === 'mariadb' || c.kind === 'postgres'))
 
 const typeItems = [
@@ -46,7 +46,7 @@ const columns: TableColumn<Domain>[] = [
   { id: 'actions', header: 'Actions', meta: { class: { th: 'w-[110px] text-left max-md:w-12', td: 'py-1' } } },
 ]
 
-// Les services optionnels (DNS, Redis, S3, Soketi) n'apparaissent que s'ils sont activés.
+// Optional services (DNS, Redis, S3, Soketi) only appear when enabled.
 const infra = computed(() => [
   {
     name: 'FrankenPHP', icon: 'i-lucide-server', to: '/conteneurs', up: up('php'),
@@ -78,7 +78,7 @@ const statCard = { body: 'p-0 sm:p-0 h-[112px] px-[15px] py-[13px] sm:px-[15px] 
     />
   </PageHeader>
 
-  <!-- Indicateurs -->
+  <!-- Indicators -->
   <div class="mt-6 grid grid-cols-2 gap-2.5 md:gap-4 xl:mt-[30px] xl:grid-cols-4 *:min-w-0">
     <UCard :ui="statCard">
       <span class="text-xs font-medium text-muted">Conteneurs actifs</span>
@@ -121,7 +121,7 @@ const statCard = { body: 'p-0 sm:p-0 h-[112px] px-[15px] py-[13px] sm:px-[15px] 
     </UCard>
   </div>
 
-  <!-- Projets & domaines -->
+  <!-- Projects & domains -->
   <UCard class="mt-6" :ui="{ body: 'p-0 sm:p-0 px-5 pt-3 pb-1.5 sm:px-5 sm:pt-3 sm:pb-1.5' }">
     <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
       <h2 class="text-base font-semibold text-highlighted">Projets &amp; domaines</h2>
@@ -186,7 +186,7 @@ const statCard = { body: 'p-0 sm:p-0 h-[112px] px-[15px] py-[13px] sm:px-[15px] 
     </div>
   </section>
 
-  <!-- Activité + réseau local -->
+  <!-- Activity + local network -->
   <div class="mt-7 grid gap-5 xl:grid-cols-[712px_1fr] *:min-w-0">
     <UCard :ui="{ body: 'px-5 py-3.5 sm:px-5 sm:py-3.5' }">
       <div class="flex items-center justify-between md:pr-6">

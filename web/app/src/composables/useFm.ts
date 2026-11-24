@@ -1,7 +1,7 @@
 /**
- * Store du dashboard, version branchée : mêmes exports que le store simulé du POC (frankenmanager-gui-poc), mais
- * l'état vient de l'API du daemon de l'instance choisie, et les actions principales l'appellent. Les autres
- * fonctionnalités du POC (DNS, SSL, Redis, S3, bases, configuration, accès) ne font pas partie de cette démo.
+ * Dashboard store, connected version: same exports as the POC's simulated store (frankenmanager-gui-poc), but the
+ * state comes from the daemon API of the chosen instance, and the main actions call it. The other POC features
+ * (DNS, SSL, Redis, S3, databases, configuration, access) are not part of this demo.
  */
 import { computed, nextTick, reactive, ref } from 'vue'
 import { ApiError, client, lastMessage, type Instance, type Client, type Container as ApiContainer, type HostInfo, type Operation, type Stat, type Status } from '../lib/api'
@@ -31,7 +31,7 @@ export interface Container {
   label: string
   port: string
   cpu: number
-  /** Mémoire en Mo. */
+  /** Memory in MB. */
   mem: number
   status: ContainerStatus
   kind: ContainerKind
@@ -73,7 +73,7 @@ export const DEFAULT_PREFS: Prefs = {
 export const PROJECTS_ROOT = '/projects'
 export const S3_DOMAIN = 's3.frankenmanager.test'
 export const DOMAIN_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\.test$/
-/** Lignes de trafic, masquées de l'activité récente et de l'historique. */
+/** Traffic lines, hidden from recent activity and history. */
 export const LIVE_NOISE = /^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|TLS|A )\b|"(GET|POST|PUT|PATCH|DELETE) /
 
 export type FieldErrors = Partial<Record<string, string>>
@@ -82,11 +82,11 @@ export interface NewProject { name: string; type: 'php' | 'static'; root: string
 const blank = () => ({
   stack: 'stopped' as 'running' | 'stopped' | 'starting' | 'stopping',
   docker: true,
-  /** Premier chargement terminé. */
+  /** First load finished. */
   loaded: false,
-  /** Dernière erreur de connexion à l'instance, vide si elle répond. */
+  /** Last connection error to the instance, empty if it responds. */
   error: '',
-  /** Flux d'événements connecté. */
+  /** Event stream connected. */
   live: false,
   domains: [] as Domain[],
   containers: [] as Container[],
@@ -98,7 +98,7 @@ const blank = () => ({
   dnsClients: [] as DnsClient[],
   ssl: { caShared: false, caPort: 0, regenerating: null as string | null },
   config: {} as Record<string, string>,
-  /** Clés modifiées qui attendent un redémarrage de la stack. */
+  /** Modified keys waiting for a stack restart. */
   configPending: [] as string[],
   redis: { keys: 0, memMB: 0, maxMB: 0, hit: 0, hits: 0, misses: 0, port: 6379, version: '', clients: 0, sample: [] as RedisKey[] },
   databases: [] as Db[],
@@ -106,7 +106,7 @@ const blank = () => ({
   adminUrl: '',
   s3: { buckets: [] as S3Bucket[], keys: [] as S3Key[], objects: {} as Record<string, S3Object[]>, folders: {} as Record<string, string[]> },
   access: { sessions: [] as Session[], log: [] as AccessEvent[], passwordSet: false, remoteActive: false, remoteUrl: '' },
-  /** Caddyfiles de site lus par l'éditeur (`GET /api/v1/hosts/{name}/caddyfile`). */
+  /** Site Caddyfiles read by the editor (`GET /api/v1/hosts/{name}/caddyfile`). */
   siteFiles: {} as Record<string, { path: string; content: string; template: string; modified: boolean }>,
   connection: { mode: 'remote' as 'local' | 'remote', host: '', address: '', client: '', signedIn: true },
   app: { version: '', latest: null as string | null },
@@ -124,7 +124,7 @@ function loadPrefs(): Prefs {
 
 export const state = reactive(blank())
 
-// ---------- Notifications (branchées sur useToast() de Nuxt UI dans App.vue) ----------
+// ---------- Notifications (wired to Nuxt UI's useToast() in App.vue) ----------
 type ToastKind = 'success' | 'error' | 'warning' | 'info'
 type Notify = (t: { id?: string; title: string; description?: string; color?: ToastKind | 'neutral'; icon?: string; duration?: number; ui?: Record<string, string> }) => void
 let notify: Notify = () => {}
@@ -140,9 +140,9 @@ const TOAST_ICON: Record<ToastKind, string> = { success: 'i-lucide-circle-check'
 
 let seq = 0
 /**
- * Toast persistant suivant une opération du daemon : chaque étape remplace la description, puis il devient le
- * résultat sur place, avec sa durée. Le remplacer par un nouveau toast superposait deux animations (sortie et
- * entrée) et faisait sauter la pile.
+ * Persistent toast following a daemon operation: each step replaces the description, then it turns into the result
+ * in place, with its duration. Replacing it with a new toast overlapped two animations (leave and enter) and made the
+ * stack jump.
  */
 function progressToast(title: string, description: string) {
   const id = `p-${++seq}`
@@ -151,18 +151,18 @@ function progressToast(title: string, description: string) {
   return {
     step: (d: string) => show(d),
     done: (color: ToastKind, t: string, d: string) => {
-      // Notifications coupées (Paramètres) : seul un échec reste affiché. Nuxt UI ignore la suppression d'un toast
-      // mis à jour dans le même tick : elle attend le suivant.
+      // Notifications turned off (Settings): only a failure stays displayed. Nuxt UI ignores removing a toast updated
+      // in the same tick: the removal waits for the next one.
       if (!state.prefs.notifications && color !== 'error') { void nextTick(() => dismiss(id)); return }
       notify({ id, title: t, description: d, color, icon: TOAST_ICON[color], duration: color === 'error' ? 7000 : 4500, ui: { icon: '' } })
     },
   }
 }
 
-// ---------- Mot de passe des actions destructives ----------
+// ---------- Password for destructive actions ----------
 /**
- * À distance, une action destructive redemande le mot de passe (X-FM-Password). ConfirmModal le saisit avec la
- * confirmation : il est gardé pour la requête qui suit. Sans lui, le client d'API le demande sur la réponse 428.
+ * Remotely, a destructive action asks for the password again (X-FM-Password). ConfirmModal collects it along with the
+ * confirmation: it is kept for the next request. Without it, the API client asks for it on the 428 response.
  */
 let pendingPassword = ''
 export function checkPassword(password: string) {
@@ -175,7 +175,7 @@ const takePassword = () => {
   return p || undefined
 }
 
-// ---------- Dérivés ----------
+// ---------- Derived ----------
 export const active = computed(() => state.domains.filter((d) => !d.archived))
 export const archived = computed(() => state.domains.filter((d) => d.archived))
 export const running = computed(() => state.containers.filter((c) => c.status === 'running'))
@@ -186,7 +186,7 @@ export const isProxied = (d: Domain) => d.kind === 'proxy' || aliasTarget(d)?.ki
 export const envLabel = (d: Domain) => (isProxied(d) ? 'Proxy HTTP' : d.kind === 'static' ? `Statique${d.spa ? ' · SPA' : ''}` : `PHP ${d.php}`)
 export const domainIcon = (d: Domain) => (d.kind === 'proxy' ? 'i-lucide-arrow-up-right' : d.kind === 'static' ? 'i-lucide-file-code-2' : 'i-lucide-globe')
 export const servedPath = (d: Domain) => `${PROJECTS_ROOT}/${d.root ?? defaultRoot(d.name, d.kind === 'static')}`
-/** Seuls les projets PHP et les hôtes statiques ont leur propre Caddyfile. */
+/** Only PHP projects and static hosts have their own Caddyfile. */
 export const hasSiteCaddyfile = (d: Domain) => d.kind === 'php' || d.kind === 'static'
 export const restoreCommand = (d: Domain, php?: Php) => `restore-host ${d.name} ${d.kind === 'static' ? '--static' : `--php ${php ?? d.php}`}`
 
@@ -206,8 +206,8 @@ export const serviceEnabled = (s: ServiceName) => state.config[SERVICES[s].key] 
 const serviceBusy = reactive<Partial<Record<ServiceName, boolean>>>({})
 export const isServiceBusy = (s: ServiceName) => !!serviceBusy[s]
 
-// ---------- Conversion des réponses de l'API ----------
-/** Conteneur du daemon → ligne du POC (libellé, type, port lu dans les réglages). */
+// ---------- API response conversion ----------
+/** Daemon container → POC row (label, kind, port read from the settings). */
 function toContainer(c: ApiContainer, prev?: Container): Container {
   const cfg = state.config
   const base = { id: c.name, cpu: prev?.cpu ?? 0, mem: prev?.mem ?? 0, status: (c.state === 'running' ? 'running' : c.state === 'restarting' ? 'restarting' : 'stopped') as ContainerStatus }
@@ -229,14 +229,14 @@ function toContainer(c: ApiContainer, prev?: Container): Container {
   return { ...base, kind, label, port }
 }
 
-/** Hôtes actifs (/status) et archivés (/hosts/archived) → domaines du POC. */
+/** Active (/status) and archived (/hosts/archived) hosts → POC domains. */
 function toDomains(hosts: Status['hosts'], archives: { domain: string; kind: string; php?: string }[]): Domain[] {
   const out: Domain[] = hosts.map((h) => ({
     name: h.name, kind: h.kind, php: h.php as Php | undefined, root: h.root || undefined, spa: h.spa,
     target: h.kind === 'proxy' ? h.target : undefined, aliasOf: h.kind === 'alias' ? h.target : undefined,
     websocket: h.websocket, archived: false,
   }))
-  // Un alias suit la version PHP de sa cible.
+  // An alias follows the PHP version of its target.
   out.forEach((d) => { if (d.kind === 'alias') d.php = out.find((x) => x.name === d.aliasOf)?.php })
   for (const a of archives) {
     if (out.some((d) => d.name === a.domain)) continue
@@ -245,7 +245,7 @@ function toDomains(hosts: Status['hosts'], archives: { domain: string; kind: str
   return out
 }
 
-/** « 52.3MiB » → octets. */
+/** "52.3MiB" → bytes. */
 function bytes(s: string) {
   const m = /([\d.]+)\s*([KMGT]?i?B)/i.exec(s)
   if (!m) return 0
@@ -254,14 +254,14 @@ function bytes(s: string) {
   return parseFloat(m[1]!) * (unit.includes('I') ? 1024 : 1000) ** pow
 }
 
-// ---------- Connexion à une instance ----------
+// ---------- Connection to an instance ----------
 let api: Client | null = null
 let events: EventSource | null = null
 let logStream: EventSource | null = null
 let timers: ReturnType<typeof setInterval>[] = []
 let refreshSoon: ReturnType<typeof setTimeout> | undefined
 let logSeq = 0
-/** Dernier horodatage lu par conteneur : un flux rouvert renvoie ses dernières lignes, déjà affichées. */
+/** Last timestamp read per container: a reopened stream sends back its last lines, already displayed. */
 let lastLogAt: Record<string, string> = {}
 
 const sourceOf = (name: string) => {
@@ -274,7 +274,7 @@ function pushLog(level: LogLevel, source: string, msg: string, at = new Date()) 
   if (state.logs.length > 400) state.logs.length = 400
 }
 
-/** Ligne de `docker logs` → entrée du journal : JSON de Caddy, ou texte dont on devine le niveau. */
+/** `docker logs` line → log entry: Caddy JSON, or text whose level is guessed. */
 function parseLine(container: string, line: string, time: string) {
   let level: LogLevel = /\b(error|fatal|panic|exception|critical)\b/i.test(line) ? 'ERROR' : /\bwarn(ing)?\b/i.test(line) ? 'WARN' : 'INFO'
   let msg = line
@@ -283,7 +283,7 @@ function parseLine(container: string, line: string, time: string) {
       const j = JSON.parse(line) as { level?: string; msg?: string; request?: { method?: string; host?: string; uri?: string }; status?: number }
       level = j.level === 'error' || j.level === 'fatal' ? 'ERROR' : j.level === 'warn' ? 'WARN' : 'INFO'
       msg = j.request ? `${j.request.method} https://${j.request.host}${j.request.uri} ${j.status ?? ''}`.trim() : j.msg ?? line
-    } catch { /* ligne gardée telle quelle */ }
+    } catch { /* line kept as is */ }
   }
   pushLog(level, sourceOf(container), msg, time ? new Date(time) : new Date())
 }
@@ -298,7 +298,7 @@ export async function refresh() {
       api.get<{ domain: string; kind: string; php?: string }[]>('/api/v1/hosts/archived'),
       api.get<ApiSetting[]>('/api/v1/settings?show_secrets=true'),
     ])
-    // En place : des pages gardent une référence à state.config.
+    // In place: some pages keep a reference to state.config.
     for (const k of Object.keys(state.config)) if (!settings.some((x) => x.key === k)) delete state.config[k]
     for (const x of settings) state.config[x.key] = x.value
     if (!CONFIG_DEFS.length) CONFIG_DEFS.push(...settings.map(toConfigDef))
@@ -319,7 +319,7 @@ export async function refresh() {
   }
 }
 
-/** DNS LAN et partage de la CA : secondaires, sans bloquer l'affichage. */
+/** LAN DNS and CA sharing: secondary, without blocking the display. */
 async function refreshExtras() {
   if (!api) return
   const [dns, clients, ca] = await Promise.all([
@@ -356,7 +356,7 @@ async function refreshStats() {
   state.memTotalGo = Math.round(total * 10) / 10
 }
 
-/** Flux des journaux de tous les conteneurs : alimente l'activité récente et la page Journaux. */
+/** Log stream of all containers: feeds the recent activity and the Logs page. */
 function openLogs() {
   logStream?.close()
   if (!api || state.stack !== 'running') return
@@ -370,20 +370,20 @@ function openLogs() {
   })
 }
 
-/** Ouvre une instance : état remis à zéro, puis lecture, flux d'événements et rafraîchissements. */
+/** Opens an instance: state reset, then read, event stream and refreshes. */
 export function connect(inst: Instance, opts: { mode?: 'local' | 'remote'; client?: string } = {}) {
   disconnect()
   const prefs = state.prefs
   Object.assign(state, blank(), { prefs })
   lastLogAt = {}
-  // Local : les actions destructives ne redemandent pas le mot de passe (ConfirmModal n'affiche pas son champ).
+  // Local: destructive actions do not ask for the password again (ConfirmModal does not show its field).
   state.connection.mode = opts.mode ?? 'remote'
   state.connection.client = opts.client ?? 'App FrankenManager'
   api = client(inst)
   resume()
 }
 
-/** Reprend les flux (ouverture, retour au premier plan). */
+/** Resumes the streams (opening, back to the foreground). */
 export function resume() {
   if (!api) return
   pause()
@@ -409,7 +409,7 @@ export function resume() {
   timers = [setInterval(refreshStats, 5_000), setInterval(refresh, 30_000)]
 }
 
-/** Suspend les flux (arrière-plan) sans oublier l'instance. */
+/** Suspends the streams (background) without forgetting the instance. */
 export function pause() {
   events?.close()
   logStream?.close()
@@ -427,8 +427,8 @@ export function disconnect() {
 
 // ---------- Actions ----------
 /**
- * Lance une opération du daemon (réponse 202) et la suit jusqu'au bout dans un toast de progression. Renvoie
- * l'erreur de l'opération, null si elle a réussi.
+ * Starts a daemon operation (202 response) and follows it to the end in a progress toast. Returns the operation's
+ * error, null if it succeeded.
  */
 async function operate(title: string, submit: (c: Client) => Promise<Operation>, success: string): Promise<string | null> {
   if (!api) return 'Aucune instance.'
@@ -484,7 +484,7 @@ async function restartContainer(id: string, opts: { rebuild?: boolean; action?: 
     return
   }
   const action = opts.action ?? 'restart'
-  // Le POC nomme le reverse proxy « caddy » ; son conteneur est franken-caddy-proxy.
+  // The POC names the reverse proxy "caddy"; its container is franken-caddy-proxy.
   if (id === 'caddy') id = state.containers.find((x) => x.kind === 'caddy')?.id ?? id
   const c = state.containers.find((x) => x.id === id)
   if (c && action !== 'stop') c.status = 'restarting'
@@ -528,7 +528,7 @@ async function switchPhp(name: string, php: Php) {
   await operate('Changement de version PHP', (c) => c.put(`/api/v1/hosts/${encodeURIComponent(name)}/php`, { php }), `${name} utilise désormais PHP ${php}.`)
 }
 
-/** Un domaine (`…/certificate`), ou tous (`restart --force-ssl`). */
+/** One domain (`…/certificate`), or all of them (`restart --force-ssl`). */
 async function regenerateCert(name: string | 'all') {
   state.ssl.regenerating = name
   if (name === 'all') await operate('Régénération SSL', (c) => c.post('/api/v1/stack/restart', { force_ssl: true }), 'Tous les certificats sont régénérés.')
@@ -544,14 +544,14 @@ async function setService(name: ServiceName, on: boolean) {
 
 function savePrefs(p: Prefs) {
   state.prefs = { ...p }
-  try { localStorage.setItem('fm-prefs', JSON.stringify(p)) } catch { /* stockage indisponible */ }
+  try { localStorage.setItem('fm-prefs', JSON.stringify(p)) } catch { /* storage unavailable */ }
 }
 
 // =====================================================================================================================
-// Reste du dashboard du POC : DNS, SSL, Redis, bases, S3, Caddyfiles, configuration, accès distant.
+// Rest of the POC dashboard: DNS, SSL, Redis, databases, S3, Caddyfiles, configuration, remote access.
 // =====================================================================================================================
 
-/** Appareil du DNS LAN (`/api/v1/dns/clients?all=true`). */
+/** LAN DNS device (`/api/v1/dns/clients?all=true`). */
 export interface DnsClient { ip: string; name?: string; mac?: string; privateMac?: boolean; lastSeen: number; queries: number }
 export const DNS_CLIENT_WINDOW_MS = 5 * 60_000
 export const clock = ref(Date.now())
@@ -568,7 +568,7 @@ export interface S3Object { key: string; size: number; modified: number; public:
 export interface Session { id: string; device: string; ip: string; remote: boolean; created: number; lastSeen: number; current?: boolean }
 export interface AccessEvent { at: number; ip: string; event: string; device?: string; remote: boolean }
 
-// ---------- Configuration : définitions tirées du registre du daemon (`GET /api/v1/settings`) ----------
+// ---------- Configuration: definitions taken from the daemon registry (`GET /api/v1/settings`) ----------
 export type ConfigType = 'bool' | 'port' | 'text' | 'select' | 'secret'
 export interface ConfigDef {
   key: string
@@ -589,9 +589,9 @@ const GROUPS: [RegExp, string][] = [
   [/^S3_/, 'Stockage S3 (Garage)'], [/^DNS_/, 'Serveur DNS'], [/^(DASHBOARD_|DAEMON_)/, 'Dashboard'], [/^WEB_/, 'Serveur web'],
   [/^(PHP_IMAGE|INSTALL_|EXTRA_)/, 'Images PHP'],
 ]
-/** Réglages du registre du daemon : leur description et leurs valeurs possibles viennent de lui. */
+/** Settings from the daemon registry: their description and possible values come from it. */
 export const CONFIG_DEFS = reactive<ConfigDef[]>([])
-/** Les valeurs générées au démarrage ne sont pas connues de l'app : aucune n'est signalée comme telle. */
+/** Values generated at startup are not known to the app: none is flagged as such. */
 export const GENERATED_CONFIG: Record<string, string> = {}
 function toConfigDef(s: ApiSetting): ConfigDef {
   const bool = !!s.values && s.values.length === 2 && s.values.includes('true') && s.values.includes('false')
@@ -603,8 +603,8 @@ function toConfigDef(s: ApiSetting): ConfigDef {
 }
 export const displayConfigValue = (def: ConfigDef, v: string) => (!v ? '(vide)' : def.type === 'secret' ? '••••••••' : v)
 
-// ---------- Chargement à l'ouverture d'une page ----------
-/** Les données propres à une page ne sont lues qu'en l'ouvrant (DashboardLayout suit la route). */
+// ---------- Loading when a page opens ----------
+/** A page's own data is only read when opening it (DashboardLayout watches the route). */
 export async function loadPage(name: string) {
   if (!api) return
   const loaders: Record<string, () => Promise<void>> = {
@@ -626,7 +626,7 @@ async function loadRedis(pattern = '*', count = 200) {
   if (!api || !serviceEnabled('redis')) return
   const st = await api.get<{ running: boolean; info?: { version: string; used_memory: string; connected_clients: number; keys: number; hits: number; misses: number } }>('/api/v1/redis')
   const i = st.info
-  // En place : RedisPage garde une référence à state.redis.
+  // In place: RedisPage keeps a reference to state.redis.
   Object.assign(state.redis, {
     port: Number(state.config.REDIS_PORT) || 6379, version: i?.version ?? '', clients: i?.connected_clients ?? 0, keys: i?.keys ?? 0,
     memMB: i ? Math.round((bytes(`${i.used_memory}B`) / 1024 ** 2) * 10) / 10 : 0, hits: i?.hits ?? 0, misses: i?.misses ?? 0,
@@ -636,7 +636,7 @@ async function loadRedis(pattern = '*', count = 200) {
   const page = await api.get<{ keys: { name: string; type: string; ttl: number }[] }>(`/api/v1/redis/keys?pattern=${encodeURIComponent(pattern || '*')}&count=${count}`)
   state.redis.sample = page.keys.map((k) => ({ key: k.name, type: k.type, size: TYPE_SIZE[k.type] ?? k.type, ttl: k.ttl }))
 }
-/** Motif `SCAN MATCH` : `*` et `?` comme glob (filtre local des clés déjà lues). */
+/** `SCAN MATCH` pattern: `*` and `?` as glob (local filter of the keys already read). */
 export function redisMatch(pattern: string, key: string) {
   const re = new RegExp(`^${(pattern || '*').replace(/[.+^${}()|[\]\\]/g, '\\$&').replaceAll('*', '.*').replaceAll('?', '.')}$`)
   return re.test(key)
@@ -666,14 +666,14 @@ async function loadS3() {
     api.get<{ name: string; public: boolean; objects: number; public_objects: number; bytes: number }[]>('/api/v1/s3/buckets'),
     api.get<{ id: string; name: string; global: boolean; grants: { bucket: string; write: boolean }[] }[]>('/api/v1/s3/keys'),
   ])
-  // En place : S3Page garde une référence à state.s3.
+  // In place: S3Page keeps a reference to state.s3.
   state.s3.buckets = buckets.map((b) => ({ name: b.name, public: b.public, objects: b.objects, publicObjects: b.public_objects, size: Math.round((b.bytes / 1e6) * 10) / 10 }))
   const own = keys.filter((k) => !k.global && k.grants.length)
   const secrets = await Promise.all(own.map((k) => api!.get<{ secret?: string }>(`/api/v1/s3/keys/${k.id}`).catch(() => ({ secret: '' }))))
   state.s3.keys = own.map((k, i) => ({ id: k.id, name: k.name, bucket: k.grants[0]!.bucket, readOnly: !k.grants[0]!.write, secret: secrets[i]!.secret ?? '' }))
 }
 
-/** Un dossier du bucket (`?prefix=`) : ses objets, et ses sous-dossiers comme des entrées « dossier/ ». */
+/** A bucket folder (`?prefix=`): its objects, and its subfolders as "folder/" entries. */
 export async function loadObjects(bucket: string, prefix: string) {
   if (!api || !bucket) return
   const page = await api.get<{ folders: string[]; objects: { key: string; size: number; last_modified: string; public: boolean; url?: string }[] }>(
@@ -685,14 +685,14 @@ export async function loadObjects(bucket: string, prefix: string) {
 }
 export const bucketObjects = (bucket: string) => state.s3.objects[bucket] ?? []
 export const objectPublic = (bucket: string, o: S3Object) => !!state.s3.buckets.find((b) => b.name === bucket)?.public || o.public
-/** URL publique d'un objet public, sinon lien pré-signé valable `expires` secondes (`…/object/link`). */
+/** Public URL of a public object, otherwise a presigned link valid for `expires` seconds (`…/object/link`). */
 export async function objectLink(bucket: string, o: S3Object, expires = 3600) {
   if (!api) throw new Error('Aucune instance.')
   const l = await api.get<{ url: string; public: boolean; expires_at?: string }>(
     `/api/v1/s3/buckets/${encodeURIComponent(bucket)}/object/link?key=${encodeURIComponent(o.key)}&expires=${expires}`)
   return { url: l.url, public: l.public, expiresAt: l.expires_at ? Date.parse(l.expires_at) : null }
 }
-/** Téléchargement en flux par le daemon : le jeton passe dans l'adresse. */
+/** Download streamed by the daemon: the token goes in the URL. */
 export const objectDownloadUrl = (bucket: string, key: string) => api?.streamUrl(`/api/v1/s3/buckets/${encodeURIComponent(bucket)}/object`, { key }) ?? ''
 
 async function loadAccess() {
@@ -714,7 +714,7 @@ export const passwordSet = () => state.access.passwordSet
 export const remoteActive = () => state.access.remoteActive
 export const remoteUrl = () => state.access.remoteUrl || `https://${state.dns.ip}:${state.config.DASHBOARD_REMOTE_PORT}`
 
-// ---------- Caddyfiles de site ----------
+// ---------- Site Caddyfiles ----------
 export const caddyfilePathOf = (name: string) => state.siteFiles[name]?.path ?? ''
 export const siteCaddyfile = (name: string) => state.siteFiles[name]?.content ?? ''
 export const defaultCaddyfile = (name: string) => state.siteFiles[name]?.template ?? ''
@@ -725,7 +725,7 @@ export async function loadCaddyfile(name: string) {
   state.siteFiles[name] = f
 }
 
-// ---------- Actions des autres pages ----------
+// ---------- Actions of the other pages ----------
 async function addRoute(r: { source: string; target: string; websocket: boolean }): Promise<FieldErrors | null> {
   if (!DOMAIN_RE.test(r.source)) return { source: 'Utilisez un domaine local en .test (ex. app.test).' }
   const target = r.target.replace(/^https?:\/\//, '')
@@ -758,7 +758,7 @@ async function resetCaddyfile(name: string) {
   await loadCaddyfile(name).catch(() => {})
 }
 
-/** Réglages DNS_* : enregistrés un à un, puis le serveur DNS relit sa configuration. */
+/** DNS_* settings: saved one by one, then the DNS server reloads its configuration. */
 async function saveDns(dns: { ip: string; listen: string; port: number; upstream: string; enabled: boolean }) {
   const values: Record<string, string> = {
     DNS_IP: dns.ip === state.connection.address ? '' : dns.ip, DNS_LISTEN_IP: dns.listen === '0.0.0.0' ? '' : dns.listen,
@@ -873,7 +873,7 @@ async function setObjectsPublic(bucket: string, keys: string[], pub: boolean, pr
   await Promise.all([loadObjects(bucket, prefix), loadS3()])
 }
 
-/** `PUT /api/v1/settings/{key}` ; une clé de service (REDIS_ENABLED…) agit comme service enable|disable. */
+/** `PUT /api/v1/settings/{key}`; a service key (REDIS_ENABLED…) acts as service enable|disable. */
 async function setConfig(key: string, raw: string): Promise<string | null> {
   const def = CONFIG_DEFS.find((d) => d.key === key)
   if (!def) return 'Clé inconnue.'
@@ -893,7 +893,7 @@ async function resetConfig(key: string) {
 }
 
 const ACCESS_KEYS = ['DASHBOARD_ACCESS', 'DASHBOARD_REMOTE_PORT', 'DASHBOARD_ALLOWED_IPS', 'DASHBOARD_LOCAL_AUTH', 'DASHBOARD_TLS_CERT', 'DASHBOARD_TLS_KEY'] as const
-/** Réglages DASHBOARD_* modifiés, enregistrés un à un avec le mot de passe saisi une fois. */
+/** Modified DASHBOARD_* settings, saved one by one with the password entered once. */
 async function setAccess(values: Partial<Record<(typeof ACCESS_KEYS)[number], string>>): Promise<FieldErrors | null> {
   const password = takePassword()
   for (const [k, v] of Object.entries(values)) {
@@ -928,8 +928,8 @@ export const actions = {
   flushRedis, deleteRedisKeys, scanRedis, createDb, dropDb, createDbUser, dropDbUser,
   createBucket, setBucketPublic, emptyBucket, deleteBucket, createS3Key, deleteS3Key, uploadObjects, deleteObjects, setObjectsPublic,
   setConfig, resetConfig, setAccess, setPassword, revokeSession,
-  /** Avec l'app, la connexion se fait depuis la liste des instances. */
+  /** With the app, sign-in happens from the instance list. */
   signIn: async (_password: string): Promise<string | null> => null,
-  /** Le domaine ne se résout que sur un appareil qui utilise le DNS LAN de l'instance. */
+  /** The domain only resolves on a device that uses the instance's LAN DNS. */
   openSite: (name: string) => { window.open(`https://${name}`, '_blank') },
 }

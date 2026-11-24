@@ -6,8 +6,8 @@ import InfoBanner from '../components/InfoBanner.vue'
 import { CONFIG_DEFS, GENERATED_CONFIG, actions, state, type ConfigDef } from '../composables/useFm'
 
 /**
- * Équivalent de `frankenmanager configuration set|reset <KEY> [value]` :
- * chaque ligne se modifie en brouillon, puis s'enregistre ou revient à sa valeur par défaut.
+ * Equivalent of `frankenmanager configuration set|reset <KEY> [value]`:
+ * each row is edited as a draft, then saved or reset to its default value.
  */
 const q = ref('')
 const onlyChanged = ref(false)
@@ -15,7 +15,7 @@ const draft = reactive<Record<string, string>>({ ...state.config })
 const errors = reactive<Record<string, string | undefined>>({})
 const revealed = reactive<Record<string, boolean>>({})
 
-/** Une valeur générée au démarrage (mot de passe, identifiant Soketi ou S3) n'est pas une personnalisation. */
+/** A value generated at startup (password, Soketi or S3 credential) is not a customization. */
 const isGenerated = (d: ConfigDef) => !!d.generated && !!state.config[d.key] && state.config[d.key] === GENERATED_CONFIG[d.key]
 const isChanged = (d: ConfigDef) => state.config[d.key] !== d.default && !isGenerated(d)
 const isDirty = (d: ConfigDef) => draft[d.key] !== state.config[d.key]

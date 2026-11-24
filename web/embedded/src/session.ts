@@ -3,18 +3,18 @@ import { connect, disconnect } from '@app/composables/useFm'
 import { setUnauthorizedHandler, type Instance } from '@app/lib/api'
 
 /**
- * Connexion du dashboard embarqué à son daemon, d'après /config.json (servi par le daemon avec les pages) :
+ * Connection of the embedded dashboard to its daemon, based on /config.json (served by the daemon with the pages):
  *
- * - local (https://frankenmanager.test, https://<alias>.test, https://127.0.0.1:DASHBOARD_HTTPS_PORT) : la page
- *   ouvre une session sans mot de passe sur l'écouteur HTTPS de 127.0.0.1, que seul un navigateur de cette machine
- *   atteint (POST /api/v1/auth/local), sauf avec DASHBOARD_LOCAL_AUTH ;
- * - remote (l'accès distant ouvert dans un navigateur) : le mot de passe du dashboard.
+ * - local (https://frankenmanager.test, https://<alias>.test, https://127.0.0.1:DASHBOARD_HTTPS_PORT): the page
+ *   opens a passwordless session on the 127.0.0.1 HTTPS listener, which only a browser on this machine can reach
+ *   (POST /api/v1/auth/local), except with DASHBOARD_LOCAL_AUTH;
+ * - remote (remote access opened in a browser): the dashboard password.
  *
- * Le jeton est gardé dans ce navigateur (localStorage de cette origine) : une nouvelle visite reprend la même session
- * tant que le daemon la reconnaît (30 jours sans usage au plus).
+ * The token is kept in this browser (localStorage of this origin): a new visit resumes the same session as long as
+ * the daemon recognizes it (30 days without use at most).
  */
 interface Config {
-  /** Adresse de l'API ; vide : l'origine de la page. */
+  /** API address; empty: the page's origin. */
   api: string
   mode: 'local' | 'remote'
   version: string
@@ -23,20 +23,20 @@ interface Config {
 const KEY = 'fm-dashboard-session'
 const read = () => { try { return localStorage.getItem(KEY) ?? '' } catch { return '' } }
 const write = (token: string) => {
-  try { if (token) localStorage.setItem(KEY, token); else localStorage.removeItem(KEY) } catch { /* stockage indisponible */ }
+  try { if (token) localStorage.setItem(KEY, token); else localStorage.removeItem(KEY) } catch { /* storage unavailable */ }
 }
 
 export const session = reactive({
   phase: 'loading' as 'loading' | 'login' | 'ready' | 'error',
   mode: 'local' as Config['mode'],
-  /** Adresse de l'API. */
+  /** API address. */
   base: '',
   error: '',
 })
 
 const bearer = (token: string): Record<string, string> => (token ? { Authorization: `Bearer ${token}` } : {})
 
-/** La session `token` (ou le cookie, sans jeton) est-elle reconnue ? */
+/** Is the `token` session (or the cookie, without a token) recognized? */
 async function recognized(token: string) {
   const r = await fetch(`${session.base}/api/v1/auth`, { headers: bearer(token) })
   if (!r.ok) return false
@@ -69,7 +69,7 @@ export async function boot() {
         write(fresh)
         return start(fresh)
       }
-      // 403 : DASHBOARD_LOCAL_AUTH, le mot de passe est demandé ici aussi
+      // 403: DASHBOARD_LOCAL_AUTH, the password is required here too
       if (r.status !== 403) throw new Error(`Connexion locale refusée (${r.status}).`)
     }
     session.phase = 'login'
@@ -79,7 +79,7 @@ export async function boot() {
   }
 }
 
-/** Connexion avec le mot de passe du dashboard ; renvoie l'erreur, null si elle a réussi. */
+/** Sign-in with the dashboard password; returns the error, null if it succeeded. */
 export async function signIn(password: string): Promise<string | null> {
   const r = await fetch(`${session.base}/api/v1/auth/login`, {
     method: 'POST',
@@ -96,7 +96,7 @@ export async function signIn(password: string): Promise<string | null> {
   return null
 }
 
-// Session révoquée ou expirée : on oublie le jeton et on recommence (nouvelle session locale, ou mot de passe).
+// Session revoked or expired: forget the token and start over (new local session, or password).
 setUnauthorizedHandler(() => {
   write('')
   disconnect()

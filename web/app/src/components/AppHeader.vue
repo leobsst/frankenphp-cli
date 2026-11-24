@@ -10,7 +10,7 @@ import SidebarContent from './SidebarContent.vue'
 const route = useRoute()
 const router = useRouter()
 const searchOpen = ref(false)
-// Mobile : la barre latérale est masquée, le burger ouvre la navigation complète.
+// Mobile: the sidebar is hidden, the burger opens the full navigation.
 const menuOpen = ref(false)
 watch(() => route.fullPath, () => { menuOpen.value = false })
 
@@ -38,7 +38,7 @@ const groups = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() => {
 
 <template>
   <header class="z-10 shrink-0 box-content flex h-(--ui-header-height) pt-safe items-center gap-5 border-b border-default bg-default px-5 md:px-6 xl:px-8">
-    <!-- Mobile : burger + logo -->
+    <!-- Mobile: burger + logo -->
     <div class="flex items-center gap-2.5 md:hidden">
       <UButton color="neutral" variant="ghost" icon="i-lucide-menu" class="-ml-1.5" aria-label="Ouvrir le menu" @click="menuOpen = true" />
       <span class="grid size-8 place-items-center rounded-lg bg-primary text-inverted"><UIcon name="i-lucide-square-terminal" class="size-5" /></span>

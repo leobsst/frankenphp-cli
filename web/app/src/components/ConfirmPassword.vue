@@ -2,7 +2,7 @@
 import { ref, watch } from 'vue'
 import { answerConfirm, confirmState } from '../lib/confirm'
 
-// Action destructive demandée à distance : le daemon redemande le mot de passe du dashboard (X-FM-Password).
+// Destructive action requested remotely: the daemon asks for the dashboard password again (X-FM-Password).
 const password = ref('')
 watch(
   () => confirmState.open,

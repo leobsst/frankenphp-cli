@@ -5,7 +5,7 @@ import { actions, active } from '../composables/useFm'
 const props = defineProps<{ target?: string }>()
 const open = defineModel<boolean>('open', { default: false })
 
-// Cibles possibles : projets PHP et proxy hosts.
+// Possible targets: PHP projects and proxy hosts.
 const targets = computed(() => active.value
   .filter((d) => d.kind === 'php' || d.kind === 'proxy')
   .map((d) => ({ label: d.kind === 'proxy' ? `${d.name} · proxy vers ${d.target}` : `${d.name} · PHP ${d.php}`, value: d.name })))

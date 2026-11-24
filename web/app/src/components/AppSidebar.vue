@@ -2,7 +2,7 @@
 import { useMediaQuery } from '@vueuse/core'
 import SidebarContent from './SidebarContent.vue'
 
-// Tablette : barre d'icônes de 72px ; bureau : barre complète de 228px.
+// Tablet: 72px icon bar; desktop: full 228px bar.
 const collapsed = useMediaQuery('(max-width: 1179px)')
 </script>
 

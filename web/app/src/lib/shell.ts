@@ -1,14 +1,14 @@
 import { reactive } from 'vue'
 
 /**
- * Ce que l'application qui monte le dashboard lui fournit : le nom et l'adresse de l'instance pilotée, et, s'il y en a
- * plusieurs (l'app mobile), la page qui permet d'en changer.
+ * What the application mounting the dashboard provides to it: the name and address of the managed instance and, if
+ * there are several (the mobile app), the page used to switch between them.
  */
 export const shell = reactive({
-  /** Nom affiché de l'instance ; vide : le nom de la machine, lu par l'API. */
+  /** Displayed instance name; empty: the machine name, read from the API. */
   name: '',
-  /** Adresse affichée de l'instance ; vide : son adresse sur le réseau local, lue par l'API. */
+  /** Displayed instance address; empty: its address on the local network, read from the API. */
   address: '',
-  /** Route de la liste des instances, null s'il n'y en a qu'une. */
+  /** Route of the instance list, null if there is only one. */
   switchTo: null as string | null,
 })

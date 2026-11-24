@@ -1,7 +1,7 @@
 import { reactive } from 'vue'
 import { setConfirmer } from './api'
 
-/** État de la demande de mot de passe (ConfirmPassword.vue), branchée sur le client d'API. */
+/** State of the password prompt (ConfirmPassword.vue), wired to the API client. */
 export const confirmState = reactive({
   open: false,
   action: '',

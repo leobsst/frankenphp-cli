@@ -1,4 +1,4 @@
 node_modules/
-# Le build du dashboard est embarqué par go:embed ; seul .gitkeep est versionné.
+# The dashboard build is embedded by go:embed; only .gitkeep is tracked.
 embedded/dist/*
 !embedded/dist/.gitkeep

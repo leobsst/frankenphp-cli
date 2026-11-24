@@ -12,8 +12,8 @@ import ConfirmModal from '../components/ConfirmModal.vue'
 import { focusField } from '../composables/focus'
 import { accessMode, actions, passwordSet, remoteActive, remoteUrl, state, type AccessEvent, type FieldErrors, type Session } from '../composables/useFm'
 
-// Accès distant (v0.11.0) : réglages DASHBOARD_* appliqués à chaud par le daemon, `PUT /api/v1/auth/password`,
-// `GET|DELETE /api/v1/auth/sessions` et `GET /api/v1/auth/log`.
+// Remote access (v0.11.0): DASHBOARD_* settings hot-applied by the daemon, `PUT /api/v1/auth/password`,
+// `GET|DELETE /api/v1/auth/sessions` and `GET /api/v1/auth/log`.
 const c = state.config
 const tab = ref('settings')
 const tabs = [{ label: 'Réglages', value: 'settings' }, { label: 'Appareils', value: 'sessions' }, { label: 'Journal', value: 'log' }]
@@ -30,7 +30,7 @@ const values = computed(() => ({
   DASHBOARD_ACCESS: form.mode, DASHBOARD_REMOTE_PORT: form.port.trim(), DASHBOARD_ALLOWED_IPS: form.allowed.trim(),
   DASHBOARD_LOCAL_AUTH: String(form.localAuth), DASHBOARD_TLS_CERT: form.custom ? form.cert.trim() : '', DASHBOARD_TLS_KEY: form.custom ? form.key.trim() : '',
 }))
-// Depuis l'accès distant, un réglage DASHBOARD_* redemande le mot de passe : il pourrait ouvrir le dashboard plus largement.
+// From remote access, a DASHBOARD_* setting asks for the password again: it could expose the dashboard more widely.
 const confirmOpen = ref(false)
 function save() {
   if (state.connection.mode === 'remote') { confirmOpen.value = true; return }

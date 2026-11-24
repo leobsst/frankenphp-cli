@@ -16,7 +16,7 @@ const THEMES: { id: Prefs['theme']; label: string; nav: string; bg: string; titl
   { id: 'system', label: 'Système', nav: 'linear-gradient(90deg,#fff 50%,var(--fm-dark-bg) 50%)', bg: 'linear-gradient(90deg,var(--color-sage-50) 50%,var(--color-sage-950) 50%)', title: 'var(--color-sage-400)', card: 'linear-gradient(90deg,#fff 50%,var(--fm-dark-elevated) 50%)' },
 ]
 
-// Saisie hexadécimale libre : appliquée seulement quand elle est valide.
+// Free hexadecimal input: applied only when valid.
 const hexPrimary = ref(draft.value.primary)
 const hexAccent = ref(draft.value.accent)
 watch(() => draft.value.primary, (v) => { hexPrimary.value = v })

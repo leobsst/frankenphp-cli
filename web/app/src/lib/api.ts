@@ -1,6 +1,6 @@
 /**
- * Instance pilotée : l'adresse de son API et le jeton de session envoyé en Bearer. Sans jeton, la session est le
- * cookie du navigateur (accès distant ouvert dans un navigateur, sur la même origine que l'API).
+ * Managed instance: its API address and the session token sent as Bearer. Without a token, the session is the
+ * browser cookie (remote access opened in a browser, on the same origin as the API).
  */
 export interface Instance {
   id: string
@@ -8,13 +8,13 @@ export interface Instance {
   token: string
 }
 
-/** Appelé quand le daemon refuse la session (révoquée, expirée, mot de passe changé) : l'hôte reconnecte. */
+/** Called when the daemon rejects the session (revoked, expired, password changed): the host reconnects. */
 let unauthorized: (inst: Instance) => void = () => {}
 export function setUnauthorizedHandler(fn: (inst: Instance) => void) {
   unauthorized = fn
 }
 
-// ---------- Types de l'API du daemon (api/openapi.yaml, /api/v1) ----------
+// ---------- Daemon API types (api/openapi.yaml, /api/v1) ----------
 
 export interface HostInfo {
   hostname: string
@@ -77,7 +77,7 @@ export interface LogLine {
   line: string
 }
 
-// ---------- Erreurs ----------
+// ---------- Errors ----------
 
 export class ApiError extends Error {
   constructor(
@@ -88,29 +88,29 @@ export class ApiError extends Error {
   }
 }
 
-/** Message d'une requête qui n'a pas abouti : le plus souvent certificat non approuvé ou accès distant fermé. */
+/** Message for a request that did not go through: most often an untrusted certificate or closed remote access. */
 export const UNREACHABLE =
   'Instance injoignable. Vérifiez que le daemon FrankenManager tourne ; depuis un autre appareil, que l’accès distant ' +
   'est ouvert (DASHBOARD_ACCESS=lan) et que la CA de FrankenManager y est installée et approuvée.'
 
-// ---------- Confirmation du mot de passe ----------
+// ---------- Password confirmation ----------
 
 /**
- * À distance, une action destructive (arrêter la stack, un conteneur…) redemande le mot de passe du dashboard :
- * le daemon répond 428, l'app le demande puis rejoue la requête avec l'en-tête X-FM-Password.
+ * Remotely, a destructive action (stopping the stack, a container…) asks for the dashboard password again: the
+ * daemon responds 428, the app asks for it then replays the request with the X-FM-Password header.
  */
 let confirmer: (action: string) => Promise<string | null> = async () => null
 export function setConfirmer(fn: typeof confirmer) {
   confirmer = fn
 }
 
-// ---------- Requêtes ----------
+// ---------- Requests ----------
 
 interface RequestOptions {
   body?: unknown
   password?: string
   timeout?: number
-  /** Libellé de l'action, montré dans la demande de mot de passe. */
+  /** Action label, shown in the password prompt. */
   action?: string
 }
 
@@ -135,7 +135,7 @@ async function send<T>(base: string, token: string | null, method: string, path:
   return data as T
 }
 
-/** Client d'une instance connectée : jeton Bearer, confirmation du mot de passe, session expirée. */
+/** Client of a connected instance: Bearer token, password confirmation, expired session. */
 export function client(inst: Instance) {
   async function request<T>(method: string, path: string, opts: RequestOptions = {}): Promise<T> {
     try {
@@ -156,11 +156,11 @@ export function client(inst: Instance) {
 
   return {
     get: <T>(path: string) => request<T>('GET', path),
-    /** `opts.password` : mot de passe déjà saisi pour une action destructive ; sans lui, demandé sur la réponse 428. */
+    /** `opts.password`: password already entered for a destructive action; without it, asked for on the 428 response. */
     post: <T = Operation>(path: string, body: unknown = {}, opts: { action?: string; password?: string } = {}) => request<T>('POST', path, { body, ...opts }),
     put: <T = Operation>(path: string, body: unknown, opts: { action?: string; password?: string } = {}) => request<T>('PUT', path, { body, ...opts }),
     del: <T = unknown>(path: string, opts: { action?: string; password?: string } = {}) => request<T>('DELETE', path, opts),
-    /** Envoie un fichier tel quel (téléversement S3), avec le jeton. */
+    /** Sends a file as is (S3 upload), with the token. */
     async upload(path: string, file: Blob) {
       let res: Response
       try {
@@ -173,7 +173,7 @@ export function client(inst: Instance) {
       return data as Operation
     },
 
-    /** Adresse d'un flux SSE : EventSource n'envoie pas d'en-tête, le jeton passe dans la requête. */
+    /** URL of an SSE stream: EventSource sends no headers, the token goes in the query string. */
     streamUrl(path: string, params: Record<string, string | string[]> = {}) {
       const u = new URL(inst.url + path)
       for (const [k, v] of Object.entries(params)) for (const x of [v].flat()) u.searchParams.append(k, x)
@@ -181,7 +181,7 @@ export function client(inst: Instance) {
       return u.toString()
     },
 
-    /** Suit une opération mise en file (réponse 202) jusqu'à sa fin. */
+    /** Follows a queued operation (202 response) until it ends. */
     async wait(op: Operation, onProgress?: (op: Operation) => void): Promise<Operation> {
       const deadline = Date.now() + 15 * 60_000
       let cur = op
@@ -197,21 +197,21 @@ export function client(inst: Instance) {
 }
 export type Client = ReturnType<typeof client>
 
-/** Version du daemon (route publique) : vérifie que l'adresse répond avant de demander le mot de passe. */
+/** Daemon version (public route): checks that the address responds before asking for the password. */
 export const health = (url: string) => send<{ version: string }>(url, null, 'GET', '/api/health', { timeout: 8_000 })
 
-/** Ouvre une session avec le mot de passe du dashboard : le daemon rend un jeton (Bearer) pour l'app. */
+/** Opens a session with the dashboard password: the daemon returns a (Bearer) token for the app. */
 export const login = (url: string, password: string, device: string) =>
   send<{ token: string; session: { id: string } }>(url, null, 'POST', '/api/v1/auth/login', { body: { password, device } })
 
 export const hostInfo = (url: string, token: string) => send<HostInfo>(url, token, 'GET', '/api/v1/host', { timeout: 8_000 })
 
-/** Ferme la session côté daemon ; sans effet si l'instance est injoignable. */
+/** Closes the session on the daemon side; no effect if the instance is unreachable. */
 export async function logout(inst: Instance) {
   await send(inst.url, inst.token, 'POST', '/api/v1/auth/logout', { body: {}, timeout: 5_000 }).catch(() => {})
 }
 
-/** Dernier message utile d'une opération, pour les notifications. */
+/** Last useful message of an operation, for notifications. */
 export function lastMessage(op: Operation): string | undefined {
   for (let i = op.events.length - 1; i >= 0; i--) {
     const e = op.events[i]!

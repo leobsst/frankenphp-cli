@@ -8,7 +8,7 @@ import DashboardLayout from './DashboardLayout.vue'
 import SignIn from './SignIn.vue'
 import { boot, session } from './session'
 
-// Notifications du store (progression des opérations), comme dans le POC.
+// Store notifications (operation progress), as in the POC.
 const toast = useToast()
 bindNotifier(
   (t) => (t.id && toast.toasts.value.some((x) => x.id === t.id) ? toast.update(t.id, t) : toast.add(t)),

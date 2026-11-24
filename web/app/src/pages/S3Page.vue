@@ -15,12 +15,12 @@ import {
   type FieldErrors, type S3Bucket, type S3Key,
 } from '../composables/useFm'
 
-// Serveur S3 Garage : `frankenmanager service enable|disable s3`, `s3 bucket …`, `s3 key …`, `s3 info`.
+// Garage S3 server: `frankenmanager service enable|disable s3`, `s3 bucket …`, `s3 key …`, `s3 info`.
 const s3 = state.s3
 const c = state.config
 const tab = ref('buckets')
 const tabs = [{ label: 'Buckets', value: 'buckets' }, { label: 'Objets', value: 'objects' }, { label: 'Clés d’accès', value: 'keys' }, { label: 'Laravel', value: 'laravel' }]
-// Bucket parcouru dans l'onglet Objets.
+// Bucket browsed in the Objects tab.
 const browsing = ref(s3.buckets[0]?.name ?? '')
 watch(() => s3.buckets.map((b) => b.name), (names) => { if (!names.includes(browsing.value)) browsing.value = names[0] ?? '' })
 
@@ -102,7 +102,7 @@ async function submitBucket() {
   if (!bucketError.value) Object.assign(bucketForm, { name: '', public: false })
 }
 
-// ---------- Clés d'accès ----------
+// ---------- Access keys ----------
 const revealed = ref<string | null>(null)
 const keyColumns: TableColumn<S3Key>[] = [
   { accessorKey: 'name', header: 'Clé / identifiant' },
@@ -202,7 +202,7 @@ function copyEnv() {
       </SideForm>
     </template>
 
-    <!-- Clés d'accès -->
+    <!-- Access keys -->
     <template v-else-if="tab === 'keys'">
       <ResourceTable title="Clés limitées à un bucket" :data="s3.keys" :columns="keyColumns" search-key="name" empty="Aucune clé : les applications utilisent la clé globale.">
         <template #name-cell="{ row }">
@@ -235,7 +235,7 @@ function copyEnv() {
       </SideForm>
     </template>
 
-    <!-- Objets -->
+    <!-- Objects -->
     <S3Objects v-else-if="tab === 'objects' && browsing" v-model:bucket="browsing" />
 
     <!-- Laravel -->

@@ -7,14 +7,14 @@ import SideForm from './SideForm.vue'
 import ConfirmModal from './ConfirmModal.vue'
 import { actions, bucketObjects, loadObjects, objectDownloadUrl, objectLink, objectPublic, state, toast, type S3Object } from '../composables/useFm'
 
-// Explorateur d'objets (v0.11.0) : `GET /api/v1/s3/buckets/{bucket}/objects?prefix=` (un dossier à la fois),
-// `PUT|GET …/object?key=` (téléversement, téléchargement en flux), `…/object/link` (URL publique ou lien pré-signé),
-// `…/objects/delete` et `…/objects/public` (ACL public-read ou private).
+// Object browser (v0.11.0): `GET /api/v1/s3/buckets/{bucket}/objects?prefix=` (one folder at a time),
+// `PUT|GET …/object?key=` (upload, streamed download), `…/object/link` (public URL or presigned link),
+// `…/objects/delete` and `…/objects/public` (public-read or private ACL).
 const bucket = defineModel<string>('bucket', { required: true })
 
 const prefix = ref('')
 watch(bucket, () => { prefix.value = '' })
-// Le daemon liste un dossier à la fois : le dossier ouvert est relu à chaque changement.
+// The daemon lists one folder at a time: the open folder is reloaded on every change.
 watch([bucket, prefix], ([b, p]) => { void loadObjects(b, p).catch((e) => toast('error', 'Lecture impossible', String(e?.message ?? e))) }, { immediate: true })
 const b = computed(() => state.s3.buckets.find((x) => x.name === bucket.value))
 
@@ -26,7 +26,7 @@ const rows = computed<Row[]>(() => {
     if (!o.key.startsWith(prefix.value)) continue
     const rest = o.key.slice(prefix.value.length)
     const slash = rest.indexOf('/')
-    // Un sous-dossier arrive comme une entrée « dossier/ » : son contenu n'est lu qu'en l'ouvrant.
+    // A subfolder comes in as a "folder/" entry: its content is only read when it is opened.
     if (slash >= 0) folders.set(rest.slice(0, slash + 1), (folders.get(rest.slice(0, slash + 1)) ?? 0) + (o.size || o.modified ? 1 : 0))
     else files.push({ name: rest, folder: false, obj: o, count: 1 })
   }
@@ -43,7 +43,7 @@ const ago = (t: number) => {
   return m < 60 ? `il y a ${m} min` : m < 1440 ? `il y a ${Math.round(m / 60)} h` : `il y a ${Math.round(m / 1440)} j`
 }
 
-// Lien d'un objet : public, son URL ; privé, un lien pré-signé valable `expires`.
+// Object link: if public, its URL; if private, a presigned link valid for `expires`.
 const link = reactive({ open: false, key: '', expires: 3600 })
 const linkFor = ref<{ url: string; public: boolean; expiresAt: number | null } | null>(null)
 watch(() => [link.open, link.key, link.expires] as const, async ([open, key, expires]) => {
@@ -84,7 +84,7 @@ const columns: TableColumn<Row>[] = [
   { id: 'actions', header: '', meta: { class: { th: 'w-10', td: 'pr-0' } } },
 ]
 
-// Téléversement : les fichiers choisis vont dans le dossier courant, en flux par le daemon.
+// Upload: the chosen files go into the current folder, streamed through the daemon.
 const upload = reactive({ public: false, busy: false })
 const files = ref<File[]>([])
 const input = ref<HTMLInputElement>()

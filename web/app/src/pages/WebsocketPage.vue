@@ -6,7 +6,7 @@ import TwoColumns from '../components/TwoColumns.vue'
 import InfoBanner from '../components/InfoBanner.vue'
 import { actions, isServiceBusy, serviceEnabled, state, toast } from '../composables/useFm'
 
-// Soketi (protocole Pusher) : `frankenmanager service enable|disable soketi`.
+// Soketi (Pusher protocol): `frankenmanager service enable|disable soketi`.
 const reveal = ref(false)
 const enabled = computed(() => serviceEnabled('soketi'))
 const busy = computed(() => isServiceBusy('soketi'))
@@ -27,7 +27,7 @@ const credentials = computed(() => [
   { key: 'SOKETI_DEFAULT_APP_SECRET', label: 'App secret', value: c.SOKETI_DEFAULT_APP_SECRET, secret: true },
 ])
 
-/** Variables Laravel (`BROADCAST_CONNECTION=pusher`) documentées dans le README du CLI. */
+/** Laravel variables (`BROADCAST_CONNECTION=pusher`) documented in the CLI README. */
 const envFile = (secret: (v: string) => string) => [
   'BROADCAST_CONNECTION=pusher',
   `PUSHER_APP_ID=${c.SOKETI_DEFAULT_APP_ID}`,

@@ -1,6 +1,6 @@
 /**
- * Pages du dashboard, communes au dashboard embarqué (web/embedded) et à l'app mobile : chaque application les
- * monte dans son propre routeur.
+ * Dashboard pages, shared by the embedded dashboard (web/embedded) and the mobile app: each application mounts them
+ * in its own router.
  */
 export const NAV = [
   { name: 'overview', path: '/', label: 'Vue d’ensemble', icon: 'i-lucide-layout-grid', component: () => import('./pages/OverviewPage.vue') },
@@ -19,6 +19,6 @@ export const NAV = [
 ] as const
 
 
-/** Page des préférences de l'interface, rangée à part dans la navigation. */
+/** Interface preferences page, kept apart in the navigation. */
 export const SETTINGS = { name: 'settings', path: '/parametres', label: 'Paramètres', icon: 'i-lucide-sliders-horizontal' } as const
 

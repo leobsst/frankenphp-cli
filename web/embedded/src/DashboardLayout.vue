@@ -6,17 +6,17 @@ import AppHeader from '@app/components/AppHeader.vue'
 import BottomNav from '@app/components/BottomNav.vue'
 import { disconnect, loadPage, pause, refresh, resume, state } from '@app/composables/useFm'
 
-// Mise en page du dashboard (POC), sur l'instance connectée par session.ts.
+// Dashboard layout (POC), on the instance connected by session.ts.
 const route = useRoute()
 
-// Le contenu défile dans son propre conteneur, sous l'en-tête : on le remonte en changeant de page.
+// The content scrolls in its own container, below the header: it is scrolled back to the top on page change.
 const scroller = useTemplateRef<HTMLElement>('scroller')
 watch(() => route.path, () => scroller.value?.scrollTo({ top: 0 }))
 
-// Données propres à une page (Redis, bases, S3, appareils DNS, accès…) : lues en l'ouvrant, une fois l'instance lue.
+// Page-specific data (Redis, databases, S3, DNS devices, access…): read when opening it, once the instance is loaded.
 watch([() => route.name, () => state.loaded], ([name, loaded]) => { if (loaded) void loadPage(String(name ?? '')) }, { immediate: true })
 
-// Onglet caché : les flux s'arrêtent, et reprennent au retour.
+// Hidden tab: the streams stop, and resume on return.
 const onVisibility = () => (document.hidden ? pause() : resume())
 document.addEventListener('visibilitychange', onVisibility)
 onBeforeUnmount(() => {

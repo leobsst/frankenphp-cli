@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { encode } from 'uqr'
 
-/** QR code généré localement (aucun appel réseau), dessiné en SVG avec la couleur du texte courant. */
+/** QR code generated locally (no network call), drawn as SVG in the current text color. */
 const props = defineProps<{ value: string; label: string }>()
 
 const qr = computed(() => encode(props.value, { border: 2 }))

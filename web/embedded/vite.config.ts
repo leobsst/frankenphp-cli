@@ -4,11 +4,11 @@ import vue from '@vitejs/plugin-vue'
 import ui from '@nuxt/ui/vite'
 
 /**
- * Dashboard embarqué dans le binaire (go:embed de dist/) et servi par le daemon. Les pages, composants et le store
- * viennent de web/app (alias @app), communs avec l'app mobile.
+ * Dashboard embedded in the binary (go:embed of dist/) and served by the daemon. The pages, components and store
+ * come from web/app (@app alias), shared with the mobile app.
  *
- * En développement (pnpm dev), /api et /config.json passent au daemon de la machine, sur son écouteur HTTPS de
- * 127.0.0.1 (DASHBOARD_HTTPS_PORT, 9444 par défaut), présentés comme venant de cet écouteur lui-même.
+ * In development (pnpm dev), /api and /config.json are proxied to the machine's daemon, on its 127.0.0.1 HTTPS
+ * listener (DASHBOARD_HTTPS_PORT, 9444 by default), presented as coming from that listener itself.
  */
 const daemon = `https://127.0.0.1:${process.env.DASHBOARD_HTTPS_PORT ?? '9444'}`
 
@@ -18,12 +18,12 @@ export default defineConfig({
     ui({
       ui: {
         colors: { primary: 'brand', info: 'accent', success: 'brand', warning: 'amber', error: 'red', neutral: 'sage' as 'zinc' },
-        // Élément de navigation actif : fond pâle + texte primaire (maquette).
+        // Active navigation item: pale background + primary text (mockup).
         navigationMenu: {
           compoundVariants: [{ variant: 'pill', active: true, highlight: false, class: { link: 'before:bg-primary/10 font-semibold' } }],
         },
       },
-      // Icônes Lucide embarquées : aucun appel à l'API Iconify.
+      // Bundled Lucide icons: no calls to the Iconify API.
       icon: { clientBundle: { scan: true } },
     }),
   ],
@@ -31,7 +31,7 @@ export default defineConfig({
     alias: { '@app': fileURLToPath(new URL('../app/src', import.meta.url)) },
     dedupe: ['vue', 'vue-router', '@nuxt/ui'],
   },
-  // Chemins relatifs : la même build sert https://frankenmanager.test, 127.0.0.1 et l'accès distant.
+  // Relative paths: the same build serves https://frankenmanager.test, 127.0.0.1 and remote access.
   base: './',
   build: { emptyOutDir: true },
   server: {

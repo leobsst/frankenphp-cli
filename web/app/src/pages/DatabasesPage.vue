@@ -13,8 +13,8 @@ import ConfirmModal from '../components/ConfirmModal.vue'
 import { focusField } from '../composables/focus'
 import { actions, state, toast, type Db, type DbUser, type FieldErrors } from '../composables/useFm'
 
-// `/api/v1/databases` : bases et utilisateurs de MariaDB, MySQL et PostgreSQL (DB_ENGINES), les comptes système
-// exclus. Les mots de passe et les requêtes passent par l'environnement puis l'entrée du client, jamais en ligne de commande.
+// `/api/v1/databases`: MariaDB, MySQL and PostgreSQL (DB_ENGINES) databases and users, system accounts excluded.
+// Passwords and queries go through the environment then the client's stdin, never on the command line.
 const tab = ref('local')
 const tabs = [{ label: 'Bases', value: 'local' }, { label: 'Utilisateurs', value: 'users' }, { label: 'Connexions', value: 'conn' }]
 const form = reactive({ engine: 'PostgreSQL' as Db['engine'], name: 'blog', user: 'blog_app', password: 'S3cure-local-pass', grant: true })
@@ -44,7 +44,7 @@ async function submit() {
   else if (!err) Object.assign(form, { name: '', user: '', password: '' })
 }
 
-// Adresse de phpMyAdmin ou pgAdmin donnée par le daemon (dev uniquement).
+// phpMyAdmin or pgAdmin URL provided by the daemon (dev only).
 const adminUrl = computed(() => state.adminUrl || 'https://localhost')
 const openAdmin = (_e: Db['engine']) => { window.open(adminUrl.value, '_blank') }
 

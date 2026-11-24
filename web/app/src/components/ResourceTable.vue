@@ -3,8 +3,8 @@ import { computed, ref } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
 
 /**
- * Carte « liste » des pages ressources : titre, recherche repliable et UTable.
- * Les slots `<colonne>-cell` sont transmis à UTable.
+ * "List" card of the resource pages: title, collapsible search and UTable.
+ * The `<column>-cell` slots are forwarded to UTable.
  */
 const props = defineProps<{ title: string; data: T[]; columns: TableColumn<T>[]; searchKey?: keyof T; empty?: string }>()
 

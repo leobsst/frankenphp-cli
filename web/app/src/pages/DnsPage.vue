@@ -40,7 +40,7 @@ function copy(d: Domain) {
   toast('info', 'Copié', rec)
 }
 
-// ---------- Appareils (`frankenmanager dns-clients [--all]`) ----------
+// ---------- Devices (`frankenmanager dns-clients [--all]`) ----------
 const isConnected = (c: DnsClient) => up.value && clock.value - c.lastSeen < DNS_CLIENT_WINDOW_MS
 const clients = computed(() => [...(showIdle.value ? state.dnsClients : state.dnsClients.filter(isConnected))].sort((a, b) => b.lastSeen - a.lastSeen))
 const clientIcon = (c: DnsClient) => (/iphone|pixel|galaxy|android/i.test(c.name ?? '') ? 'i-lucide-smartphone' : /ipad|tab/i.test(c.name ?? '') ? 'i-lucide-tablet' : 'i-lucide-laptop')

@@ -21,7 +21,7 @@ const tabs = [{ label: 'Domaines actifs', value: 'active' }, { label: 'Archives'
 const form = reactive({ name: 'blog.test', type: 'php' as NewProject['type'], root: '', php: '8.5' as Php, spa: false, alias: 'www.blog.test', ssl: true })
 const isStatic = computed(() => form.type === 'static')
 const typeItems = [{ label: 'Projet PHP', value: 'php' }, { label: 'Site statique', value: 'static' }]
-// Dossier servi par défaut, affiché en placeholder : `--root` est facultatif.
+// Default served folder, shown as placeholder: `--root` is optional.
 const rootPlaceholder = computed(() => defaultRoot(form.name.trim().toLowerCase() || 'blog.test', isStatic.value))
 const command = computed(() => {
   const name = form.name.trim().toLowerCase() || '<domaine>'
@@ -49,10 +49,10 @@ const stats = computed(() => [
 const deprecated = computed(() => active.value.filter((d) => d.kind === 'php' && DEPRECATED_PHP.includes(d.php!)))
 const isDeprecated = (d: Domain) => !isProxied(d) && DEPRECATED_PHP.includes(d.php!)
 const sub = (d: Domain) => (d.kind === 'proxy' ? d.target : d.kind === 'alias' ? `alias de ${d.aliasOf}` : servedPath(d))
-/** Dossier d'archive (v0.11.0) : sites/archive/php-<version>/ ou sites/archive/static/. */
+/** Archive folder (v0.11.0): sites/archive/php-<version>/ or sites/archive/static/. */
 const archiveDir = (d: Domain) => (d.kind === 'static' ? 'archive/static/' : `archive/php-${d.php}/`)
 
-/** `restore-host --php <version>` (au choix, pas forcément celle d'origine) ou `restore-host --static`. */
+/** `restore-host --php <version>` (any version, not necessarily the original one) or `restore-host --static`. */
 function restoreMenu(d: Domain): DropdownMenuItem[][] {
   if (d.kind === 'static') return [[{ label: 'Restaurer l’hôte statique', icon: 'i-lucide-archive-restore', onSelect: () => actions.restoreDomain(d.name) }]]
   return [[

@@ -3,12 +3,12 @@ import { watch } from 'vue'
 import { actions, dnsClientsConnected, loadPage, state } from '../composables/useFm'
 import QrCode from './QrCode.vue'
 
-// POC : lien provisoire. En réel : `http://${state.dns.ip}:${state.ssl.caPort}` (téléchargement de la CA).
+// POC: temporary link. For real: `http://${state.dns.ip}:${state.ssl.caPort}` (CA download).
 const CA_DOWNLOAD_URL = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=RDdQw4w9WgXcQ'
 
 const open = defineModel<boolean>('open', { default: false })
 
-// Les appareils du DNS LAN et l'état du partage de la CA sont relus à l'ouverture.
+// The LAN DNS devices and the CA sharing state are reloaded on open.
 watch(open, (o) => { if (o) void loadPage('dns') })
 </script>
 

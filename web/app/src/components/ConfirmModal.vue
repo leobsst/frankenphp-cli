@@ -16,7 +16,7 @@ const emit = defineEmits<{ confirm: [] }>()
 const open = defineModel<boolean>('open', { default: false })
 
 const typed = ref('')
-// Depuis l'accès distant, une action destructive redemande le mot de passe (en-tête X-FM-Password, v0.11.0).
+// Over remote access, a destructive action asks for the password again (X-FM-Password header, v0.11.0).
 const remote = computed(() => state.connection.mode === 'remote')
 const password = ref('')
 const wrong = ref(false)

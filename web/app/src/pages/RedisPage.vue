@@ -11,8 +11,8 @@ import InfoBanner from '../components/InfoBanner.vue'
 import ConfirmModal from '../components/ConfirmModal.vue'
 import { actions, isServiceBusy, redisMatch, serviceEnabled, state, toast, type RedisKey } from '../composables/useFm'
 
-// Cache Redis : `/api/v1/redis` (INFO), `/redis/keys` (SCAN MATCH puis TYPE et TTL), `/redis/keys/delete` (DEL),
-// `/redis/flush` (FLUSHALL). Le daemon parle le protocole Redis directement sur REDIS_PORT, sans redis-cli.
+// Redis cache: `/api/v1/redis` (INFO), `/redis/keys` (SCAN MATCH then TYPE and TTL), `/redis/keys/delete` (DEL),
+// `/redis/flush` (FLUSHALL). The daemon speaks the Redis protocol directly on REDIS_PORT, without redis-cli.
 const r = state.redis
 const tab = ref('keys')
 const tabs = [{ label: 'Clés du cache', value: 'keys' }, { label: 'Serveur', value: 'stats' }]
@@ -24,7 +24,7 @@ const pattern = ref('*')
 const applied = ref('*')
 const count = ref(100)
 const shown = computed(() => r.sample.filter((k) => redisMatch(applied.value, k.key)))
-// SCAN MATCH côté serveur : le motif et le nombre de clés sont envoyés au daemon.
+// Server-side SCAN MATCH: the pattern and key count are sent to the daemon.
 const scan = async () => { applied.value = pattern.value.trim() || '*'; await actions.scanRedis(applied.value, count.value) }
 
 const enabled = computed(() => serviceEnabled('redis'))
@@ -37,7 +37,7 @@ const stats = computed(() => [
   { label: 'Clés', value: r.keys.toLocaleString('fr-FR'), sub: 'Toutes les bases Redis' },
 ])
 
-/** TTL lisible : -1 sans expiration. */
+/** Readable TTL: -1 means no expiration. */
 function ttl(s: number) {
   if (s < 0) return 'Sans expiration'
   if (s < 60) return `${s} s`

@@ -28,19 +28,19 @@ const stats = computed(() => [
   { label: 'Ports publics', value: '80 / 443', sub: 'HTTP → HTTPS' },
   { label: 'Réponse', value: caddyUp.value ? `${16 + (state.cpuHistory[state.cpuHistory.length - 1] % 5)} ms` : '—', sub: 'Latence moyenne' },
 ])
-// Cibles d'alias : projets PHP et proxy hosts.
+// Alias targets: PHP projects and proxy hosts.
 const aliasTargets = computed(() => active.value
   .filter((d) => d.kind === 'php' || d.kind === 'proxy')
   .map((d) => ({ label: d.kind === 'proxy' ? `${d.name} · proxy` : `${d.name} · PHP ${d.php}`, value: d.name })))
 
 const dest = (d: Domain) => (d.kind === 'proxy' ? d.target : d.kind === 'alias' ? `→ ${d.aliasOf}` : d.kind === 'static' ? 'Fichiers' : `127.0.0.1:${containerFor(d)?.port ?? '—'}`)
-// Une route proxy relaie le WebSocket par défaut (Caddy) ; refusé, un upgrade reçoit 403 (v0.11.0).
+// A proxy route relays WebSocket by default (Caddy); when refused, an upgrade gets a 403 (v0.11.0).
 const wsAllowed = (d: Domain) => d.websocket !== false
 const kind = (d: Domain) => (d.kind === 'proxy' ? `Proxy direct · HTTPS · ${wsAllowed(d) ? 'WebSocket' : 'WebSocket refusé'}` : d.kind === 'alias' ? (isProxied(d) ? 'Alias de proxy · HTTPS' : 'Alias · HTTPS') : d.kind === 'static' ? `Site statique${d.spa ? ' (SPA)' : ''} · HTTPS` : 'Site PHP · HTTPS')
 
-/** Bloc Caddy d'un domaine ; l'alias d'un proxy host suit son upstream avec la cible comme en-tête Host. */
+/** Caddy block of a domain; a proxy host alias follows its upstream with the target as Host header. */
 function caddyBlock(d: Domain) {
-  // Un hôte statique est importé depuis son propre fichier, servi par le reverse proxy (dossier des projets monté en lecture seule).
+  // A static host is imported from its own file, served by the reverse proxy (projects folder mounted read-only).
   if (d.kind === 'static') return `# ${d.name} → ${servedPath(d)}\nimport /etc/caddy/sites/static/${simpleDomain(d.name)}_Caddyfile`
   const t = aliasTarget(d)
   const upstream = d.kind === 'proxy' ? d.target : t?.kind === 'proxy' ? `${t.target} {\n    header_up Host ${t.name}\n  }` : `frankenphp-${d.php}:80`
@@ -51,9 +51,9 @@ function caddyBlock(d: Domain) {
 }
 const caddyfile = computed(() => active.value.map(caddyBlock).join('\n\n'))
 
-// Caddyfiles des sites : un par projet PHP et par hôte statique, modifiables (les alias et proxy hosts n'en ont pas).
+// Site Caddyfiles: one per PHP project and per static host, editable (aliases and proxy hosts have none).
 const sites = computed(() => active.value.filter(hasSiteCaddyfile))
-// Le domaine reste renseigné après fermeture pour que le titre ne se vide pas pendant l'animation.
+// The domain stays set after closing so the title does not go blank during the animation.
 const editing = ref('')
 const editorOpen = ref(false)
 const edit = (name: string) => { editing.value = name; editorOpen.value = true }

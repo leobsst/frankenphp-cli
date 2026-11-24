@@ -1,16 +1,16 @@
 @import "tailwindcss";
 @import "@nuxt/ui";
 
-/* Classes des pages et composants communs, et de l'application qui les monte (embarquée ou mobile). */
+/* Classes of the shared pages and components, and of the application mounting them (embedded or mobile). */
 @source "../";
 @source "../../../embedded/src";
 
 /*
- * Palettes issues de la maquette Figma.
- * - brand  : couleur primaire, dérivée de --fm-primary (modifiable dans Paramètres)
- * - accent : couleur d'accentuation, dérivée de --fm-accent
- * - sage   : neutres de la maquette, teintés par --fm-tint (couleur primaire) :
- *            on garde leur clarté (L) et leur faible chroma (C), seule la teinte (h) suit.
+ * Palettes taken from the Figma mockup.
+ * - brand  : primary color, derived from --fm-primary (editable in Settings)
+ * - accent : accent color, derived from --fm-accent
+ * - sage   : mockup neutrals, tinted by --fm-tint (primary color):
+ *            their lightness (L) and low chroma (C) are kept, only the hue (h) follows.
  */
 @theme static {
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -19,7 +19,7 @@
   --color-brand-100: color-mix(in oklab, var(--fm-primary) 14%, white);
   --color-brand-200: color-mix(in oklab, var(--fm-primary) 30%, white);
   --color-brand-300: color-mix(in oklab, var(--fm-primary) 50%, white);
-  /* Primaire du mode sombre (Nuxt UI) : primaire éclaircie dans sa propre teinte. */
+  /* Dark mode primary (Nuxt UI): primary lightened within its own hue. */
   --color-brand-400: color-mix(in oklab, var(--fm-primary) 55%, oklch(from var(--fm-primary) 0.908 min(c, 0.1) h));
   --color-brand-500: var(--fm-primary);
   --color-brand-600: color-mix(in oklab, var(--fm-primary) 88%, black);
@@ -56,16 +56,16 @@
 :root {
   --fm-primary: #2563eb;
   --fm-accent: #8b5cf6;
-  /* Teinte des neutres (fonds, bordures, textes secondaires) en clair comme en sombre. */
+  /* Hue of the neutrals (backgrounds, borders, secondary text) in both light and dark mode. */
   --fm-tint: var(--fm-primary);
-  /* Neutres propres au mode sombre (aussi utilisés par l'aperçu des thèmes dans Paramètres). */
+  /* Dark-mode-specific neutrals (also used by the theme preview in Settings). */
   --fm-dark-bg: oklch(from var(--fm-tint) 0.239 min(c, 0.0185) h);
   --fm-dark-elevated: oklch(from var(--fm-tint) 0.266 min(c, 0.0213) h);
   --fm-dark-text: oklch(from var(--fm-tint) 0.940 min(c, 0.0125) h);
   --ui-radius: 0.3rem;
   --ui-header-height: 76px;
 
-  /* Jetons sémantiques Nuxt UI alignés sur la maquette (mode clair) */
+  /* Nuxt UI semantic tokens aligned with the mockup (light mode) */
   --ui-text: var(--color-sage-900);
   --ui-text-highlighted: var(--color-sage-900);
   --ui-text-toned: var(--color-sage-700);
@@ -124,15 +124,15 @@ body {
 }
 .fm-fade-in { animation: fm-fade-in 400ms ease; }
 
-/* Points de rupture de la maquette : mobile < 720px ≤ tablette < 1180px ≤ bureau */
+/* Mockup breakpoints: mobile < 720px ≤ tablet < 1180px ≤ desktop */
 @theme {
   --breakpoint-md: 45rem;
   --breakpoint-xl: 73.75rem;
 }
 
 /*
- * Zones sûres (encoche, barre d'accueil). iOS les donne par env() ; sous Android, Capacitor 8 les injecte
- * en variables --safe-area-inset-* quand la WebView les ignore.
+ * Safe areas (notch, home indicator). iOS provides them through env(); on Android, Capacitor 8 injects them as
+ * --safe-area-inset-* variables when the WebView ignores them.
  */
 :root {
   --sat: max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px));

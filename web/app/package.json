@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "Dashboard FrankenManager, commun au dashboard embarqué (web/embedded) et à l'app mobile : pages, composants et store branché sur l'API du daemon.",
+  "description": "FrankenManager dashboard, shared by the embedded dashboard (web/embedded) and the mobile app: pages, components and a store wired to the daemon API.",
   "dependencies": {
     "@iconify-json/lucide": "^1.2.154",
     "@nuxt/ui": "4.12.0",

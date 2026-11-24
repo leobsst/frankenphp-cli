@@ -25,10 +25,10 @@ const items = computed<DropdownMenuItem[][]>(() => {
     ])
   }
   const tools: DropdownMenuItem[] = []
-  // Projets PHP (caddy/sites/php-<version>/) et hôtes statiques (caddy/sites/static/) ont leur propre Caddyfile.
+  // PHP projects (caddy/sites/php-<version>/) and static hosts (caddy/sites/static/) have their own Caddyfile.
   if (hasSiteCaddyfile(d)) tools.push({ label: 'Modifier le Caddyfile', icon: 'i-lucide-file-code', onSelect: () => { caddyOpen.value = true } })
   if (d.kind !== 'alias') tools.push({ label: 'Régénérer le certificat', icon: 'i-lucide-shield-check', disabled: state.stack !== 'running', onSelect: () => actions.regenerateCert(d.name) })
-  // add-alias accepte un projet PHP ou un proxy host comme cible, pas un hôte statique.
+  // add-alias accepts a PHP project or a proxy host as target, not a static host.
   if (d.kind === 'php' || d.kind === 'proxy') tools.push({ label: 'Ajouter un alias', icon: 'i-lucide-link', onSelect: () => { aliasOpen.value = true } })
   if (tools.length) groups.push(tools)
   if (c && d.kind !== 'alias') {

@@ -3,8 +3,8 @@ import { computed, ref, watch } from 'vue'
 import { actions, caddyfilePathOf, containerFor, defaultCaddyfile, isCaddyfileCustom, loadCaddyfile, siteCaddyfile, state, toast } from '../composables/useFm'
 import { hasWebsocket, toggleWebsocket } from '../composables/caddyfile'
 
-// Éditeur du Caddyfile d'un site : caddy/sites/php-<version>/<domaine>_Caddyfile pour un projet PHP,
-// caddy/sites/static/<domaine>_Caddyfile pour un hôte statique (v0.9.0).
+// Editor for a site's Caddyfile: caddy/sites/php-<version>/<domain>_Caddyfile for a PHP project,
+// caddy/sites/static/<domain>_Caddyfile for a static host (v0.9.0).
 const props = defineProps<{ domain: string }>()
 const open = defineModel<boolean>('open', { default: false })
 
@@ -12,7 +12,7 @@ const text = ref('')
 const error = ref<string | null>(null)
 const saving = ref(false)
 const checking = ref(false)
-/** Résultat de la dernière vérification par Caddy : null tant que le texte n'a pas été vérifié. */
+/** Result of the last check by Caddy: null until the text has been checked. */
 const checked = ref<boolean | null>(null)
 const confirmReset = ref(false)
 const editor = ref<HTMLTextAreaElement>()
@@ -29,7 +29,7 @@ const lines = computed(() => text.value.split('\n').length)
 
 watch(open, async (o) => {
   if (!o) return
-  // Le fichier, son modèle et son chemin viennent du daemon (`GET /api/v1/hosts/{name}/caddyfile`).
+  // The file, its template and its path come from the daemon (`GET /api/v1/hosts/{name}/caddyfile`).
   text.value = ''
   try { await loadCaddyfile(props.domain) } catch (e) { toast('error', 'Lecture impossible', e instanceof Error ? e.message : String(e)) }
   text.value = saved.value
@@ -44,7 +44,7 @@ function onInput() {
   confirmReset.value = false
 }
 
-/** `POST /api/v1/hosts/{name}/caddyfile/validate` : vérifié par le Caddy du conteneur, rien n'est enregistré. */
+/** `POST /api/v1/hosts/{name}/caddyfile/validate`: checked by the container's Caddy, nothing is saved. */
 async function check() {
   checking.value = true
   const invalid = await actions.checkCaddyfile(props.domain, text.value)
@@ -54,7 +54,7 @@ async function check() {
   if (invalid) focusLine(invalid.line)
 }
 
-/** Tab insère une tabulation (indentation des Caddyfiles du CLI) au lieu de quitter le champ. */
+/** Tab inserts a tab character (the CLI's Caddyfile indentation) instead of leaving the field. */
 function onTab(e: KeyboardEvent) {
   const el = e.target as HTMLTextAreaElement
   const { selectionStart: a, selectionEnd: b } = el
@@ -72,7 +72,7 @@ function setWebsocket(on: boolean) {
   error.value = null
 }
 
-/** Place le curseur sur la ligne fautive pour la retrouver dans un long fichier. */
+/** Moves the cursor to the faulty line so it can be found in a long file. */
 function focusLine(line: number) {
   const el = editor.value
   if (!el) return
@@ -82,7 +82,7 @@ function focusLine(line: number) {
 }
 
 async function save() {
-  // Le daemon fait vérifier le fichier par le Caddy du conteneur avant de l'enregistrer.
+  // The daemon has the container's Caddy check the file before saving it.
   saving.value = true
   error.value = await actions.saveCaddyfile(props.domain, text.value)
   saving.value = false
@@ -144,7 +144,7 @@ async function reset() {
         :disabled="isTemplate && !isCaddyfileCustom(domain)" @click="reset"
       />
       <code class="hidden truncate font-mono text-[10px] text-dimmed lg:block">$ frankenmanager restart --caddy</code>
-      <!-- Sur téléphone, les boutons passent à la ligne et « Enregistrer » prend toute la largeur. -->
+      <!-- On phones, the buttons wrap and "Enregistrer" takes the full width. -->
       <div class="ml-auto flex flex-wrap justify-end gap-2 max-sm:w-full">
         <UButton color="neutral" variant="outline" label="Annuler" @click="close" />
         <UButton color="neutral" variant="outline" icon="i-lucide-shield-check" label="Vérifier" :loading="checking" @click="check" />

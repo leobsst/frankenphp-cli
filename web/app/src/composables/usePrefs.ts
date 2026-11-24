@@ -3,10 +3,10 @@ import { useRoute } from 'vue-router'
 import { useColorMode } from '@vueuse/core'
 import { state, type Prefs } from './useFm'
 
-/** Préférences en cours d'édition (prévisualisées en direct sur la page Paramètres). */
+/** Preferences being edited (previewed live on the Settings page). */
 export const draftPrefs = ref<Prefs>({ ...state.prefs })
 
-/** Applique thème, couleurs et animations à partir des préférences actives. */
+/** Applies theme, colors and animations from the active preferences. */
 export function useApplyPrefs() {
   const route = useRoute()
   const mode = useColorMode()

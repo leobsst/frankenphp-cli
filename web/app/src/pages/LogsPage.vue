@@ -13,7 +13,7 @@ const tabs = [{ label: 'Flux en direct', value: 'live' }, { label: 'Historique',
 
 const draft = reactive({ service: 'all', level: 'INFO' as LogLevel, period: '30', q: '', autoscroll: true })
 const applied = reactive({ ...draft })
-const pausedAt = ref<number | null>(null) // dernier log visible au moment de la pause
+const pausedAt = ref<number | null>(null) // last visible log when paused
 
 const sources = computed(() => [{ label: 'Tous les services', value: 'all' }, ...[...new Set(state.logs.map((l) => l.source))].sort().map((s) => ({ label: s, value: s }))])
 const warnings = computed(() => state.logs.filter((l) => l.level === 'WARN'))
