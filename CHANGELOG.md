@@ -79,6 +79,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Stops a running server before installing and starts it again on the new version (as the real user under `sudo`); a stopped server stays stopped, a failed install restarts the previous version. The restart no longer fails with "The server is already running": the stop now really removes the containers
   - Linux: grants port 53 again to the new binary, or tells to rerun `sudo frankenmanager setup`
 - `trust-ca` - Share the local mkcert root CA over the LAN (off by default)
+- `dashboard [--print]` - Open the dashboard, served by the daemon from the binary, at https://frankenmanager.test and https://<CLI_ALIAS>.test: names of this machine only (certificate, hosts entry and reverse proxy route, no LAN DNS record, no API through the proxy), the page signing in without the password at the daemon's HTTPS listener on 127.0.0.1 (`DASHBOARD_HTTPS_PORT`, 9444), which no other device reaches; `DASHBOARD_LOCAL_AUTH=true` asks for the password there too
 - `daemon start|stop|status|run` - The daemon behind the dashboard: one HTTP/JSON API (`api/openapi.yaml`) on a Unix socket for the CLI and on `127.0.0.1:DASHBOARD_PORT` for the dashboard (token of `daemon.token`, `Host` and `Origin` checked against DNS rebinding)
   - Actions run one at a time as operations, followed on an event stream (Server-Sent Events)
   - Serves the LAN DNS server and the root CA sharing in its own process

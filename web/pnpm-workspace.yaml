@@ -1,0 +1,6 @@
+packages:
+  - app
+  - embedded
+allowBuilds:
+  esbuild: true
+  vue-demi: true

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,6 +31,10 @@ type AccessConfig struct {
 	// TLSCert and TLSKey are the certificate of the remote access, empty
 	// to generate one
 	TLSCert, TLSKey string
+	// DashboardOrigins are the pages of this machine that sign in at the
+	// HTTPS listener on 127.0.0.1 without the password
+	// (https://frankenmanager.test, see the dashboard package)
+	DashboardOrigins []string
 }
 
 // PasswordSet reports whether the dashboard has a password.
@@ -61,10 +66,13 @@ const (
 
 // requester is who sends a request, as the guards found it.
 type requester struct {
-	remote  bool // through the remote access (LAN, Internet, tunnel)
-	ip      string
-	session *store.Session
-	token   string // the session token, to sign out
+	remote bool // through the remote access (LAN, Internet, tunnel)
+	// dashboard: through the HTTPS listener on 127.0.0.1, the dashboard of
+	// this machine (see dashboardGuard)
+	dashboard bool
+	ip        string
+	session   *store.Session
+	token     string // the session token, to sign out
 }
 
 type requesterKey struct{}
@@ -213,6 +221,7 @@ var publicPaths = map[string]bool{
 	"/api/health":        true,
 	"/api/v1/auth":       true,
 	"/api/v1/auth/login": true,
+	"/api/v1/auth/local": true,
 }
 
 // streamPaths are the routes a browser opens without custom headers (event
@@ -226,8 +235,11 @@ func streamPath(r *http.Request) bool {
 // requireSession lets r through with a valid session, or answers 401.
 func (s *Server) requireSession(w http.ResponseWriter, r *http.Request, rq requester, next http.Handler) {
 	if !publicPaths[r.URL.Path] {
-		token := sessionToken(r, rq.remote)
-		if token == "" && rq.remote && streamPath(r) {
+		// The remote access and the dashboard listener carry the session in
+		// the Authorization header: the daemon token is for 127.0.0.1:PORT
+		bearer := rq.remote || rq.dashboard
+		token := sessionToken(r, bearer)
+		if token == "" && bearer && streamPath(r) {
 			token = r.URL.Query().Get("access_token")
 		}
 		rq.session = s.session(token, rq.ip)
@@ -255,6 +267,12 @@ func (s *Server) guard(next http.Handler) http.Handler {
 		}
 		if !allowed(r.Host) {
 			writeError(w, http.StatusForbidden, i18n.T("Forbidden host."))
+			return
+		}
+		if !isAPI(r.URL.Path) {
+			// The pages, served at https://frankenmanager.test by the reverse
+			// proxy: they reach the API at the HTTPS listener on 127.0.0.1
+			s.serveUI(w, r, uiConfig{API: "https://" + net.JoinHostPort("127.0.0.1", strconv.Itoa(s.HTTPSPort)), Mode: "local"})
 			return
 		}
 		if origin := r.Header.Get("Origin"); origin != "" && !allowed(strings.TrimPrefix(origin, "http://")) {
@@ -301,6 +319,11 @@ func (s *Server) remoteGuard(next http.Handler) http.Handler {
 			writeError(w, http.StatusForbidden, i18n.T("This address may not reach the dashboard."))
 			return
 		}
+		if !isAPI(r.URL.Path) && !crossOrigin {
+			// The pages of the dashboard, which signs in with the password
+			s.serveUI(w, r, uiConfig{Mode: "remote"})
+			return
+		}
 		if crossOrigin {
 			if !appOrigin(origin) {
 				writeError(w, http.StatusForbidden, i18n.T("Forbidden origin."))
@@ -312,6 +335,51 @@ func (s *Server) remoteGuard(next http.Handler) http.Handler {
 				return
 			}
 		}
+		s.requireSession(w, r, rq, next)
+	})
+}
+
+// dashboardGuard protects the HTTPS listener on 127.0.0.1, behind
+// https://frankenmanager.test: the page served there signs in at
+// POST /api/v1/auth/local without the password, then sends that session as
+// Authorization: Bearer. Only a browser of this machine reaches 127.0.0.1,
+// and only the dashboard origins are answered (Host and Origin checked, no
+// DNS rebinding). With DASHBOARD_LOCAL_AUTH, the password is required here
+// too. The requests count as local: no confirmation of the destructive
+// actions.
+func (s *Server) dashboardGuard(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("Strict-Transport-Security", "max-age=31536000")
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("Cache-Control", "no-store")
+		port := strconv.Itoa(s.HTTPSPort)
+		if !strings.EqualFold(r.Host, "127.0.0.1:"+port) && !strings.EqualFold(r.Host, "localhost:"+port) {
+			writeError(w, http.StatusForbidden, i18n.T("Forbidden host."))
+			return
+		}
+		origin := r.Header.Get("Origin")
+		if origin != "" {
+			if !slices.Contains(s.access().DashboardOrigins, origin) {
+				writeError(w, http.StatusForbidden, i18n.T("Forbidden origin."))
+				return
+			}
+			h.Set("Access-Control-Allow-Origin", origin)
+			h.Add("Vary", "Origin")
+			h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE")
+			h.Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+			h.Set("Access-Control-Expose-Headers", "Content-Disposition")
+			h.Set("Access-Control-Max-Age", "600")
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusNoContent)
+				return
+			}
+		}
+		if !isAPI(r.URL.Path) {
+			s.serveUI(w, r, uiConfig{Mode: "local"})
+			return
+		}
+		rq := requester{dashboard: true, ip: clientAddr(r).String()}
 		s.requireSession(w, r, rq, next)
 	})
 }

@@ -2,6 +2,7 @@ package stack
 
 import (
 	"context"
+	"net"
 	"os"
 	"path/filepath"
 	"slices"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/leobsst/frankenphp-cli/internal/core/caddyfile"
 	"github.com/leobsst/frankenphp-cli/internal/core/compose"
+	"github.com/leobsst/frankenphp-cli/internal/core/dashboard"
 	"github.com/leobsst/frankenphp-cli/internal/core/dns"
 	"github.com/leobsst/frankenphp-cli/internal/core/docker"
 	"github.com/leobsst/frankenphp-cli/internal/core/env"
@@ -167,7 +169,9 @@ func WriteMain(caddyDir string, e *env.Env, s *store.Store) error {
 	return caddyfile.WriteMain(caddyDir, caddyfile.Main{
 		Domains: domains, Aliases: aliases, Proxies: proxies, Statics: statics,
 		DBAdminTarget: e.DBAdminTarget(), WebsocketTarget: soketi.Target(e),
-		S3Target: s3.ProxyTarget(e),
+		S3Target:         s3.ProxyTarget(e),
+		DashboardDomains: dashboard.Domains(e),
+		DashboardTarget:  net.JoinHostPort("127.0.0.1", e.Get(env.DashboardPortKey)),
 	})
 }
 
@@ -448,6 +452,13 @@ func (s *Service) Start(ctx context.Context, o StartOptions) (StartResult, error
 	if s3.Enabled(e) && !slices.Contains(all, s3.Domain) {
 		served = append(served, s3.Domain)
 	}
+	// The dashboard on this machine: a certificate and a hosts entry, never
+	// a record of the LAN DNS server
+	for _, d := range dashboard.Domains(e) {
+		if !slices.Contains(served, d) {
+			served = append(served, d)
+		}
+	}
 
 	certs, err := s.Certs(filepath.Join(caddyDir, "certs"))
 	if err != nil {
@@ -473,7 +484,9 @@ func (s *Service) Start(ctx context.Context, o StartOptions) (StartResult, error
 	if err := caddyfile.WriteMain(caddyDir, caddyfile.Main{
 		Domains: merged, Aliases: aliasEntries, Proxies: proxies, Statics: statics,
 		DBAdminTarget: e.DBAdminTarget(), WebsocketTarget: soketi.Target(e),
-		S3Target: s3.ProxyTarget(e),
+		S3Target:         s3.ProxyTarget(e),
+		DashboardDomains: dashboard.Domains(e),
+		DashboardTarget:  net.JoinHostPort("127.0.0.1", e.Get(env.DashboardPortKey)),
 	}); err != nil {
 		return fail(err)
 	}
@@ -634,6 +647,7 @@ func (s *Service) Restart(ctx context.Context, targets []string, forceSSL, build
 		if s3.Enabled(e) {
 			domains = append(domains, s3.Domain)
 		}
+		domains = append(domains, dashboard.Domains(e)...)
 		s.Log.Break()
 		s.Log.Step(i18n.T("Generating SSL certificates..."))
 		// <CADDY_DIR>/certs, like the other commands, not CERTS_DIR
@@ -642,6 +656,16 @@ func (s *Service) Restart(ctx context.Context, targets []string, forceSSL, build
 			return err
 		}
 		if err := certs.GenerateAll(ctx, domains, forceSSL, e.IsProduction()); err != nil {
+			return err
+		}
+		// The dashboard names, for a server started by a release without
+		// them: their hosts entries and their routes in the main Caddyfile
+		for _, name := range dashboard.Domains(e) {
+			if _, err := s.Hosts.AddEntry(ctx, "127.0.0.1", name); err != nil {
+				return err
+			}
+		}
+		if err := WriteMain(e.ResolveDir("CADDY_DIR", "./caddy", s.Dir), e, st); err != nil {
 			return err
 		}
 	}

@@ -1,0 +1,4 @@
+node_modules/
+# The dashboard build is embedded by go:embed; only .gitkeep is tracked.
+embedded/dist/*
+!embedded/dist/.gitkeep

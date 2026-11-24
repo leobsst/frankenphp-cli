@@ -166,6 +166,7 @@ frankenmanager setup --status
 | `frankenmanager trust-ca on \| off \| status [--port <port>]` | Share the local mkcert root CA over the LAN so other devices can trust your `.test` domains (off by default) |
 | `frankenmanager daemon start\|stop\|status\|run` | Start, stop or check the daemon: dashboard API, LAN DNS server, root CA sharing (see [Daemon](#daemon)) |
 | `frankenmanager daemon password` | Set the password of the dashboard, required for its [remote access](#remote-access-to-the-dashboard) |
+| `frankenmanager dashboard [--print]` | Open the dashboard in the browser, at https://frankenmanager.test (see [Dashboard](#dashboard)) |
 | `frankenmanager --help` | Show help for all commands |
 
 ## Usage
@@ -980,9 +981,21 @@ frankenmanager daemon run      # Run it in the foreground (what the service mana
 **API.** The daemon serves one HTTP/JSON API, versioned under `/api/v1` and described in [`api/openapi.yaml`](api/openapi.yaml):
 - on the Unix socket `daemon.sock` of the FrankenManager directory, readable by your user only, for the CLI;
 - on `http://127.0.0.1:9081` (`DASHBOARD_PORT`), for the dashboard on this machine: every request needs the token of `daemon.token` (`Authorization: Bearer <token>`), and requests whose `Host` or `Origin` is not this local address are refused (DNS rebinding);
+- on `https://127.0.0.1:9444` (`DASHBOARD_HTTPS_PORT`), for the dashboard page of this machine (see [Dashboard](#dashboard));
 - on `https://<this machine>:9443` (`DASHBOARD_REMOTE_PORT`) when the [remote access](#remote-access-to-the-dashboard) is on.
 
 The actions answer at once with an operation, run in turn; their steps and result stream on `/api/v1/events` (Server-Sent Events), with the state of the containers whenever Docker reports a change. Besides what the CLI does, the API offers what the dashboard needs: the containers one by one, their CPU and memory usage and a live log stream (read from the Docker Engine API, no `docker` process per call), the certificate of one host, the site Caddyfiles (read, check with Caddy, save, back to the template), the Redis cache (stats, keys, flush), the databases and users of MariaDB, MySQL and PostgreSQL, and the objects of the S3 buckets (list, upload, download, public or private, public URL or temporary link).
+
+#### Dashboard
+
+The daemon serves the dashboard, built into the binary. On this machine, open it with `frankenmanager dashboard`, or type https://frankenmanager.test (or https://fkm.test, after the `CLI_ALIAS`) in the browser: it opens without any password.
+
+- These names are for this machine only: `start` (or `restart`) gives them a certificate, a hosts entry and a route of the reverse proxy, never a record of the LAN DNS server, and the reverse proxy serves the pages only, not the API.
+- A name already taken by one of your hosts (a project, proxy, static host or alias called `frankenmanager.test`) stays with it, and its pages cannot sign in the dashboard: use the other name, or change `CLI_ALIAS`.
+- The page signs in by calling the daemon at `https://127.0.0.1:9444` (`DASHBOARD_HTTPS_PORT`), which no other device reaches, from these names only (`Origin` and `Host` checked); its session is kept in the browser. With `DASHBOARD_LOCAL_AUTH=true`, it asks for the password instead.
+- Before the stack runs, `frankenmanager dashboard` opens `https://127.0.0.1:9444` itself.
+- From another device, the dashboard answers at the [remote access](#remote-access-to-the-dashboard), with the password.
+- From the source, `make web` builds the pages (pnpm) before `make build`; without it, the daemon answers that the dashboard is not part of the build.
 
 #### Remote access to the dashboard
 
@@ -1244,6 +1257,7 @@ frankenmanager completion powershell >> $PROFILE
 | `CLI_ALIAS` | `fkm` | Short alias of the command, see [CLI alias](#cli-alias) (empty: none) |
 | `CLI_LANGUAGE` | `auto` | Language of the messages: `auto`, `en` or `fr`, see [Language](#language) |
 | `DASHBOARD_PORT` | `9081` | Port of the dashboard API, on 127.0.0.1, see [Daemon](#daemon) |
+| `DASHBOARD_HTTPS_PORT` | `9444` | HTTPS port of the dashboard on 127.0.0.1, behind https://frankenmanager.test, see [Dashboard](#dashboard) |
 | `DAEMON_AUTOSTART` | `true` | Run the daemon at login through the OS service manager; `false`: started on demand only |
 | `DASHBOARD_ACCESS` | `local` | Who reaches the dashboard: `local` (this machine), `lan` (also the local networks) or `internet` (any address), see [Remote access](#remote-access-to-the-dashboard) |
 | `DASHBOARD_REMOTE_PORT` | `9443` | HTTPS port of the remote access |

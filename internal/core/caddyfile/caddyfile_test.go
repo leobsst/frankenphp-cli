@@ -100,6 +100,28 @@ func TestWriteMainSkipsRegisteredWebsocketHost(t *testing.T) {
 	}
 }
 
+// The dashboard names serve the daemon's pages once their certificate
+// exists, as asked at the daemon's own address, and never its API.
+func TestWriteMainDashboard(t *testing.T) {
+	caddyDir := t.TempDir()
+	write(t, filepath.Join(caddyDir, "certs", "frankenmanager.test.pem"), "")
+	err := WriteMain(caddyDir, Main{DashboardDomains: []string{"frankenmanager.test", "fkm.test"}, DashboardTarget: "127.0.0.1:9081"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := read(t, filepath.Join(caddyDir, MainName))
+	for _, want := range []string{"frankenmanager.test {", "\t@api path /api /api/*", "\trespond @api 404",
+		"\treverse_proxy 127.0.0.1:9081 {", "\t\theader_up Host 127.0.0.1:9081"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q:\n%s", want, got)
+		}
+	}
+	// fkm.test has no certificate yet: Caddy would refuse the whole file
+	if strings.Contains(got, "fkm.test {") {
+		t.Errorf("block without its certificate:\n%s", got)
+	}
+}
+
 // An alias of a proxy host forwards to its upstream with the target as Host.
 func TestWriteMainProxyAlias(t *testing.T) {
 	caddyDir := t.TempDir()

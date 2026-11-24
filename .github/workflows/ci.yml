@@ -83,6 +83,12 @@ jobs:
         with:
           go-version: "1.27.x"
 
+      # The dashboard, embedded in the binaries (go:embed of web/embedded/dist)
+      - name: Build the dashboard
+        run: |
+          npm install --global pnpm@10.33.0
+          make web
+
       - name: Cross-compile every target without cgo
         run: make build-all
 

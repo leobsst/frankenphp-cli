@@ -1,0 +1,145 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+/* Classes of the shared pages and components, and of the application mounting them (embedded or mobile). */
+@source "../";
+@source "../../../embedded/src";
+
+/*
+ * Palettes taken from the Figma mockup.
+ * - brand  : primary color, derived from --fm-primary (editable in Settings)
+ * - accent : accent color, derived from --fm-accent
+ * - sage   : mockup neutrals, tinted by --fm-tint (primary color):
+ *            their lightness (L) and low chroma (C) are kept, only the hue (h) follows.
+ */
+@theme static {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  --color-brand-50: color-mix(in oklab, var(--fm-primary) 7%, white);
+  --color-brand-100: color-mix(in oklab, var(--fm-primary) 14%, white);
+  --color-brand-200: color-mix(in oklab, var(--fm-primary) 30%, white);
+  --color-brand-300: color-mix(in oklab, var(--fm-primary) 50%, white);
+  /* Dark mode primary (Nuxt UI): primary lightened within its own hue. */
+  --color-brand-400: color-mix(in oklab, var(--fm-primary) 55%, oklch(from var(--fm-primary) 0.908 min(c, 0.1) h));
+  --color-brand-500: var(--fm-primary);
+  --color-brand-600: color-mix(in oklab, var(--fm-primary) 88%, black);
+  --color-brand-700: color-mix(in oklab, var(--fm-primary) 75%, black);
+  --color-brand-800: color-mix(in oklab, var(--fm-primary) 60%, black);
+  --color-brand-900: color-mix(in oklab, var(--fm-primary) 45%, black);
+  --color-brand-950: color-mix(in oklab, var(--fm-primary) 30%, black);
+
+  --color-accent-50: color-mix(in oklab, var(--fm-accent) 7%, white);
+  --color-accent-100: color-mix(in oklab, var(--fm-accent) 14%, white);
+  --color-accent-200: color-mix(in oklab, var(--fm-accent) 30%, white);
+  --color-accent-300: color-mix(in oklab, var(--fm-accent) 50%, white);
+  --color-accent-400: color-mix(in oklab, var(--fm-accent) 75%, white);
+  --color-accent-500: var(--fm-accent);
+  --color-accent-600: color-mix(in oklab, var(--fm-accent) 88%, black);
+  --color-accent-700: color-mix(in oklab, var(--fm-accent) 75%, black);
+  --color-accent-800: color-mix(in oklab, var(--fm-accent) 60%, black);
+  --color-accent-900: color-mix(in oklab, var(--fm-accent) 45%, black);
+  --color-accent-950: color-mix(in oklab, var(--fm-accent) 30%, black);
+
+  --color-sage-50: oklch(from var(--fm-tint) 0.98 min(c, 0.0025) h);
+  --color-sage-100: oklch(from var(--fm-tint) 0.96 min(c, 0.0066) h);
+  --color-sage-200: oklch(from var(--fm-tint) 0.931 min(c, 0.0092) h);
+  --color-sage-300: oklch(from var(--fm-tint) 0.86 min(c, 0.0145) h);
+  --color-sage-400: oklch(from var(--fm-tint) 0.696 min(c, 0.0269) h);
+  --color-sage-500: oklch(from var(--fm-tint) 0.563 min(c, 0.0228) h);
+  --color-sage-600: oklch(from var(--fm-tint) 0.48 min(c, 0.0225) h);
+  --color-sage-700: oklch(from var(--fm-tint) 0.362 min(c, 0.0307) h);
+  --color-sage-800: oklch(from var(--fm-tint) 0.319 min(c, 0.0265) h);
+  --color-sage-900: oklch(from var(--fm-tint) 0.275 min(c, 0.0274) h);
+  --color-sage-950: oklch(from var(--fm-tint) 0.208 min(c, 0.0145) h);
+}
+
+:root {
+  --fm-primary: #2563eb;
+  --fm-accent: #8b5cf6;
+  /* Hue of the neutrals (backgrounds, borders, secondary text) in both light and dark mode. */
+  --fm-tint: var(--fm-primary);
+  /* Dark-mode-specific neutrals (also used by the theme preview in Settings). */
+  --fm-dark-bg: oklch(from var(--fm-tint) 0.239 min(c, 0.0185) h);
+  --fm-dark-elevated: oklch(from var(--fm-tint) 0.266 min(c, 0.0213) h);
+  --fm-dark-text: oklch(from var(--fm-tint) 0.940 min(c, 0.0125) h);
+  --ui-radius: 0.3rem;
+  --ui-header-height: 76px;
+
+  /* Nuxt UI semantic tokens aligned with the mockup (light mode) */
+  --ui-text: var(--color-sage-900);
+  --ui-text-highlighted: var(--color-sage-900);
+  --ui-text-toned: var(--color-sage-700);
+  --ui-text-muted: var(--color-sage-500);
+  --ui-text-dimmed: var(--color-sage-400);
+  --ui-bg: #ffffff;
+  --ui-bg-muted: var(--color-sage-50);
+  --ui-bg-elevated: var(--color-sage-50);
+  --ui-bg-accented: var(--color-sage-200);
+  --ui-border: var(--color-sage-200);
+  --ui-border-muted: var(--color-sage-200);
+  --ui-border-accented: var(--color-sage-300);
+  --ui-warning: #a86b1d;
+  --ui-error: #b33a3a;
+}
+
+.dark {
+  --ui-text: var(--fm-dark-text);
+  --ui-text-highlighted: oklch(from var(--fm-tint) 0.964 min(c, 0.0091) h);
+  --ui-text-toned: oklch(from var(--fm-tint) 0.818 min(c, 0.0207) h);
+  --ui-text-muted: var(--color-sage-400);
+  --ui-text-dimmed: oklch(from var(--fm-tint) 0.591 min(c, 0.0278) h);
+  --ui-bg: var(--fm-dark-bg);
+  --ui-bg-muted: var(--color-sage-950);
+  --ui-bg-elevated: var(--fm-dark-elevated);
+  --ui-bg-accented: var(--color-sage-800);
+  --ui-border: var(--color-sage-800);
+  --ui-border-muted: var(--color-sage-800);
+  --ui-border-accented: var(--color-sage-700);
+  --ui-warning: #e3a54a;
+  --ui-error: #d65757;
+}
+
+@media (max-width: 1179px) {
+  :root { --ui-header-height: 72px; }
+}
+@media (max-width: 719px) {
+  :root { --ui-header-height: 64px; }
+}
+
+html.reduce-motion *,
+html.reduce-motion *::before,
+html.reduce-motion *::after {
+  transition-duration: 0ms !important;
+  animation-duration: 0ms !important;
+}
+
+body {
+  @apply bg-muted text-default antialiased;
+  font-size: 13px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@keyframes fm-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+}
+.fm-fade-in { animation: fm-fade-in 400ms ease; }
+
+/* Mockup breakpoints: mobile < 720px ≤ tablet < 1180px ≤ desktop */
+@theme {
+  --breakpoint-md: 45rem;
+  --breakpoint-xl: 73.75rem;
+}
+
+/*
+ * Safe areas (notch, home indicator). iOS provides them through env(); on Android, Capacitor 8 injects them as
+ * --safe-area-inset-* variables when the WebView ignores them.
+ */
+:root {
+  --sat: max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px));
+  --sab: max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px));
+  --sal: max(env(safe-area-inset-left, 0px), var(--safe-area-inset-left, 0px));
+  --sar: max(env(safe-area-inset-right, 0px), var(--safe-area-inset-right, 0px));
+}
+.pt-safe { padding-top: var(--sat); }
+.pb-safe { padding-bottom: var(--sab); }
+.px-safe { padding-left: max(1rem, var(--sal)); padding-right: max(1rem, var(--sar)); }

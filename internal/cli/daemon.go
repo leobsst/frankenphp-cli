@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -18,6 +19,7 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/core/access"
 	"github.com/leobsst/frankenphp-cli/internal/core/buckets"
 	"github.com/leobsst/frankenphp-cli/internal/core/caserver"
+	"github.com/leobsst/frankenphp-cli/internal/core/dashboard"
 	"github.com/leobsst/frankenphp-cli/internal/core/dnswatcher"
 	"github.com/leobsst/frankenphp-cli/internal/core/docker"
 	"github.com/leobsst/frankenphp-cli/internal/core/domains"
@@ -30,6 +32,7 @@ import (
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
 	"github.com/leobsst/frankenphp-cli/internal/platform"
 	"github.com/leobsst/frankenphp-cli/internal/version"
+	"github.com/leobsst/frankenphp-cli/web"
 )
 
 func newDaemonCmd(a *app) *cobra.Command {
@@ -189,6 +192,15 @@ func (a *app) runDaemon(ctx context.Context) error {
 	}
 
 	a.log.Success(i18n.Tf("Dashboard API listening on http://%s (token: %s)", local.Addr(), filepath.Join(dir, daemon.TokenFile)))
+	// The dashboard behind https://frankenmanager.test: HTTPS on 127.0.0.1,
+	// which a page served over HTTPS may call
+	httpsPort := dashboard.HTTPSPort(e)
+	dash, err := a.listenDashboard(ctx, dir, httpsPort)
+	if err != nil {
+		a.log.Warning(i18n.Tf("Dashboard HTTPS on 127.0.0.1 is off: %v", err))
+	} else {
+		a.log.Success(i18n.Tf("Dashboard listening on https://%s", dash.Addr()))
+	}
 	a.log.Info(i18n.Tf("CLI socket: %s", socketPath))
 	// The background processes of earlier releases: the daemon serves the
 	// LAN DNS server and shares the root CA itself now
@@ -211,9 +223,27 @@ func (a *app) runDaemon(ctx context.Context) error {
 	srv.RemoteCert = func(cfg daemon.AccessConfig) (string, string, error) { return a.remoteCert(ctx, dir, cfg) }
 	srv.LANIP = a.deps.LANIP
 	srv.Logf = func(format string, args ...any) { fmt.Fprintf(a.errOut, format+"\n", args...) }
-	err = srv.Serve(ctx, socket, local)
+	srv.UI = web.Dashboard()
+	srv.HTTPSPort = httpsPort
+	err = srv.Serve(ctx, socket, local, dash)
 	a.log.Info(i18n.T("Dashboard API stopped."))
 	return err
+}
+
+// listenDashboard listens in HTTPS on 127.0.0.1:port with the certificate
+// of the remote access, generated with mkcert for 127.0.0.1 and localhost
+// among others (an own DASHBOARD_TLS_CERT may not name them: not used here).
+func (a *app) listenDashboard(ctx context.Context, dir string, port int) (net.Listener, error) {
+	certFile, keyFile, err := a.remoteCert(ctx, dir, daemon.AccessConfig{})
+	if err != nil {
+		return nil, err
+	}
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return nil, err
+	}
+	return tls.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)),
+		&tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}})
 }
 
 // listenSocket listens on the Unix socket path, readable by the user only.

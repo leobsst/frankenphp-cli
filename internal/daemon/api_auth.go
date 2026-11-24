@@ -33,9 +33,9 @@ func (s *Server) authState(w http.ResponseWriter, r *http.Request) {
 	cfg, rq := s.access(), requesterOf(r)
 	st := AuthState{Mode: cfg.Mode, PasswordSet: cfg.PasswordSet(), LocalAuth: cfg.LocalAuth,
 		RemotePort: cfg.RemotePort, RemoteActive: s.remote.running() != "", Remote: rq.remote,
-		SessionRequired: rq.remote || (cfg.LocalAuth && cfg.PasswordSet())}
+		SessionRequired: rq.remote || rq.dashboard || (cfg.LocalAuth && cfg.PasswordSet())}
 	if st.SessionRequired {
-		st.Authenticated = s.session(sessionToken(r, rq.remote), rq.ip) != nil
+		st.Authenticated = s.session(sessionToken(r, rq.remote || rq.dashboard), rq.ip) != nil
 	}
 	writeJSON(w, http.StatusOK, st)
 }
@@ -86,6 +86,14 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.limiter.succeeded(rq.ip)
+	s.openSession(w, rq, device, "login")
+}
+
+// openSession records a new session of device and answers its token: a
+// cookie for a browser of the remote access or of 127.0.0.1:PORT, the token
+// in the answer for an app and for the dashboard listener (Bearer).
+func (s *Server) openSession(w http.ResponseWriter, rq requester, device, event string) {
+	now := time.Now()
 	st, err := s.openStore()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -99,9 +107,32 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	s.logAccess(rq, "login", device)
-	setSessionCookie(w, token, rq.remote)
+	s.logAccess(rq, event, device)
+	if !rq.dashboard {
+		setSessionCookie(w, token, rq.remote)
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"token": token, "session": sess})
+}
+
+// localLogin signs in the dashboard of this machine without the password:
+// only through the HTTPS listener on 127.0.0.1, from a dashboard origin
+// (dashboardGuard), which only a browser of this machine reaches. With
+// DASHBOARD_LOCAL_AUTH, the password is required: POST /api/v1/auth/login.
+func (s *Server) localLogin(w http.ResponseWriter, r *http.Request) {
+	rq := requesterOf(r)
+	if !rq.dashboard || r.Header.Get("Origin") == "" {
+		writeError(w, http.StatusNotFound, i18n.T("Not found."))
+		return
+	}
+	if cfg := s.access(); cfg.LocalAuth && cfg.PasswordSet() {
+		writeError(w, http.StatusForbidden, i18n.T("The dashboard password is required on this machine too (DASHBOARD_LOCAL_AUTH)."))
+		return
+	}
+	device := r.UserAgent()
+	if len(device) > 200 {
+		device = device[:200]
+	}
+	s.openSession(w, rq, device, "local_login")
 }
 
 // logout ends the session of the request.
