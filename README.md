@@ -1021,6 +1021,10 @@ frankenmanager trust-ca on                            # Then install the root CA
 - Five wrong passwords from an address lock it for 15 minutes.
 - The settings apply within 30 seconds, without restarting anything.
 
+#### Mobile app
+
+An iOS and Android app (Capacitor) manages several instances through their remote access, with the same pages as the dashboard. Pair it by scanning the QR code shown by the dashboard (or sign in with the address and the password); each session token is kept in the iOS Keychain or the Android Keystore. It lives in [`web/mobile`](web/mobile/README.md), next to the dashboard in the `web/` pnpm workspace, and is built apart from `make web`: `pnpm --dir web mobile:build`, `mobile:ios` and `mobile:android` prepare the web bundle and the native projects (signing and version come from environment variables, see its README). It is not published to the stores yet.
+
 ### Show version
 
 ```bash
