@@ -21,6 +21,16 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!--
+              Pairing links (frankenmanager://pair?...): the QR code shown by the dashboard opens the app when scanned
+              with the system camera. Handled by src/lib/pairing.ts (appUrlOpen event of @capacitor/app).
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="frankenmanager" android:host="pair" />
+            </intent-filter>
         </activity>
 
         <provider
@@ -44,4 +54,7 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- QR code pairing (@capacitor/barcode-scanner). -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
 </manifest>

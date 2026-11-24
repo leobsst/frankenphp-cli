@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { onMounted, reactive } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { DropdownMenuItem } from '@nuxt/ui'
 import { client, logout, type Status } from '@app/lib/api'
 import { current, removeInstance, setCurrent, store, type Instance } from '../lib/instances'
+import { openPairing, scanPairing } from '../lib/pairing'
 
 const router = useRouter()
 const version = __APP_VERSION__
@@ -41,6 +42,18 @@ async function open(inst: Instance) {
   if (inst.expired) return router.push(`/instances/${inst.id}/connexion`)
   await setCurrent(inst.id)
   router.push('/')
+}
+
+/** Pairing with the QR code of the dashboard. */
+const scanError = ref('')
+async function scan() {
+  scanError.value = ''
+  try {
+    const link = await scanPairing()
+    if (link) await openPairing(router, link)
+  } catch (e) {
+    scanError.value = e instanceof Error ? e.message : String(e)
+  }
 }
 
 const menu = (inst: Instance): DropdownMenuItem[] => [
@@ -81,14 +94,17 @@ const dot: Record<Probe['state'], string> = {
     </header>
 
     <main class="px-safe space-y-3 py-3">
+      <UAlert v-if="scanError" color="error" variant="subtle" icon="i-lucide-circle-alert" :description="scanError" />
+
       <div v-if="!store.list.length" class="rounded-lg border border-dashed border-accented bg-default p-6 text-center space-y-3">
         <UIcon name="i-lucide-smartphone" class="size-10 text-primary mx-auto" />
         <h2 class="font-semibold text-highlighted">Aucune instance</h2>
         <p class="text-sm text-muted">
-          Sur la machine qui fait tourner FrankenManager, ouvrez l’accès distant (<code>DASHBOARD_ACCESS=lan</code>) avec un mot de passe
-          (<code>frankenmanager daemon password</code>), puis ajoutez son adresse ici.
+          Sur la machine qui fait tourner FrankenManager, ouvrez l’accès distant (<code>DASHBOARD_ACCESS=lan</code>), puis scannez le QR
+          code d’appairage de son dashboard (Accès distant), ou ajoutez son adresse avec le mot de passe du dashboard.
         </p>
-        <UButton to="/instances/ajouter" icon="i-lucide-plus" label="Ajouter une instance" size="lg" />
+        <UButton icon="i-lucide-scan-qr-code" label="Appairer avec un QR code" size="lg" block @click="scan" />
+        <UButton to="/instances/ajouter" icon="i-lucide-plus" label="Ajouter avec le mot de passe" color="neutral" variant="outline" size="lg" block />
       </div>
 
       <div
@@ -117,7 +133,10 @@ const dot: Record<Probe['state'], string> = {
         </UDropdownMenu>
       </div>
 
-      <UButton v-if="store.list.length" to="/instances/ajouter" icon="i-lucide-plus" label="Ajouter une instance" color="neutral" variant="outline" size="lg" block />
+      <template v-if="store.list.length">
+        <UButton icon="i-lucide-scan-qr-code" label="Appairer avec un QR code" size="lg" block @click="scan" />
+        <UButton to="/instances/ajouter" icon="i-lucide-plus" label="Ajouter avec le mot de passe" color="neutral" variant="outline" size="lg" block />
+      </template>
 
       <p class="pt-4 text-center text-xs text-dimmed">FrankenManager mobile {{ version }} ({{ build }})</p>
     </main>

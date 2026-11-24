@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { ApiError, health, hostInfo, login, logout } from '@app/lib/api'
 import { deviceName } from '../lib/device'
 import { findInstance, newId, normalizeUrl, setCurrent, upsertInstance } from '../lib/instances'
+import { openPairing, scanPairing } from '../lib/pairing'
 
 // Adds an instance, or signs in again to an instance whose session expired (props.id).
 const props = defineProps<{ id?: string }>()
@@ -54,6 +55,16 @@ async function submit() {
   }
 }
 
+/** Pairing with the QR code of the dashboard, instead of the address and password. */
+async function scan() {
+  error.value = ''
+  try {
+    const link = await scanPairing()
+    if (link) await openPairing(router, link)
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e)
+  }
+}
 </script>
 
 <template>
@@ -63,7 +74,14 @@ async function submit() {
       <h1 class="text-lg font-semibold text-highlighted">{{ existing ? 'Se reconnecter' : 'Ajouter une instance' }}</h1>
     </header>
 
-    <main class="px-safe py-3">
+    <main class="px-safe space-y-5 py-3">
+      <div class="space-y-2">
+        <UButton icon="i-lucide-scan-qr-code" label="Appairer avec un QR code" size="xl" block @click="scan" />
+        <p class="text-center text-xs text-muted">Affichez le QR code d’appairage dans le dashboard de la machine (Accès distant).</p>
+      </div>
+
+      <USeparator label="ou avec le mot de passe" />
+
       <form class="space-y-5" @submit.prevent="submit">
         <UFormField label="Adresse de l’accès distant" help="IP ou nom de la machine, port 9443 par défaut (DASHBOARD_REMOTE_PORT)." required>
           <UInput
@@ -87,7 +105,7 @@ async function submit() {
 
         <UAlert v-if="error" color="error" variant="subtle" icon="i-lucide-circle-alert" :description="error" />
 
-        <UButton type="submit" label="Se connecter" size="xl" block :loading="busy" :disabled="!url || !password" />
+        <UButton type="submit" label="Se connecter" color="neutral" variant="outline" size="xl" block :loading="busy" :disabled="!url || !password" />
 
         <div class="rounded-lg bg-elevated p-4 text-sm text-muted space-y-2">
           <p class="font-medium text-toned">Première connexion depuis ce téléphone</p>

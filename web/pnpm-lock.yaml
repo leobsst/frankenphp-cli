@@ -93,6 +93,9 @@ importers:
       '@capacitor/app':
         specifier: 8.1.2
         version: 8.1.2(@capacitor/core@8.5.3)
+      '@capacitor/barcode-scanner':
+        specifier: 3.1.3
+        version: 3.1.3(@capacitor/core@8.5.3)
       '@capacitor/core':
         specifier: 8.5.3
         version: 8.5.3
@@ -202,6 +205,11 @@ packages:
     resolution: {integrity: sha512-6fi6bYunaawAZ9kkbJheB1Kon7AbqS3AYblQ2ocAnHGyO7YQX3gsgcH7hptklrpbcLT8B6KMyuBZqfDgChCyrw==}
     engines: {node: '>=20.9.0'}
     hasBin: true
+
+  '@capacitor/barcode-scanner@3.1.3':
+    resolution: {integrity: sha512-ZqM+Z6gMdIyjA2g+S5SgR3dyfIdKA6h6lnkV/rwKa+Q/iZ32rGnbuBATvqwb+HwQqvSGpvIZUlOU51Cw/MAIug==}
+    peerDependencies:
+      '@capacitor/core': '>=8.0.0'
 
   '@capacitor/cli@8.5.3':
     resolution: {integrity: sha512-/G6xwna+p4GS3lthSdWN3OThCH2F85O0Ukdy8rv3oAXvgEMeyFgPEIA3PMAS++IkHwUuBYBAKOQJnZfcrh1n0w==}
@@ -2010,6 +2018,9 @@ packages:
   hookable@6.1.2:
     resolution: {integrity: sha512-+abwxtiEA52GCVIsQqut3S/uKTbUwYIp4Pe/vv+6py5XiXBCqMZHg6pA6Y5qhgLSEys0/cYuPbO0z1QFj5ZCmg==}
 
+  html5-qrcode@2.3.8:
+    resolution: {integrity: sha512-jsr4vafJhwoLVEDW3n1KvPnCCXWaQfRng0/EEYk1vNcQGcG/htAdhJX0be8YyqMoSz7+hZvOZSTAepsabiuhiQ==}
+
   https-proxy-agent@7.0.6:
     resolution: {integrity: sha512-vK9P5/iUfdl95AI+JVyUuIcVtd4ofvtrOr3HNtM2yxC9bnMbEdp3x01OhQNnjb8IJYi38VlTE3mBXwcfvywuSw==}
     engines: {node: '>= 14'}
@@ -3118,6 +3129,11 @@ snapshots:
       - '@types/node'
       - encoding
       - supports-color
+
+  '@capacitor/barcode-scanner@3.1.3(@capacitor/core@8.5.3)':
+    dependencies:
+      '@capacitor/core': 8.5.3
+      html5-qrcode: 2.3.8
 
   '@capacitor/cli@8.5.3':
     dependencies:
@@ -4993,6 +5009,8 @@ snapshots:
   hey-listen@1.0.8: {}
 
   hookable@6.1.2: {}
+
+  html5-qrcode@2.3.8: {}
 
   https-proxy-agent@7.0.6(supports-color@10.2.2):
     dependencies:

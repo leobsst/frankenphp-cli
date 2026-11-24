@@ -1,6 +1,7 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import { NAV, SETTINGS } from '@app/nav'
 import { currentInstance } from './lib/instances'
+import { PAIR_PATH } from './lib/pairing'
 
 /** Instance list: the app's home when no instance is open, and the target of « Changer d’instance ». */
 export const INSTANCES = { name: 'instances', path: '/instances' } as const
@@ -12,6 +13,7 @@ export const router = createRouter({
     { name: INSTANCES.name, path: INSTANCES.path, component: () => import('./pages/InstancesPage.vue') },
     { path: '/instances/ajouter', component: () => import('./pages/InstanceForm.vue') },
     { path: '/instances/:id/connexion', component: () => import('./pages/InstanceForm.vue'), props: true },
+    { path: PAIR_PATH, component: () => import('./pages/PairPage.vue') },
     {
       // The dashboard pages of web/app, on the instance chosen in the list.
       path: '/',

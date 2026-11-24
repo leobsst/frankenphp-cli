@@ -8,6 +8,19 @@
 	<string>en</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>FrankenManager se connecte aux instances de votre réseau local pour les piloter.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>FrankenManager utilise l’appareil photo pour scanner le QR code d’appairage affiché par le dashboard.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER).pair</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>frankenmanager</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleDisplayName</key>
         <string>FrankenManager</string>
 	<key>CFBundleExecutable</key>

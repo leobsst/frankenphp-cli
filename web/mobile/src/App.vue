@@ -9,6 +9,7 @@ import ConfirmPassword from '@app/components/ConfirmPassword.vue'
 import { bindNotifier, state } from '@app/composables/useFm'
 import { useApplyPrefs } from '@app/composables/usePrefs'
 import { hideSplash } from './lib/splash'
+import { listenPairingLinks } from './lib/pairing'
 
 const router = useRouter()
 
@@ -54,6 +55,8 @@ onMounted(() => {
       else void CapApp.exitApp()
     })
   }
+  // Pairing links (frankenmanager://pair?…) opening the app: system camera, link from another app.
+  void listenPairingLinks(router)
 })
 </script>
 
