@@ -4,3 +4,7 @@ packages:
 allowBuilds:
   esbuild: true
   vue-demi: true
+overrides:
+  # fontless (@nuxt/fonts, through @nuxt/ui) asks for esbuild ^0.27,
+  # affected by GHSA advisories fixed in 0.28.1
+  esbuild: 0.28.2
