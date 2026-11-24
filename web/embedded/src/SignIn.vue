@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { session, signIn } from './session'
+
+const { t } = useI18n()
 
 // Dashboard password: remote access opened in a browser, or DASHBOARD_LOCAL_AUTH on this machine.
 const password = ref('')
@@ -23,13 +26,13 @@ async function submit() {
           <span class="grid size-9 place-items-center rounded-lg bg-primary text-inverted"><UIcon name="i-lucide-square-terminal" class="size-5" /></span>
           <div>
             <h1 class="text-base font-semibold text-highlighted">frankenmanager</h1>
-            <p class="text-xs text-muted">{{ session.mode === 'local' ? 'Mot de passe demandé sur cette machine (DASHBOARD_LOCAL_AUTH)' : 'Accès distant' }}</p>
+            <p class="text-xs text-muted">{{ session.mode === 'local' ? t('signIn.localHint', { env: 'DASHBOARD_LOCAL_AUTH' }) : t('signIn.remoteAccess') }}</p>
           </div>
         </div>
-        <UFormField label="Mot de passe du dashboard" :error="error || undefined">
+        <UFormField :label="t('signIn.password')" :error="error || undefined">
           <UInput v-model="password" type="password" autocomplete="current-password" autofocus size="lg" class="w-full" @update:model-value="error = ''" />
         </UFormField>
-        <UButton type="submit" label="Se connecter" size="lg" block :loading="busy" :disabled="!password" />
+        <UButton type="submit" :label="t('common.signIn')" size="lg" block :loading="busy" :disabled="!password" />
       </form>
     </UCard>
   </div>

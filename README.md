@@ -1000,8 +1000,11 @@ The daemon serves the dashboard, built into the binary. On this machine, open it
 - Before the stack runs, `frankenmanager dashboard` opens `https://127.0.0.1:9444` itself.
 - When the daemon stops or restarts (`frankenmanager daemon stop`/`start`, an update), the open page keeps retrying and recovers by itself once it answers, signing in again on this machine if needed: no reload.
 - From another device, the dashboard answers at the [remote access](#remote-access-to-the-dashboard), with the password.
+- The dashboard speaks French or English: the language of the browser (of the phone in the mobile app) by default, or the one chosen in its Settings page ("Langue du système", Français, English), remembered on each device. Dates, numbers and sizes follow it. The messages written by the daemon itself (operation steps, API errors, setting descriptions) follow its `CLI_LANGUAGE` setting instead, like the CLI.
 - From the source, `make web` builds the pages (pnpm) before `make build`; without it, the daemon answers that the dashboard is not part of the build.
+- Every icon is part of the build (Lucide, through Nuxt UI): the pages, the installed app and the mobile app never ask a third-party server (such as the Iconify API) for one, offline or not.
 - Its TypeScript types of the API (`web/app/src/lib/api.gen.ts`) are generated from `api/openapi.yaml` by `pnpm --dir web gen:api`: run it after changing the spec and commit the result, the CI fails when they differ.
+- Its texts live in `web/app/src/locales/fr.json` and `en.json` (vue-i18n, keys by page such as `overview.restart`). `pnpm --dir web i18n:check`, run by the CI, fails when the two files do not have the same keys, a message is empty or invalid, or a key used in the code is missing.
 
 #### Remote access to the dashboard
 
@@ -1406,6 +1409,7 @@ Changing a password (`configuration set MARIADB_ROOT_PASSWORD ...`) is applied t
 
 - **phpMyAdmin** runs as soon as MariaDB or MySQL is enabled, on `PMA_PORT` (`8080`) and at `https://localhost`. A single phpMyAdmin connects to every enabled MariaDB/MySQL server, already logged in as `root`: when both are enabled, switch between them with phpMyAdmin's server selector (MariaDB is the default).
 - **pgAdmin** runs as soon as PostgreSQL is enabled, on `PGADMIN_PORT` (`8081`). It is served at `https://localhost` when PostgreSQL is the only engine; otherwise `https://localhost` stays on phpMyAdmin. Log in with `PGADMIN_EMAIL` (`admin@admin.com`) and `POSTGRES_PASSWORD`.
+- The dashboard links to that admin UI: `https://localhost` on this machine; from another device (remote access, mobile app), `http://<address of this machine>:<PMA_PORT or PGADMIN_PORT>`, only with `EXPOSE_SERVICES=true`, as the admin UIs have no name of their own behind the reverse proxy and their ports are otherwise bound to `127.0.0.1` (no link then).
 
 ### Production Mode
 

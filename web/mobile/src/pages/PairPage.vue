@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ApiError, hostInfo, logout, pair, UNREACHABLE } from '@app/lib/api'
+import { useI18n } from 'vue-i18n'
+import { ApiError, hostInfo, logout, pair } from '@app/lib/api'
 import { deviceName } from '../lib/device'
 import { findByUrl, newId, setCurrent, upsertInstance } from '../lib/instances'
 import { formatFingerprint, parsePairLink, type PairRequest } from '../lib/pairing'
@@ -10,6 +11,7 @@ import { formatFingerprint, parsePairLink, type PairRequest } from '../lib/pairi
  * Confirmation of a pairing link (scanned in the app, or opened by the system camera through the frankenmanager://
  * scheme): shows what the phone is about to trust, then exchanges the one-time code for a session token.
  */
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 
@@ -30,11 +32,12 @@ const error = ref('')
 function explain(e: unknown) {
   if (!(e instanceof ApiError)) return e instanceof Error ? e.message : String(e)
   switch (e.status) {
-    case 0: return `${UNREACHABLE} Le téléphone doit aussi être sur le même réseau que la machine.`
-    case 401: return 'Code d’appairage invalide, expiré ou déjà utilisé : affichez-en un nouveau dans le dashboard.'
-    case 403: return `${e.message} Vérifiez DASHBOARD_ACCESS et DASHBOARD_ALLOWED_IPS.`
-    case 404: return 'Cette instance ne propose pas l’appairage par QR code : mettez FrankenManager à jour sur la machine.'
-    case 429: return 'Trop de tentatives : patientez quelques minutes avant de réessayer.'
+    // Status 0: the request did not reach the daemon; the message already says so.
+    case 0: return t('mobile.pair.errors.unreachable', { message: e.message })
+    case 401: return t('mobile.pair.errors.invalidCode')
+    case 403: return t('mobile.errors.forbidden', { message: e.message })
+    case 404: return t('mobile.pair.errors.notSupported')
+    case 429: return t('mobile.pair.errors.tooMany')
     default: return e.message
   }
 }
@@ -73,8 +76,8 @@ async function confirm() {
 <template>
   <div class="h-dvh overflow-y-auto pt-safe pb-safe">
     <header class="px-safe flex items-center gap-2 pt-3 pb-2">
-      <UButton icon="i-lucide-chevron-left" color="neutral" variant="ghost" size="lg" aria-label="Retour" to="/instances" />
-      <h1 class="text-lg font-semibold text-highlighted">Appairer une instance</h1>
+      <UButton icon="i-lucide-chevron-left" color="neutral" variant="ghost" size="lg" :aria-label="t('common.back')" to="/instances" />
+      <h1 class="text-lg font-semibold text-highlighted">{{ t('mobile.pair.title') }}</h1>
     </header>
 
     <main class="px-safe space-y-5 py-3">
@@ -85,39 +88,35 @@ async function confirm() {
               <UIcon name="i-lucide-server-cog" class="size-5" />
             </div>
             <div class="min-w-0">
-              <p class="font-semibold text-highlighted truncate">{{ request.name || 'Machine sans nom' }}</p>
+              <p class="font-semibold text-highlighted truncate">{{ request.name || t('mobile.pair.unnamed') }}</p>
               <p class="text-sm text-muted truncate">{{ request.url.replace('https://', '') }}</p>
             </div>
           </div>
           <div class="space-y-1">
-            <p class="text-xs font-medium text-toned">Empreinte SHA-256 de la CA</p>
+            <p class="text-xs font-medium text-toned">{{ t('mobile.pair.fingerprint') }}</p>
             <p v-if="request.ca" class="font-mono text-xs break-all text-muted">{{ formatFingerprint(request.ca) }}</p>
-            <p v-else class="text-xs text-muted">Non communiquée par l’instance.</p>
+            <p v-else class="text-xs text-muted">{{ t('mobile.pair.noFingerprint') }}</p>
           </div>
         </div>
 
-        <p class="text-sm text-muted">
-          Vérifiez que ce nom et cette adresse sont bien ceux affichés par le dashboard de la machine. Le certificat de l’accès
-          distant doit être signé par cette CA, installée et approuvée sur le téléphone<template v-if="request.ca"> : comparez
-          l’empreinte avec celle du certificat installé</template>.
-        </p>
+        <p class="text-sm text-muted">{{ request.ca ? t('mobile.pair.verifyWithCa') : t('mobile.pair.verify') }}</p>
 
         <UAlert
           v-if="existing"
           color="warning" variant="subtle" icon="i-lucide-refresh-cw"
-          :description="`« ${existing.name} » est déjà dans l’app à cette adresse : sa session sera remplacée.`"
+          :description="t('mobile.pair.existing', { name: existing.name })"
         />
         <UAlert v-if="error" color="error" variant="subtle" icon="i-lucide-circle-alert" :description="error" />
 
         <div class="space-y-2">
-          <UButton icon="i-lucide-link" label="Appairer" size="xl" block :loading="busy" @click="confirm" />
-          <UButton label="Annuler" color="neutral" variant="ghost" size="xl" block :disabled="busy" to="/instances" />
+          <UButton icon="i-lucide-link" :label="t('mobile.pair.confirm')" size="xl" block :loading="busy" @click="confirm" />
+          <UButton :label="t('common.cancel')" color="neutral" variant="ghost" size="xl" block :disabled="busy" to="/instances" />
         </div>
       </template>
 
       <template v-else>
-        <UAlert color="error" variant="subtle" icon="i-lucide-qr-code" title="Appairage impossible" :description="parsed.error" />
-        <UButton label="Retour aux instances" color="neutral" variant="outline" size="xl" block to="/instances" />
+        <UAlert color="error" variant="subtle" icon="i-lucide-qr-code" :title="t('mobile.pair.impossible')" :description="parsed.error" />
+        <UButton :label="t('mobile.pair.backToList')" color="neutral" variant="outline" size="xl" block to="/instances" />
       </template>
     </main>
   </div>

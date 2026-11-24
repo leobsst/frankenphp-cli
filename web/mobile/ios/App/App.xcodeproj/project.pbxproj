@@ -19,6 +19,7 @@
 		F1A1B2C42DB0000100EA8C5F /* NativeTabBarPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A1B2C32DB0000100EA8C5F /* NativeTabBarPlugin.swift */; };
 		F1A1B2C62DB0000100EA8C5F /* MainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A1B2C52DB0000100EA8C5F /* MainViewController.swift */; };
 		F1A1B2C82DB0000100EA8C5F /* SecureStorePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A1B2C72DB0000100EA8C5F /* SecureStorePlugin.swift */; };
+		F1A1B2D32DB0000100EA8C5F /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = F1A1B2D02DB0000100EA8C5F /* InfoPlist.strings */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -37,6 +38,8 @@
 		F1A1B2C32DB0000100EA8C5F /* NativeTabBarPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeTabBarPlugin.swift; sourceTree = "<group>"; };
 		F1A1B2C52DB0000100EA8C5F /* MainViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainViewController.swift; sourceTree = "<group>"; };
 		F1A1B2C72DB0000100EA8C5F /* SecureStorePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureStorePlugin.swift; sourceTree = "<group>"; };
+		F1A1B2D12DB0000100EA8C5F /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		F1A1B2D22DB0000100EA8C5F /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fr; path = fr.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -82,6 +85,7 @@
 				504EC30E1FED79650016851F /* Assets.xcassets */,
 				504EC3101FED79650016851F /* LaunchScreen.storyboard */,
 				504EC3131FED79650016851F /* Info.plist */,
+				F1A1B2D02DB0000100EA8C5F /* InfoPlist.strings */,
 				2FAD9762203C412B000D30F8 /* config.xml */,
 				50B271D01FEDC1A000F3C39B /* public */,
 			);
@@ -133,6 +137,7 @@
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
+				fr,
 				Base,
 			);
 			mainGroup = 504EC2FB1FED79650016851F;
@@ -159,6 +164,7 @@
 				50379B232058CBB4000EE86E /* capacitor.config.json in Resources */,
 				504EC30D1FED79650016851F /* Main.storyboard in Resources */,
 				2FAD9763203C412B000D30F8 /* config.xml in Resources */,
+				F1A1B2D32DB0000100EA8C5F /* InfoPlist.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -194,6 +200,15 @@
 				504EC3111FED79650016851F /* Base */,
 			);
 			name = LaunchScreen.storyboard;
+			sourceTree = "<group>";
+		};
+		F1A1B2D02DB0000100EA8C5F /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				F1A1B2D12DB0000100EA8C5F /* en */,
+				F1A1B2D22DB0000100EA8C5F /* fr */,
+			);
+			name = InfoPlist.strings;
 			sourceTree = "<group>";
 		};
 /* End PBXVariantGroup section */

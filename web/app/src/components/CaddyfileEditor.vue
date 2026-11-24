@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { actions, caddyfilePathOf, containerFor, defaultCaddyfile, isCaddyfileCustom, loadCaddyfile, siteCaddyfile, state, toast } from '../composables/useFm'
 import { hasWebsocket, toggleWebsocket } from '../composables/caddyfile'
+import { formatNumber } from '../i18n'
 
 // Editor for a site's Caddyfile: caddy/sites/php-<version>/<domain>_Caddyfile for a PHP project,
 // caddy/sites/static/<domain>_Caddyfile for a static host (v0.9.0).
 const props = defineProps<{ domain: string }>()
 const open = defineModel<boolean>('open', { default: false })
+const { t } = useI18n()
 
 const text = ref('')
 const error = ref<string | null>(null)
@@ -31,7 +34,7 @@ watch(open, async (o) => {
   if (!o) return
   // The file, its template and its path come from the daemon (`GET /api/v1/hosts/{name}/caddyfile`).
   text.value = ''
-  try { await loadCaddyfile(props.domain) } catch (e) { toast('error', 'Lecture impossible', e instanceof Error ? e.message : String(e)) }
+  try { await loadCaddyfile(props.domain) } catch (e) { toast('error', t('caddyfileEditor.readFailed'), e instanceof Error ? e.message : String(e)) }
   text.value = saved.value
   error.value = null
   checked.value = null
@@ -65,7 +68,7 @@ function onTab(e: KeyboardEvent) {
 function setWebsocket(on: boolean) {
   const next = toggleWebsocket(text.value, on)
   if (next === null) {
-    error.value = 'Les blocs WebSocket du modèle ont été modifiés : éditez le fichier à la main (encode, @notWebsocket, @websocket).'
+    error.value = t('caddyfileEditor.websocketEdited')
     return
   }
   text.value = next
@@ -99,17 +102,17 @@ async function reset() {
 <template>
   <USlideover
     v-model:open="open" side="right" :title="`Caddyfile · ${domain}`" :description="path"
-    :ui="{ content: 'w-full sm:max-w-[760px] pt-safe pb-safe', body: 'flex flex-col gap-4 sm:p-5', description: 'font-mono text-[11px] truncate', footer: 'flex-wrap gap-2' }"
+    :ui="{ content: 'w-full sm:max-w-[760px]', body: 'flex flex-col gap-4 sm:p-5', description: 'font-mono text-[11px] truncate', footer: 'flex-wrap gap-2' }"
   >
     <template #body>
       <div class="flex flex-wrap items-center gap-2">
-        <UBadge v-if="dirty" label="Non enregistré" color="warning" variant="soft" />
-        <UBadge v-else-if="isCaddyfileCustom(domain)" label="Personnalisé" variant="soft" />
-        <UBadge v-else label="Généré par le modèle" color="neutral" variant="soft" />
-        <UBadge :label="isStatic ? `Statique${site?.spa ? ' · SPA' : ''}` : `PHP ${site?.php}`" color="neutral" variant="outline" />
+        <UBadge v-if="dirty" :label="t('caddyfileEditor.unsaved')" color="warning" variant="soft" />
+        <UBadge v-else-if="isCaddyfileCustom(domain)" :label="t('caddyfileEditor.custom')" variant="soft" />
+        <UBadge v-else :label="t('caddyfileEditor.generated')" color="neutral" variant="soft" />
+        <UBadge :label="isStatic ? (site?.spa ? t('caddyfileEditor.staticSpa') : t('caddyfileEditor.static')) : `PHP ${site?.php}`" color="neutral" variant="outline" />
         <USwitch
           v-if="!isStatic" class="ml-auto" :model-value="websocket" label="WebSocket (/app*)"
-          description="Proxy vers 127.0.0.1:7006, compression désactivée sur /app*"
+          :description="t('caddyfileEditor.websocketHelp', { address: '127.0.0.1:7006', path: '/app*' })"
           @update:model-value="setWebsocket"
         />
       </div>
@@ -117,38 +120,37 @@ async function reset() {
       <UAlert v-if="error" color="error" variant="soft" icon="i-lucide-circle-alert" :description="error" :ui="{ description: 'text-xs' }" />
       <UAlert
         v-else-if="checked" color="success" variant="soft" icon="i-lucide-circle-check"
-        :description="`Caddy accepte ce fichier (${isStatic ? 'caddy adapt dans le reverse proxy' : `frankenphp adapt dans ${server}`}).`"
+        :description="isStatic ? t('caddyfileEditor.checkedStatic') : t('caddyfileEditor.checkedPhp', { server })"
         :ui="{ description: 'text-xs' }"
       />
 
       <div class="relative min-h-[420px] flex-1 overflow-hidden rounded-lg bg-sage-950 ring-1 ring-default">
         <textarea
           ref="editor" v-model="text" spellcheck="false" autocapitalize="off" autocomplete="off" wrap="off"
-          aria-label="Contenu du Caddyfile"
+          :aria-label="t('caddyfileEditor.content')"
           class="absolute inset-0 size-full resize-none bg-transparent p-4 font-mono text-xs leading-[19px] text-sage-200 outline-none [tab-size:4]"
           @input="onInput" @keydown.tab.exact.prevent="onTab" @keydown.meta.s.prevent="save" @keydown.ctrl.s.prevent="save"
         />
       </div>
-      <p class="text-[11px] text-muted">
-        {{ lines }} lignes · Tab indente · ⌘S enregistre. Le fichier est vérifié par le Caddy du conteneur avant d’être enregistré, puis s’applique au rechargement du conteneur
-        <span class="font-mono">{{ server }}</span> ;
-        <template v-if="isStatic">servi en HTTPS par le reverse proxy, ce fichier garde sa ligne <span class="font-mono">tls</span>.</template>
-        <template v-else>les autres domaines de cette version sont brièvement indisponibles.</template>
-      </p>
+      <i18n-t :keypath="isStatic ? 'caddyfileEditor.helpStatic' : 'caddyfileEditor.helpPhp'" tag="p" scope="global" class="text-[11px] text-muted">
+        <template #lines>{{ t('caddyfileEditor.lines', { n: formatNumber(lines) }, lines) }}</template>
+        <template #server><span class="font-mono">{{ server }}</span></template>
+        <template #tls><span class="font-mono">tls</span></template>
+      </i18n-t>
     </template>
 
     <template #footer="{ close }">
       <UButton
         :color="confirmReset ? 'error' : 'neutral'" variant="ghost" icon="i-lucide-rotate-ccw"
-        :label="confirmReset ? 'Confirmer : écraser avec le modèle' : 'Rétablir le modèle'"
+        :label="confirmReset ? t('caddyfileEditor.confirmReset') : t('caddyfileEditor.reset')"
         :disabled="isTemplate && !isCaddyfileCustom(domain)" @click="reset"
       />
       <code class="hidden truncate font-mono text-[10px] text-dimmed lg:block">$ frankenmanager restart --caddy</code>
       <!-- On phones, the buttons wrap and "Enregistrer" takes the full width. -->
       <div class="ml-auto flex flex-wrap justify-end gap-2 max-sm:w-full">
-        <UButton color="neutral" variant="outline" label="Annuler" @click="close" />
-        <UButton color="neutral" variant="outline" icon="i-lucide-shield-check" label="Vérifier" :loading="checking" @click="check" />
-        <UButton icon="i-lucide-save" label="Enregistrer et recharger" class="max-sm:w-full max-sm:justify-center" :loading="saving" :disabled="!dirty" @click="save" />
+        <UButton color="neutral" variant="outline" :label="t('common.cancel')" @click="close" />
+        <UButton color="neutral" variant="outline" icon="i-lucide-shield-check" :label="t('caddyfileEditor.check')" :loading="checking" @click="check" />
+        <UButton icon="i-lucide-save" :label="t('caddyfileEditor.save')" class="max-sm:w-full max-sm:justify-center" :loading="saving" :disabled="!dirty" @click="save" />
       </div>
     </template>
   </USlideover>

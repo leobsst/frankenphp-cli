@@ -2,6 +2,7 @@ import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import ui from '@nuxt/ui/vite'
+import { uiIcons, uiTheme } from '../app/src/theme'
 import { serviceWorker } from './sw/plugin'
 
 /**
@@ -16,17 +17,8 @@ const daemon = `https://127.0.0.1:${process.env.DASHBOARD_HTTPS_PORT ?? '9444'}`
 export default defineConfig({
   plugins: [
     vue(),
-    ui({
-      ui: {
-        colors: { primary: 'brand', info: 'accent', success: 'brand', warning: 'amber', error: 'red', neutral: 'sage' as 'zinc' },
-        // Active navigation item: pale background + primary text (mockup).
-        navigationMenu: {
-          compoundVariants: [{ variant: 'pill', active: true, highlight: false, class: { link: 'before:bg-primary/10 font-semibold' } }],
-        },
-      },
-      // Bundled Lucide icons: no calls to the Iconify API.
-      icon: { clientBundle: { scan: true } },
-    }),
+    // Bundled Lucide icons, the shared pages and .ts files included: no calls to the Iconify API.
+    ui({ ui: uiTheme, icon: uiIcons }),
     // dist/sw.js, the service worker of the installable dashboard (PWA), with the list of the built files.
     serviceWorker(),
   ],
@@ -34,6 +26,8 @@ export default defineConfig({
     alias: { '@app': fileURLToPath(new URL('../app/src', import.meta.url)) },
     dedupe: ['vue', 'vue-router', '@nuxt/ui'],
   },
+  // vue-i18n (web/app/src/i18n.ts): Composition API only, no devtools in production.
+  define: { __VUE_I18N_FULL_INSTALL__: true, __VUE_I18N_LEGACY_API__: false, __INTLIFY_PROD_DEVTOOLS__: false },
   // Relative paths: the same build serves https://frankenmanager.test, 127.0.0.1 and remote access.
   base: './',
   build: { emptyOutDir: true },

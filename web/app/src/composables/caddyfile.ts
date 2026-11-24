@@ -5,6 +5,8 @@
  * Aliases and proxy hosts have no Caddyfile of their own.
  */
 
+import { t } from '../i18n'
+
 /** Copy of the CLI's `caddy/Caddyfile.template` (v0.4.0). */
 export const SITE_TEMPLATE = "full_domain {\n\t# TLS\n\ttls /certs/full_domain.pem /certs/full_domain-key.pem\n\t\n\t# Root project\n\troot * /{$CUSTOM_PATH}/custom_domain/public/\n\n\t# Compression Brotli and Gzip (if not using websocket)\n\tencode br gzip\n\n\t# If using websocket don't use any compression\n\t# @notWebsocket {\n\t#\t not path /app*\n\t# }\n\t# encode @notWebsocket br gzip\n\n\t# Logging\n\tlog {\n\t\toutput file /var/log/caddy/custom_domain_access.log\n\t\tformat console\n\t}\n\n\t# Cache and security headers\n\t@static path /css/* /js/* /images/* /fonts/* /favicon.ico\n\theader @static Cache-Control \"public, max-age=31536000, immutable\"\n\n\theader {\n\t\t# Security headers\n\t\tStrict-Transport-Security \"max-age=15552000; includeSubDomains; preload\"\n\t\tX-Frame-Options \"SAMEORIGIN\"\n\t\t#X-Content-Type-Options \"nosniff\"\n\t\tX-XSS-Protection \"1; mode=block\"\n\t\tReferrer-Policy \"no-referrer\"\n\t\t\n\t\t# Remove server and PHP version headers\n\t\t-Server\n\t\t-X-Powered-By\n\t}\n\n\t# @websocket {\n\t# \tpath /app*\n\t# }\n\t# handle @websocket {\n\t# \treverse_proxy 127.0.0.1:7006\n\t# }\n\n\t# Cache for robots.txt file\n\t# @robots {\n\t# \tpath /robots.txt\n\t# }\n\t# handle @robots {\n\t# \theader Cache-Control \"public, max-age=86400\"\n\t# \tfile_server\n\t# }\n\n\t# Manage PHP requests with FrankenPHP\n\tphp_server {\n\t\tindex index.php\n\t\tresolve_root_symlink\n\t}\n}"
 
@@ -80,11 +82,11 @@ export function generateStaticCaddyfile(domain: string, root: string, spa: boole
 
 /** Checks that braces are balanced, ignoring comments; returns the faulty line. */
 export function validateCaddyfile(text: string, opts: { static?: boolean } = {}): { line: number; message: string } | null {
-  if (!text.trim()) return { line: 1, message: 'Le Caddyfile est vide.' }
+  if (!text.trim()) return { line: 1, message: t('errors.caddyfile.empty') }
   // v0.9.1: the reverse proxy (standard Caddy image) has no Brotli encoder; Caddy would refuse to start.
   if (opts.static) {
     const i = text.split('\n').findIndex((l) => /^\s*encode\b[^\n{#]*\sbr\b/.test(l))
-    if (i >= 0) return { line: i + 1, message: `Encodage br non pris en charge par le reverse proxy (ligne ${i + 1}) : utilisez encode zstd gzip.` }
+    if (i >= 0) return { line: i + 1, message: t('errors.caddyfile.brotli', { line: i + 1 }) }
   }
   const open: number[] = []
   const lines = text.split('\n')
@@ -92,10 +94,10 @@ export function validateCaddyfile(text: string, opts: { static?: boolean } = {})
     const line = raw.replace(/(^|\s)#.*$/, '')
     for (const ch of line) {
       if (ch === '{') open.push(i + 1)
-      else if (ch === '}' && !open.pop()) return { line: i + 1, message: `Accolade fermante sans ouverture (ligne ${i + 1}).` }
+      else if (ch === '}' && !open.pop()) return { line: i + 1, message: t('errors.caddyfile.unopened', { line: i + 1 }) }
     }
   }
-  if (open.length) return { line: open[open.length - 1], message: `Accolade ouverte ligne ${open[open.length - 1]} jamais fermée.` }
+  if (open.length) return { line: open[open.length - 1], message: t('errors.caddyfile.unclosed', { line: open[open.length - 1] }) }
   return null
 }
 

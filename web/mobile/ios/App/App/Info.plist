@@ -6,10 +6,12 @@
 	<string>$(CAPACITOR_DEBUG)</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>FrankenManager se connecte aux instances de votre réseau local pour les piloter.</string>
+	<string>FrankenManager connects to the instances on your local network to manage them.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>FrankenManager utilise l’appareil photo pour scanner le QR code d’appairage affiché par le dashboard.</string>
+	<string>FrankenManager uses the camera to scan the pairing QR code shown by the dashboard.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

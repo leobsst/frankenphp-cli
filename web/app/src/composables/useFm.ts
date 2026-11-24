@@ -5,8 +5,9 @@
  * it is back; `state.docker` follows whether the daemon reaches Docker.
  */
 import { computed, nextTick, reactive, ref } from 'vue'
-import { ApiError, client, lastMessage, type Instance, type Client, type Container as ApiContainer, type HostInfo, type Operation, type Stat, type Status, type ApiResponse, type LogLine, type OpEvent, type Schema } from '../lib/api'
+import { ApiError, client, lastMessage, type Instance, type Client, type Container as ApiContainer, type HostInfo, type Operation, type Stat, type Status, type ApiResponse, type LogLine, type OpEvent, type Schema, type EventStream } from '../lib/api'
 import { defaultRoot } from './caddyfile'
+import { formatNumber, formatTime, setLanguage, t, type LanguagePref } from '../i18n'
 
 export type Php = '8.2' | '8.3' | '8.4' | '8.5'
 export const PHP_VERSIONS: Php[] = ['8.5', '8.4', '8.3', '8.2']
@@ -43,11 +44,12 @@ export type LogLevel = 'INFO' | 'WARN' | 'ERROR'
 export interface LogEntry { id: number; time: string; level: LogLevel; source: string; msg: string }
 
 export type ServiceName = 'dns' | 'redis' | 's3' | 'soketi'
-export const SERVICES: Record<ServiceName, { key: string; label: string; desc: string; icon: string; to: string }> = {
-  dns: { key: 'DNS_SERVER', label: 'Serveur DNS LAN', desc: 'CoreDNS intégré à FrankenManager · résout les .test pour le réseau local', icon: 'i-lucide-globe', to: '/dns' },
-  redis: { key: 'REDIS_ENABLED', label: 'Cache Redis', desc: 'Conteneur franken_redis', icon: 'i-lucide-zap', to: '/redis' },
-  s3: { key: 'S3_ENABLED', label: 'Stockage S3 (Garage)', desc: 'Conteneurs franken_s3 et franken_s3_gateway · https://s3.frankenmanager.test', icon: 'i-lucide-hard-drive', to: '/s3' },
-  soketi: { key: 'SOKETI_ENABLED', label: 'WebSocket (Soketi)', desc: 'Conteneur franken_soketi · wss://ws.frankenmanager.test', icon: 'i-lucide-radio', to: '/websocket' },
+/** `label` and `desc` are getters: they follow the interface language (a spread copies their current value). */
+export const SERVICES: Record<ServiceName, { key: string; readonly label: string; readonly desc: string; icon: string; to: string }> = {
+  dns: { key: 'DNS_SERVER', get label() { return t('services.dns.label') }, get desc() { return t('services.dns.desc') }, icon: 'i-lucide-globe', to: '/dns' },
+  redis: { key: 'REDIS_ENABLED', get label() { return t('services.redis.label') }, get desc() { return t('services.redis.desc') }, icon: 'i-lucide-zap', to: '/redis' },
+  s3: { key: 'S3_ENABLED', get label() { return t('services.s3.label') }, get desc() { return t('services.s3.desc', { url: 'https://s3.frankenmanager.test' }) }, icon: 'i-lucide-hard-drive', to: '/s3' },
+  soketi: { key: 'SOKETI_ENABLED', get label() { return t('services.soketi.label') }, get desc() { return t('services.soketi.desc', { url: 'wss://ws.frankenmanager.test' }) }, icon: 'i-lucide-radio', to: '/websocket' },
 }
 
 export function versionAtLeast(v: string, min: string) {
@@ -64,11 +66,12 @@ export interface Prefs {
   autoRefresh: boolean
   notifications: boolean
   reduceMotion: boolean
-  lang: 'fr' | 'en'
+  /** Interface language, or the system's (stored per device, like the other preferences). */
+  language: LanguagePref
 }
 export const DEFAULT_PREFS: Prefs = {
   theme: 'system', primary: '#2563EB', accent: '#8B5CF6',
-  autoRefresh: true, notifications: true, reduceMotion: false, lang: 'fr',
+  autoRefresh: true, notifications: true, reduceMotion: false, language: 'system',
 }
 
 export const PROJECTS_ROOT = '/projects'
@@ -97,7 +100,8 @@ const blank = () => ({
   memTotalGo: 0,
   dns: { enabled: false, status: 'stopped' as 'running' | 'stopped' | 'restarting', ip: '', port: 53, connected: 0, listen: '0.0.0.0', upstream: '' },
   dnsClients: [] as DnsClient[],
-  ssl: { caShared: false, caPort: 0, regenerating: null as string | null },
+  /** caUrl: where the other devices download the root CA while it is shared (daemon's caserver, any path serves it). */
+  ssl: { caShared: false, caPort: 0, caUrl: '', regenerating: null as string | null },
   config: {} as Record<string, string>,
   /** Modified keys waiting for a stack restart. */
   configPending: [] as string[],
@@ -117,13 +121,16 @@ const blank = () => ({
 function loadPrefs(): Prefs {
   try {
     const p = localStorage.getItem('fm-prefs')
-    return p ? { ...DEFAULT_PREFS, ...JSON.parse(p) } : { ...DEFAULT_PREFS }
+    // `lang` (before the translations, when the choice was only simulated) is dropped: the system language applies.
+    const { lang: _lang, ...saved } = p ? JSON.parse(p) : {}
+    return { ...DEFAULT_PREFS, ...saved }
   } catch {
     return { ...DEFAULT_PREFS }
   }
 }
 
 export const state = reactive(blank())
+setLanguage(state.prefs.language)
 
 // ---------- Notifications (wired to Nuxt UI's useToast() in App.vue) ----------
 type ToastKind = 'success' | 'error' | 'warning' | 'info'
@@ -151,11 +158,11 @@ function progressToast(title: string, description: string) {
   show(description)
   return {
     step: (d: string) => show(d),
-    done: (color: ToastKind, t: string, d: string) => {
+    done: (color: ToastKind, title: string, d: string) => {
       // Notifications turned off (Settings): only a failure stays displayed. Nuxt UI ignores removing a toast updated
       // in the same tick: the removal waits for the next one.
       if (!state.prefs.notifications && color !== 'error') { void nextTick(() => dismiss(id)); return }
-      notify({ id, title: t, description: d, color, icon: TOAST_ICON[color], duration: color === 'error' ? 7000 : 4500, ui: { icon: '' } })
+      notify({ id, title, description: d, color, icon: TOAST_ICON[color], duration: color === 'error' ? 7000 : 4500, ui: { icon: '' } })
     },
   }
 }
@@ -184,7 +191,7 @@ export const phpVersions = computed(() => [...new Set(active.value.filter((d) =>
 
 export const aliasTarget = (d: Domain) => (d.kind === 'alias' ? state.domains.find((x) => x.name === d.aliasOf) : undefined)
 export const isProxied = (d: Domain) => d.kind === 'proxy' || aliasTarget(d)?.kind === 'proxy'
-export const envLabel = (d: Domain) => (isProxied(d) ? 'Proxy HTTP' : d.kind === 'static' ? `Statique${d.spa ? ' · SPA' : ''}` : `PHP ${d.php}`)
+export const envLabel = (d: Domain) => (isProxied(d) ? t('labels.env.proxy') : d.kind === 'static' ? t(d.spa ? 'labels.env.staticSpa' : 'labels.env.static') : `PHP ${d.php}`)
 export const domainIcon = (d: Domain) => (d.kind === 'proxy' ? 'i-lucide-arrow-up-right' : d.kind === 'static' ? 'i-lucide-file-code-2' : 'i-lucide-globe')
 export const servedPath = (d: Domain) => `${PROJECTS_ROOT}/${d.root ?? defaultRoot(d.name, d.kind === 'static')}`
 /** Only PHP projects and static hosts have their own Caddyfile. */
@@ -219,7 +226,7 @@ function toContainer(c: ApiContainer, prev?: Container): Container {
     franken_redis: ['redis', 'Redis', cfg.REDIS_PORT || '6379'],
     franken_soketi: ['soketi', 'Soketi', cfg.SOKETI_PORT || '6001'],
     franken_s3: ['s3', 'Garage (S3)', cfg.S3_ADMIN_PORT || '3903'],
-    franken_s3_gateway: ['s3', 'Passerelle ACL S3', cfg.S3_PORT || '3900'],
+    franken_s3_gateway: ['s3', t('labels.containers.s3Gateway'), cfg.S3_PORT || '3900'],
     franken_mariadb: ['mariadb', 'MariaDB', cfg.DB_PORT || '3306'],
     franken_mysql: ['mariadb', 'MySQL', cfg.MYSQL_PORT || '3307'],
     franken_postgresql: ['postgres', 'PostgreSQL', cfg.POSTGRES_PORT || '5432'],
@@ -257,8 +264,8 @@ function bytes(s: string) {
 
 // ---------- Connection to an instance ----------
 let api: Client | null = null
-let events: EventSource | null = null
-let logStream: EventSource | null = null
+let events: EventStream | null = null
+let logStream: EventStream | null = null
 let timers: ReturnType<typeof setInterval>[] = []
 let refreshSoon: ReturnType<typeof setTimeout> | undefined
 /** Retry after a failed refresh (daemon gone): sooner than the 30 s poll, backing off up to RETRY_MAX. */
@@ -276,7 +283,7 @@ const sourceOf = (name: string) => {
 }
 
 function pushLog(level: LogLevel, source: string, msg: string, at = new Date()) {
-  state.logs.unshift({ id: ++logSeq, time: at.toLocaleTimeString('fr-FR', { hour12: false }), level, source, msg })
+  state.logs.unshift({ id: ++logSeq, time: formatTime(at, { hour12: false }), level, source, msg })
   if (state.logs.length > 400) state.logs.length = 400
 }
 
@@ -344,7 +351,12 @@ async function refreshExtras() {
   ])
   if (dns) Object.assign(state.dns, { enabled: dns.enabled, status: dns.running ? 'running' : 'stopped' })
   if (clients) state.dns.connected = clients.connected
-  if (ca) Object.assign(state.ssl, { caShared: ca.sharing, caPort: ca.port ?? 0 })
+  if (ca) {
+    // The daemon gives the URL (its LAN address); an older one only the port: same URL, on the host's LAN address.
+    const port = ca.port ?? 0
+    const url = ca.url || (ca.sharing && port && state.connection.address ? `http://${state.connection.address}:${port}/` : '')
+    Object.assign(state.ssl, { caShared: ca.sharing, caPort: port, caUrl: ca.sharing ? url : '' })
+  }
   Object.assign(state.dns, { listen: state.config.DNS_LISTEN_IP || '0.0.0.0', upstream: state.config.DNS_UPSTREAM ?? '' })
 }
 
@@ -359,11 +371,11 @@ async function refreshStats() {
   let total = 0
   for (const s of list) {
     const c = state.containers.find((x) => x.id === s.name)
-    const [u, t] = s.mem_usage.split('/')
+    const [u, max] = s.mem_usage.split('/')
     const mb = bytes(u ?? '') / 1024 ** 2
     if (c) Object.assign(c, { cpu: Math.round(s.cpu_percent * 10) / 10, mem: Math.round(mb) })
     used += mb
-    total = Math.max(total, bytes(t ?? '') / 1024 ** 3)
+    total = Math.max(total, bytes(max ?? '') / 1024 ** 3)
   }
   const cpu = Math.round(list.reduce((a, s) => a + s.cpu_percent, 0))
   state.cpuHistory = [...state.cpuHistory.slice(1), cpu]
@@ -375,7 +387,7 @@ async function refreshStats() {
 function openLogs() {
   logStream?.close()
   if (!api || state.stack !== 'running') return
-  logStream = new EventSource(api.streamUrl('/api/v1/logs', { tail: '30' }))
+  logStream = api.stream('/api/v1/logs', { tail: '30' })
   logStream.addEventListener('log', (e) => {
     const l = JSON.parse((e as MessageEvent).data) as LogLine
     const last = lastLogAt[l.container]
@@ -409,7 +421,7 @@ function reopenStreams(recovering: boolean) {
 function openEvents() {
   events?.close()
   if (!api) return
-  const es = new EventSource(api.streamUrl('/api/v1/events'))
+  const es = api.stream('/api/v1/events')
   events = es
   // Set by an error: messages may have been missed, the state is read again once reconnected.
   let stale = false
@@ -458,7 +470,7 @@ export function connect(inst: Instance, opts: { mode?: 'local' | 'remote'; clien
   lastLogAt = {}
   // Local: destructive actions do not ask for the password again (ConfirmModal does not show its field).
   state.connection.mode = opts.mode ?? 'remote'
-  state.connection.client = opts.client ?? 'App FrankenManager'
+  state.connection.client = opts.client ?? t('labels.appClient')
   api = client(inst)
   resetUpdates()
   resetPairing()
@@ -510,23 +522,23 @@ export function disconnect() {
  * error, null if it succeeded.
  */
 async function operate(title: string, submit: (c: Client) => Promise<Operation>, success: string): Promise<string | null> {
-  if (!api) return 'Aucune instance.'
+  if (!api) return t('errors.noInstance')
   const c = api
-  const t = progressToast(title, 'Envoi…')
+  const p = progressToast(title, t('store.progress.sending'))
   try {
     const op = await submit(c)
-    t.step('En file…')
-    const done = await c.wait(op, (o) => t.step(lastMessage(o) ?? 'En cours…'))
+    p.step(t('store.progress.queued'))
+    const done = await c.wait(op, (o) => p.step(lastMessage(o) ?? t('store.progress.running')))
     if (done.status === 'failed') {
-      const err = done.error || lastMessage(done) || 'Échec.'
-      t.done('error', title, err)
+      const err = done.error || lastMessage(done) || t('errors.failed')
+      p.done('error', title, err)
       return err
     }
-    t.done('success', title, lastMessage(done) ?? success)
+    p.done('success', title, lastMessage(done) ?? success)
     return null
   } catch (e) {
     const err = e instanceof Error ? e.message : String(e)
-    t.done('error', title, e instanceof ApiError && e.status === 403 && /password|passe/i.test(err) ? 'Mot de passe erroné.' : err)
+    p.done('error', title, e instanceof ApiError && e.status === 403 && /password|passe/i.test(err) ? t('errors.wrongPassword') : err)
     return err
   } finally {
     void refresh()
@@ -535,7 +547,7 @@ async function operate(title: string, submit: (c: Client) => Promise<Operation>,
 
 async function startStack() {
   state.stack = 'starting'
-  await operate('Démarrage de la stack', (c) => c.post('/api/v1/stack/start', {}), 'La stack a démarré.')
+  await operate(t('store.stack.start'), (c) => c.post('/api/v1/stack/start', {}), t('store.stack.started'))
   state.stack = 'stopped'
   await refresh()
   openLogs()
@@ -544,14 +556,14 @@ async function startStack() {
 async function stopStack() {
   state.stack = 'stopping'
   const password = takePassword()
-  await operate('Arrêt de la stack', (c) => c.post('/api/v1/stack/stop', {}, { action: 'Arrêter la stack', password }), 'Les volumes et les données sont conservés.')
+  await operate(t('store.stack.stop'), (c) => c.post('/api/v1/stack/stop', {}, { action: t('store.stack.stopAction'), password }), t('store.stack.stopped'))
   state.stack = 'running'
   await refresh()
 }
 
 async function restartStack() {
   state.stack = 'starting'
-  await operate('Redémarrage de la stack', (c) => c.post('/api/v1/stack/restart', {}), 'La stack a redémarré.')
+  await operate(t('store.stack.restart'), (c) => c.post('/api/v1/stack/restart', {}), t('store.stack.restarted'))
   state.stack = 'stopped'
   await refresh()
   openLogs()
@@ -562,7 +574,7 @@ async function restartContainer(id: string, opts: { rebuild?: boolean; action?: 
     // `frankenmanager restart --caddy --build`: the images of every active PHP version are rebuilt, their containers
     // recreated, then the FrankenPHP containers and the reverse proxy restart; the other services keep running.
     for (const c of state.containers) if (c.kind === 'php') c.status = 'restarting'
-    await operate('Reconstruction des images PHP', (cl) => cl.post('/api/v1/stack/restart', { targets: ['caddy'], build: true }), 'Images PHP reconstruites, conteneurs recréés.')
+    await operate(t('store.rebuild.title'), (cl) => cl.post('/api/v1/stack/restart', { targets: ['caddy'], build: true }), t('store.rebuild.done'))
     return
   }
   const action = opts.action ?? 'restart'
@@ -570,17 +582,16 @@ async function restartContainer(id: string, opts: { rebuild?: boolean; action?: 
   if (id === 'caddy') id = state.containers.find((x) => x.kind === 'caddy')?.id ?? id
   const c = state.containers.find((x) => x.id === id)
   if (c && action !== 'stop') c.status = 'restarting'
-  const label = { restart: 'Redémarrage', stop: 'Arrêt', start: 'Démarrage' }[action]
-  await operate(`${label} de ${id}`, (cl) => cl.post(`/api/v1/containers/${encodeURIComponent(id)}/${action}`, {}, { action: `Arrêter ${id}` }), 'Terminé.')
+  await operate(t(`store.container.${action}`, { id }), (cl) => cl.post(`/api/v1/containers/${encodeURIComponent(id)}/${action}`, {}, { action: t('store.container.stopAction', { id }) }), t('store.done'))
 }
 
 async function addProject(p: NewProject): Promise<FieldErrors | null> {
-  if (!DOMAIN_RE.test(p.name)) return { name: 'Utilisez un domaine local en .test (ex. blog.test).' }
-  if (state.domains.some((d) => d.name === p.name && !d.archived)) return { name: 'Ce domaine existe déjà. Choisissez un autre nom.' }
-  if (p.alias && !DOMAIN_RE.test(p.alias)) return { alias: 'Utilisez un domaine local en .test (ex. www.blog.test).' }
+  if (!DOMAIN_RE.test(p.name)) return { name: t('errors.domain.test', { example: 'blog.test' }) }
+  if (state.domains.some((d) => d.name === p.name && !d.archived)) return { name: t('errors.domain.exists') }
+  if (p.alias && !DOMAIN_RE.test(p.alias)) return { alias: t('errors.domain.test', { example: 'www.blog.test' }) }
   const isStatic = p.type === 'static'
   const body = { domains: [p.name], root: p.root.trim(), ...(isStatic ? { static: true, spa: p.spa } : { php: p.php }) }
-  const err = await operate(isStatic ? 'Ajout de l’hôte statique' : 'Création du projet', (c) => c.post('/api/v1/hosts', body), `${p.name} est prêt en HTTPS.`)
+  const err = await operate(t(isStatic ? 'store.project.addStatic' : 'store.project.create'), (c) => c.post('/api/v1/hosts', body), t('store.project.ready', { name: p.name }))
   if (err) return /root|dossier|folder|director/i.test(err) ? { root: err } : { name: err }
   if (p.alias) {
     const aErr = await addAlias(p.name, p.alias)
@@ -590,37 +601,37 @@ async function addProject(p: NewProject): Promise<FieldErrors | null> {
 }
 
 async function addAlias(target: string, alias: string): Promise<string | null> {
-  if (!DOMAIN_RE.test(alias)) return 'Utilisez un domaine local en .test (ex. www.blog.test).'
-  return operate('Ajout de l’alias', (c) => c.post(`/api/v1/hosts/${encodeURIComponent(target)}/aliases`, { aliases: [alias] }), `${alias} pointe vers ${target}.`)
+  if (!DOMAIN_RE.test(alias)) return t('errors.domain.test', { example: 'www.blog.test' })
+  return operate(t('store.alias.add'), (c) => c.post(`/api/v1/hosts/${encodeURIComponent(target)}/aliases`, { aliases: [alias] }), t('store.alias.added', { alias, target }))
 }
 
 async function archiveDomain(name: string) {
   const password = takePassword()
   const d = state.domains.find((x) => x.name === name)
-  await operate(d?.kind === 'alias' ? 'Suppression de l’alias' : 'Archivage', (c) => c.post('/api/v1/hosts/remove', { domains: [name] }, { action: `Archiver ${name}`, password }), `${name} est archivé.`)
+  await operate(t(d?.kind === 'alias' ? 'store.alias.remove' : 'store.domain.archive'), (c) => c.post('/api/v1/hosts/remove', { domains: [name] }, { action: t('store.domain.archiveAction', { name }), password }), t('store.domain.archived', { name }))
 }
 
 async function restoreDomain(name: string, php?: Php) {
   const d = state.domains.find((x) => x.name === name)
   const body = d?.kind === 'static' ? { domains: [name], static: true } : { domains: [name], php: php ?? d?.php ?? '' }
-  await operate('Restauration', (c) => c.post('/api/v1/hosts/restore', body), `${name} est de nouveau en ligne.`)
+  await operate(t('store.domain.restore'), (c) => c.post('/api/v1/hosts/restore', body), t('store.domain.restored', { name }))
 }
 
 async function switchPhp(name: string, php: Php) {
-  await operate('Changement de version PHP', (c) => c.put(`/api/v1/hosts/${encodeURIComponent(name)}/php`, { php }), `${name} utilise désormais PHP ${php}.`)
+  await operate(t('store.php.switch'), (c) => c.put(`/api/v1/hosts/${encodeURIComponent(name)}/php`, { php }), t('store.php.switched', { name, php }))
 }
 
 /** One domain (`…/certificate`), or all of them (`restart --force-ssl`). */
 async function regenerateCert(name: string | 'all') {
   state.ssl.regenerating = name
-  if (name === 'all') await operate('Régénération SSL', (c) => c.post('/api/v1/stack/restart', { force_ssl: true }), 'Tous les certificats sont régénérés.')
-  else await operate('Régénération SSL', (c) => c.post(`/api/v1/hosts/${encodeURIComponent(name)}/certificate`, {}), `Certificat de ${name} régénéré.`)
+  if (name === 'all') await operate(t('store.ssl.regenerate'), (c) => c.post('/api/v1/stack/restart', { force_ssl: true }), t('store.ssl.allRegenerated'))
+  else await operate(t('store.ssl.regenerate'), (c) => c.post(`/api/v1/hosts/${encodeURIComponent(name)}/certificate`, {}), t('store.ssl.regenerated', { name }))
   state.ssl.regenerating = null
 }
 
 async function setService(name: ServiceName, on: boolean) {
   serviceBusy[name] = true
-  await operate(`${on ? 'Activation' : 'Désactivation'} : ${SERVICES[name].label}`, (c) => c.put(`/api/v1/services/${name}`, { enabled: on }), 'Terminé.')
+  await operate(t(on ? 'store.service.enable' : 'store.service.disable', { service: SERVICES[name].label }), (c) => c.put(`/api/v1/services/${name}`, { enabled: on }), t('store.done'))
   serviceBusy[name] = false
 }
 
@@ -666,10 +677,11 @@ export interface ConfigDef {
 }
 type ApiSetting = Schema<'Setting'>
 
+/** Setting prefix → group (key under labels.configGroups). */
 const GROUPS: [RegExp, string][] = [
-  [/^(DB_|MARIADB_|MYSQL_|POSTGRES_|PMA_|PGADMIN_)/, 'Bases de données'], [/^REDIS_/, 'Cache Redis'], [/^SOKETI_/, 'WebSocket (Soketi)'],
-  [/^S3_/, 'Stockage S3 (Garage)'], [/^DNS_/, 'Serveur DNS'], [/^(DASHBOARD_|DAEMON_)/, 'Dashboard'], [/^WEB_/, 'Serveur web'],
-  [/^(PHP_IMAGE|INSTALL_|EXTRA_)/, 'Images PHP'],
+  [/^(DB_|MARIADB_|MYSQL_|POSTGRES_|PMA_|PGADMIN_)/, 'databases'], [/^REDIS_/, 'redis'], [/^SOKETI_/, 'websocket'],
+  [/^S3_/, 's3'], [/^DNS_/, 'dns'], [/^(DASHBOARD_|DAEMON_)/, 'dashboard'], [/^WEB_/, 'web'],
+  [/^(PHP_IMAGE|INSTALL_|EXTRA_)/, 'phpImages'],
 ]
 /** Settings from the daemon registry: their description and possible values come from it. */
 export const CONFIG_DEFS = reactive<ConfigDef[]>([])
@@ -678,12 +690,14 @@ export const GENERATED_CONFIG: Record<string, string> = {}
 function toConfigDef(s: ApiSetting): ConfigDef {
   const bool = !!s.values && s.values.length === 2 && s.values.includes('true') && s.values.includes('false')
   const type: ConfigType = s.secret ? 'secret' : bool ? 'bool' : s.values?.length ? 'select' : /_PORT$/.test(s.key) ? 'port' : 'text'
+  const group = GROUPS.find(([re]) => re.test(s.key))?.[1] ?? 'general'
   return {
-    key: s.key, group: GROUPS.find(([re]) => re.test(s.key))?.[1] ?? 'Général', type, default: s.default,
+    // Getter: the group name follows the interface language.
+    key: s.key, get group() { return t(`labels.configGroups.${group}`) }, type, default: s.default,
     help: `${s.description}${s.applies ? ` · ${s.applies}` : ''}`, options: s.values, restart: !['now', 'live', 'daemon', 'alias'].includes(s.apply),
   }
 }
-export const displayConfigValue = (def: ConfigDef, v: string) => (!v ? '(vide)' : def.type === 'secret' ? '••••••••' : v)
+export const displayConfigValue = (def: ConfigDef, v: string) => (!v ? t('labels.emptyValue') : def.type === 'secret' ? '••••••••' : v)
 
 // ---------- Loading when a page opens ----------
 /** A page's own data is only read when opening it (DashboardLayout watches the route). */
@@ -692,7 +706,7 @@ export async function loadPage(name: string) {
   const loaders: Record<string, () => Promise<void>> = {
     dns: loadDns, ssl: refreshExtras, redis: loadRedis, databases: loadDatabases, s3: loadS3, access: loadAccess, overview: loadDatabases,
   }
-  await loaders[name]?.().catch((e) => toast('error', 'Lecture impossible', e instanceof Error ? e.message : String(e)))
+  await loaders[name]?.().catch((e) => toast('error', t('store.loadFailed'), e instanceof Error ? e.message : String(e)))
 }
 
 async function loadDns() {
@@ -703,7 +717,7 @@ async function loadDns() {
   await refreshExtras()
 }
 
-const TYPE_SIZE: Record<string, string> = { string: 'chaîne', hash: 'hash', list: 'liste', set: 'ensemble', zset: 'ensemble trié', stream: 'flux' }
+const REDIS_TYPES = ['string', 'hash', 'list', 'set', 'zset', 'stream']
 async function loadRedis(pattern = '*', count = 200) {
   if (!api || !serviceEnabled('redis')) return
   const st = await api.get<ApiResponse<'/api/v1/redis'>>('/api/v1/redis')
@@ -716,7 +730,7 @@ async function loadRedis(pattern = '*', count = 200) {
   })
   if (!st.running) { state.redis.sample = []; return }
   const page = await api.get<ApiResponse<'/api/v1/redis/keys'>>(`/api/v1/redis/keys?pattern=${encodeURIComponent(pattern || '*')}&count=${count}`)
-  state.redis.sample = page.keys.map((k) => ({ key: k.name, type: k.type, size: TYPE_SIZE[k.type] ?? k.type, ttl: k.ttl }))
+  state.redis.sample = page.keys.map((k) => ({ key: k.name, type: k.type, size: REDIS_TYPES.includes(k.type) ? t(`labels.redisTypes.${k.type}`) : k.type, ttl: k.ttl }))
 }
 /** `SCAN MATCH` pattern: `*` and `?` as glob (local filter of the keys already read). */
 export function redisMatch(pattern: string, key: string) {
@@ -737,9 +751,9 @@ async function loadDatabases() {
 export const BUCKET_RE = /^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/
 export const s3Up = () => state.containers.some((c) => c.id === 'franken_s3_gateway' && c.status === 'running')
 export function validateBucket(name: string): string | null {
-  if (!name) return 'Le nom du bucket est requis.'
-  if (!BUCKET_RE.test(name)) return '3 à 63 minuscules, chiffres et tirets, sans point.'
-  if (state.s3.buckets.some((b) => b.name === name)) return `Le bucket ${name} existe déjà.`
+  if (!name) return t('errors.bucket.required')
+  if (!BUCKET_RE.test(name)) return t('errors.bucket.invalid')
+  if (state.s3.buckets.some((b) => b.name === name)) return t('errors.bucket.exists', { name })
   return null
 }
 async function loadS3() {
@@ -769,7 +783,7 @@ export const bucketObjects = (bucket: string) => state.s3.objects[bucket] ?? []
 export const objectPublic = (bucket: string, o: S3Object) => !!state.s3.buckets.find((b) => b.name === bucket)?.public || o.public
 /** Public URL of a public object, otherwise a presigned link valid for `expires` seconds (`…/object/link`). */
 export async function objectLink(bucket: string, o: S3Object, expires = 3600) {
-  if (!api) throw new Error('Aucune instance.')
+  if (!api) throw new Error(t('errors.noInstance'))
   const l = await api.get<ApiResponse<'/api/v1/s3/buckets/{bucket}/object/link'>>(
     `/api/v1/s3/buckets/${encodeURIComponent(bucket)}/object/link?key=${encodeURIComponent(o.key)}&expires=${expires}`)
   return { url: l.url, public: l.public, expiresAt: l.expires_at ? Date.parse(l.expires_at) : null }
@@ -809,18 +823,18 @@ export async function loadCaddyfile(name: string) {
 
 // ---------- Actions of the other pages ----------
 async function addRoute(r: { source: string; target: string; websocket: boolean }): Promise<FieldErrors | null> {
-  if (!DOMAIN_RE.test(r.source)) return { source: 'Utilisez un domaine local en .test (ex. app.test).' }
+  if (!DOMAIN_RE.test(r.source)) return { source: t('errors.domain.test', { example: 'app.test' }) }
   const target = r.target.replace(/^https?:\/\//, '')
-  if (!/^[\w.-]+:\d{2,5}$/.test(target)) return { target: 'Adresse attendue au format hôte:port (ex. 127.0.0.1:5173).' }
-  const err = await operate('Ajout de la route', (c) => c.post('/api/v1/hosts', { domains: [r.source], target, websocket: r.websocket }), `${r.source} est exposé en HTTPS.`)
+  if (!/^[\w.-]+:\d{2,5}$/.test(target)) return { target: t('errors.route.target') }
+  const err = await operate(t('store.route.add'), (c) => c.post('/api/v1/hosts', { domains: [r.source], target, websocket: r.websocket }), t('store.route.added', { source: r.source }))
   return err ? { source: err } : null
 }
 async function setWebsocket(name: string, on: boolean) {
-  await operate(on ? 'WebSocket autorisé' : 'WebSocket refusé', (c) => c.put(`/api/v1/hosts/${encodeURIComponent(name)}/websocket`, { enabled: on }), on ? `${name} relaie les connexions WebSocket.` : `Une demande d’upgrade vers ${name} reçoit 403.`)
+  await operate(t(on ? 'store.websocket.allowed' : 'store.websocket.refused'), (c) => c.put(`/api/v1/hosts/${encodeURIComponent(name)}/websocket`, { enabled: on }), t(on ? 'store.websocket.relays' : 'store.websocket.upgradeRefused', { name }))
 }
 
 async function checkCaddyfile(name: string, text: string): Promise<{ line: number; message: string } | null> {
-  if (!api) return { line: 1, message: 'Aucune instance.' }
+  if (!api) return { line: 1, message: t('errors.noInstance') }
   try {
     await api.post<ApiResponse<'/api/v1/hosts/{name}/caddyfile/validate', 'post'>>(`/api/v1/hosts/${encodeURIComponent(name)}/caddyfile/validate`, { content: text })
     return null
@@ -830,13 +844,13 @@ async function checkCaddyfile(name: string, text: string): Promise<{ line: numbe
   }
 }
 async function saveCaddyfile(name: string, text: string): Promise<string | null> {
-  const err = await operate('Caddyfile enregistré', (c) => c.put(`/api/v1/hosts/${encodeURIComponent(name)}/caddyfile`, { content: text }), 'Vérifié par Caddy, le conteneur a été rechargé.')
+  const err = await operate(t('store.caddyfile.saved'), (c) => c.put(`/api/v1/hosts/${encodeURIComponent(name)}/caddyfile`, { content: text }), t('store.caddyfile.reloaded'))
   if (!err) await loadCaddyfile(name).catch(() => {})
   return err
 }
 async function resetCaddyfile(name: string) {
   const password = takePassword()
-  await operate('Retour au modèle', (c) => c.post(`/api/v1/hosts/${encodeURIComponent(name)}/caddyfile/reset`, {}, { action: `Rétablir le Caddyfile de ${name}`, password }), 'Caddyfile régénéré depuis le modèle.')
+  await operate(t('store.caddyfile.reset'), (c) => c.post(`/api/v1/hosts/${encodeURIComponent(name)}/caddyfile/reset`, {}, { action: t('store.caddyfile.resetAction', { name }), password }), t('store.caddyfile.regenerated'))
   await loadCaddyfile(name).catch(() => {})
 }
 
@@ -848,42 +862,42 @@ async function saveDns(dns: { ip: string; listen: string; port: number; upstream
   }
   for (const [k, v] of Object.entries(values)) {
     if ((state.config[k] ?? '') === v) continue
-    if (await operate(`Réglage ${k}`, (c) => c.put(`/api/v1/settings/${k}`, { value: v }), `${k} enregistré.`)) return
+    if (await operate(t('store.setting.title', { key: k }), (c) => c.put(`/api/v1/settings/${k}`, { value: v }), t('store.setting.saved', { key: k }))) return
   }
   if (dns.enabled !== state.dns.enabled) await setService('dns', dns.enabled)
   await loadDns()
 }
 async function restartDns() {
   state.dns.status = 'restarting'
-  await operate('Redémarrage du DNS', (c) => c.post('/api/v1/dns/apply', {}), 'Le serveur DNS a relu sa configuration.')
+  await operate(t('store.dns.restart'), (c) => c.post('/api/v1/dns/apply', {}), t('store.dns.restarted'))
   await loadDns()
 }
 
 async function setCaShared(on: boolean, port: number) {
-  await operate(on ? 'Partage de la CA' : 'Arrêt du partage', (c) => c.put('/api/v1/ca', { enabled: on, port }), on ? 'Désactivez le partage après l’installation.' : 'La CA n’est plus exposée.')
+  await operate(t(on ? 'store.ca.share' : 'store.ca.stopSharing'), (c) => c.put('/api/v1/ca', { enabled: on, port }), t(on ? 'store.ca.shared' : 'store.ca.unshared'))
   await refreshExtras()
 }
 
 async function flushRedis() {
   const password = takePassword()
-  await operate('Vidage du cache', (c) => c.post('/api/v1/redis/flush', {}, { action: 'Vider Redis', password }), 'Toutes les clés sont supprimées.')
+  await operate(t('store.redis.flush'), (c) => c.post('/api/v1/redis/flush', {}, { action: t('store.redis.flushAction'), password }), t('store.redis.flushed'))
   await loadRedis()
 }
 async function deleteRedisKeys(keys: string[]) {
   const password = takePassword()
-  await operate('Suppression de clés', (c) => c.post('/api/v1/redis/keys/delete', { keys }, { action: 'Supprimer des clés', password }), keys.length === 1 ? keys[0]! : `${keys.length} clés.`)
+  await operate(t('store.redis.deleteKeys'), (c) => c.post('/api/v1/redis/keys/delete', { keys }, { action: t('store.redis.deleteKeysAction'), password }), keys.length === 1 ? keys[0]! : t('store.redis.keysDeleted', { n: formatNumber(keys.length) }))
   await loadRedis()
 }
 async function scanRedis(pattern: string, count = 200) { await loadRedis(pattern, count) }
 
 const DB_NAME = /^[A-Za-z0-9_]{1,63}$/
 async function createDb(d: { engine: DbEngine; name: string; user: string; password: string; grant: boolean }): Promise<FieldErrors | null> {
-  if (!DB_NAME.test(d.name)) return { name: 'Lettres, chiffres et _ uniquement, 63 au plus.' }
+  if (!DB_NAME.test(d.name)) return { name: t('errors.db.name') }
   if (d.grant) {
-    if (!DB_NAME.test(d.user)) return { user: 'Lettres, chiffres et _ uniquement, 63 au plus.' }
-    if (!d.password) return { password: 'Un mot de passe est obligatoire.' }
+    if (!DB_NAME.test(d.user)) return { user: t('errors.db.name') }
+    if (!d.password) return { password: t('errors.db.passwordRequired') }
   }
-  const err = await operate('Création de la base', (c) => c.post(`/api/v1/databases/${engineId(d.engine)}`, { name: d.name }), `${d.name} (${d.engine}) est prête.`)
+  const err = await operate(t('store.db.create'), (c) => c.post(`/api/v1/databases/${engineId(d.engine)}`, { name: d.name }), t('store.db.created', { name: d.name, engine: d.engine }))
   if (err) { await loadDatabases(); return { name: err } }
   if (d.grant) return createDbUser({ engine: d.engine, name: d.user, password: d.password, database: d.name })
   await loadDatabases()
@@ -891,86 +905,86 @@ async function createDb(d: { engine: DbEngine; name: string; user: string; passw
 }
 async function dropDb(name: string, engine: DbEngine) {
   const password = takePassword()
-  await operate('Suppression de la base', (c) => c.post(`/api/v1/databases/${engineId(engine)}/delete`, { names: [name] }, { action: `Supprimer ${name}`, password }), `${name} a été supprimée.`)
+  await operate(t('store.db.drop'), (c) => c.post(`/api/v1/databases/${engineId(engine)}/delete`, { names: [name] }, { action: t('store.deleteAction', { name }), password }), t('store.db.dropped', { name }))
   await loadDatabases()
 }
 async function createDbUser(u: { engine: DbEngine; name: string; password: string; database: string }): Promise<FieldErrors | null> {
-  if (!DB_NAME.test(u.name)) return { user: 'Lettres, chiffres et _ uniquement, 63 au plus.' }
-  if (!u.password) return { password: 'Un mot de passe est obligatoire.' }
-  const err = await operate('Création de l’utilisateur', (c) => c.post(`/api/v1/databases/${engineId(u.engine)}/users`, { name: u.name, password: u.password, database: u.database }), u.database ? `${u.name} a tous les droits sur ${u.database}.` : `${u.name} est créé.`)
+  if (!DB_NAME.test(u.name)) return { user: t('errors.db.name') }
+  if (!u.password) return { password: t('errors.db.passwordRequired') }
+  const err = await operate(t('store.dbUser.create'), (c) => c.post(`/api/v1/databases/${engineId(u.engine)}/users`, { name: u.name, password: u.password, database: u.database }), u.database ? t('store.dbUser.granted', { name: u.name, database: u.database }) : t('store.dbUser.created', { name: u.name }))
   await loadDatabases()
   return err ? { user: err } : null
 }
 async function dropDbUser(name: string, engine: DbEngine) {
   const password = takePassword()
-  await operate('Suppression de l’utilisateur', (c) => c.post(`/api/v1/databases/${engineId(engine)}/users/delete`, { names: [name] }, { action: `Supprimer ${name}`, password }), `${name} ne peut plus se connecter.`)
+  await operate(t('store.dbUser.drop'), (c) => c.post(`/api/v1/databases/${engineId(engine)}/users/delete`, { names: [name] }, { action: t('store.deleteAction', { name }), password }), t('store.dbUser.dropped', { name }))
   await loadDatabases()
 }
 
 async function createBucket(name: string, pub: boolean): Promise<string | null> {
-  const err = validateBucket(name) ?? await operate('Création du bucket', (c) => c.post('/api/v1/s3/buckets', { names: [name], public: pub }), pub ? 'Public : ses objets sont lisibles sans identifiants.' : 'Privé.')
+  const err = validateBucket(name) ?? await operate(t('store.bucket.create'), (c) => c.post('/api/v1/s3/buckets', { names: [name], public: pub }), t(pub ? 'store.bucket.createdPublic' : 'store.bucket.createdPrivate'))
   await loadS3()
   return err
 }
 async function setBucketPublic(name: string, pub: boolean) {
-  await operate(pub ? 'Bucket public' : 'Bucket privé', (c) => c.post('/api/v1/s3/buckets/public', { names: [name], public: pub }), name)
+  await operate(t(pub ? 'store.bucket.public' : 'store.bucket.private'), (c) => c.post('/api/v1/s3/buckets/public', { names: [name], public: pub }), name)
   await loadS3()
 }
 async function emptyBucket(name: string) {
   const password = takePassword()
-  await operate('Vidage du bucket', (c) => c.post('/api/v1/s3/buckets/empty', { names: [name] }, { action: `Vider ${name}`, password }), `${name} est vide.`)
+  await operate(t('store.bucket.empty'), (c) => c.post('/api/v1/s3/buckets/empty', { names: [name] }, { action: t('store.bucket.emptyAction', { name }), password }), t('store.bucket.emptied', { name }))
   await loadS3()
 }
 async function deleteBucket(name: string) {
   const password = takePassword()
-  await operate('Suppression du bucket', (c) => c.post('/api/v1/s3/buckets/delete', { names: [name], force: true }, { action: `Supprimer ${name}`, password }), `${name} et ses clés sont supprimés.`)
+  await operate(t('store.bucket.delete'), (c) => c.post('/api/v1/s3/buckets/delete', { names: [name], force: true }, { action: t('store.deleteAction', { name }), password }), t('store.bucket.deleted', { name }))
   await loadS3()
 }
 async function createS3Key(bucket: string, name: string, readOnly: boolean): Promise<FieldErrors | null> {
-  if (!bucket) return { bucket: 'Choisissez un bucket existant.' }
-  const err = await operate('Création de la clé', (c) => c.post('/api/v1/s3/keys', { bucket, name: name.trim(), read_only: readOnly }), `Clé créée pour ${bucket}.`)
+  if (!bucket) return { bucket: t('errors.s3Key.bucketRequired') }
+  const err = await operate(t('store.s3Key.create'), (c) => c.post('/api/v1/s3/keys', { bucket, name: name.trim(), read_only: readOnly }), t('store.s3Key.created', { bucket }))
   await loadS3()
   return err ? { name: err } : null
 }
 async function deleteS3Key(id: string) {
   const password = takePassword()
-  await operate('Suppression de la clé', (c) => c.post('/api/v1/s3/keys/delete', { ids: [id] }, { action: `Supprimer ${id}`, password }), id)
+  await operate(t('store.s3Key.delete'), (c) => c.post('/api/v1/s3/keys/delete', { ids: [id] }, { action: t('store.deleteAction', { name: id }), password }), id)
   await loadS3()
 }
 async function uploadObjects(bucket: string, prefix: string, files: File[], pub: boolean) {
   for (const f of files) {
     const key = `${prefix}${f.name}`
-    const err = await operate('Téléversement', (c) => c.upload(`/api/v1/s3/buckets/${encodeURIComponent(bucket)}/object?key=${encodeURIComponent(key)}&public=${pub}`, f), key)
+    const err = await operate(t('store.objects.upload'), (c) => c.upload(`/api/v1/s3/buckets/${encodeURIComponent(bucket)}/object?key=${encodeURIComponent(key)}&public=${pub}`, f), key)
     if (err) break
   }
   await Promise.all([loadObjects(bucket, prefix), loadS3()])
 }
 async function deleteObjects(bucket: string, keys: string[], prefix = '') {
   const password = takePassword()
-  await operate('Suppression d’objets', (c) => c.post(`/api/v1/s3/buckets/${encodeURIComponent(bucket)}/objects/delete`, { keys }, { action: 'Supprimer des objets', password }), `${keys.length} objet(s) supprimé(s).`)
+  await operate(t('store.objects.delete'), (c) => c.post(`/api/v1/s3/buckets/${encodeURIComponent(bucket)}/objects/delete`, { keys }, { action: t('store.objects.deleteAction'), password }), t('store.objects.deleted', { n: formatNumber(keys.length) }, keys.length))
   await Promise.all([loadObjects(bucket, prefix), loadS3()])
 }
 async function setObjectsPublic(bucket: string, keys: string[], pub: boolean, prefix = '') {
-  await operate(pub ? 'Objet(s) public(s)' : 'Objet(s) privé(s)', (c) => c.post(`/api/v1/s3/buckets/${encodeURIComponent(bucket)}/objects/public`, { keys, public: pub }), pub ? 'public-read' : 'private')
+  await operate(t(pub ? 'store.objects.public' : 'store.objects.private', keys.length), (c) => c.post(`/api/v1/s3/buckets/${encodeURIComponent(bucket)}/objects/public`, { keys, public: pub }), pub ? 'public-read' : 'private')
   await Promise.all([loadObjects(bucket, prefix), loadS3()])
 }
 
 /** `PUT /api/v1/settings/{key}`; a service key (REDIS_ENABLED…) acts as service enable|disable. */
 async function setConfig(key: string, raw: string): Promise<string | null> {
   const def = CONFIG_DEFS.find((d) => d.key === key)
-  if (!def) return 'Clé inconnue.'
+  if (!def) return t('errors.config.unknownKey')
   const v = raw.trim()
-  if (def.type === 'port' && (!/^\d+$/.test(v) || +v < 1 || +v > 65535)) return 'Port invalide (1-65535).'
-  if (def.type === 'select' && def.options && !def.options.includes(v)) return `Valeurs possibles : ${def.options.join(', ')}.`
+  if (def.type === 'port' && (!/^\d+$/.test(v) || +v < 1 || +v > 65535)) return t('errors.config.invalidPort')
+  if (def.type === 'select' && def.options && !def.options.includes(v)) return t('errors.config.allowedValues', { values: def.options.join(', ') })
   const password = key.startsWith('DASHBOARD_') ? takePassword() : undefined
-  const err = await operate('Configuration enregistrée', (c) => c.put(`/api/v1/settings/${key}`, { value: v }, { action: `Modifier ${key}`, password }), `${key} = ${displayConfigValue(def, v)}`)
+  const err = await operate(t('store.config.saved'), (c) => c.put(`/api/v1/settings/${key}`, { value: v }, { action: t('store.config.editAction', { key }), password }), `${key} = ${displayConfigValue(def, v)}`)
   if (!err && def.restart && !state.configPending.includes(key)) state.configPending.push(key)
   return err
 }
 async function resetConfig(key: string) {
   const def = CONFIG_DEFS.find((d) => d.key === key)
   const password = key.startsWith('DASHBOARD_') ? takePassword() : undefined
-  const err = await operate('Valeur par défaut rétablie', (c) => c.put(`/api/v1/settings/${key}`, { value: null }, { action: `Rétablir ${key}`, password }), key)
+  const err = await operate(t('store.config.reset'), (c) => c.put(`/api/v1/settings/${key}`, { value: null }, { action: t('store.config.resetAction', { key }), password }), key)
   if (!err && def?.restart && !state.configPending.includes(key)) state.configPending.push(key)
 }
 
@@ -980,15 +994,15 @@ async function setAccess(values: Partial<Record<(typeof ACCESS_KEYS)[number], st
   const password = takePassword()
   for (const [k, v] of Object.entries(values)) {
     if ((state.config[k] ?? '') === (v ?? '')) continue
-    const err = await operate(`Réglage ${k}`, (c) => c.put(`/api/v1/settings/${k}`, { value: v ?? '' }, { action: `Modifier ${k}`, password }), `${k} enregistré.`)
+    const err = await operate(t('store.setting.title', { key: k }), (c) => c.put(`/api/v1/settings/${k}`, { value: v ?? '' }, { action: t('store.config.editAction', { key: k }), password }), t('store.setting.saved', { key: k }))
     if (err) return { [k]: err }
   }
   await loadAccess()
   return null
 }
 async function setPassword(current: string, next: string): Promise<FieldErrors | null> {
-  if (next.length < 10) return { password: 'Au moins 10 caractères.' }
-  const err = await operate('Mot de passe changé', (c) => c.put('/api/v1/auth/password', { current, password: next }), 'Tous les appareils sont déconnectés, celui-ci aussi : reconnectez-vous.')
+  if (next.length < 10) return { password: t('errors.password.tooShort', { n: 10 }) }
+  const err = await operate(t('store.password.changed'), (c) => c.put('/api/v1/auth/password', { current, password: next }), t('store.password.signedOut'))
   if (err) return /passe|password/i.test(err) ? { current: err } : { password: err }
   return null
 }
@@ -996,9 +1010,9 @@ async function revokeSession(id: string) {
   if (!api) return
   try {
     await api.del(`/api/v1/auth/sessions/${encodeURIComponent(id)}`)
-    toast('success', 'Appareil déconnecté', 'Il devra se reconnecter.')
+    toast('success', t('store.session.revoked'), t('store.session.revokedDesc'))
   } catch (e) {
-    toast('error', 'Déconnexion impossible', e instanceof Error ? e.message : String(e))
+    toast('error', t('store.session.revokeFailed'), e instanceof Error ? e.message : String(e))
   }
   await loadAccess()
 }
@@ -1035,7 +1049,7 @@ function resetUpdates() {
 
 /** Reads the lookup; `refresh` bypasses the daemon's cache. Returns the error, null when answered. */
 async function loadUpdates(refresh = false): Promise<string | null> {
-  if (!api) return 'Aucune instance.'
+  if (!api) return t('errors.noInstance')
   const c = api
   updates.checking = true
   try {
@@ -1058,10 +1072,10 @@ async function loadUpdates(refresh = false): Promise<string | null> {
 export async function checkUpdate() {
   const err = await loadUpdates(true)
   const info = updates.info
-  if (err || !info) toast('error', 'Vérification impossible', err ?? undefined)
-  else if (info.error) toast('warning', 'Vérification impossible', info.error)
-  else if (info.update_available) toast('info', 'Mise à jour disponible', `FrankenManager ${info.latest} est disponible.`)
-  else toast('success', 'FrankenManager est à jour', `Version ${info.version}.`)
+  if (err || !info) toast('error', t('store.update.checkFailed'), err ?? undefined)
+  else if (info.error) toast('warning', t('store.update.checkFailed'), info.error)
+  else if (info.update_available) toast('info', t('store.update.available'), t('store.update.availableDesc', { version: info.latest }))
+  else toast('success', t('store.update.upToDate'), t('store.update.version', { version: info.version }))
 }
 
 // ---------- Device pairing (POST /api/v1/auth/pairing, "paired" event) ----------
@@ -1083,7 +1097,7 @@ export async function createPairing() {
   const c = api
   Object.assign(pairing, { creating: true, error: '', paired: '' })
   try {
-    const code = await c.post<Pairing>('/api/v1/auth/pairing', {}, { action: 'Appairer un appareil' })
+    const code = await c.post<Pairing>('/api/v1/auth/pairing', {}, { action: t('store.pairing.action') })
     if (c === api) pairing.code = code
   } catch (e) {
     if (c === api) Object.assign(pairing, { code: null, error: e instanceof Error ? e.message : String(e) })
@@ -1098,6 +1112,6 @@ export const closePairing = resetPairing
 /** A device used a code: the modal tells which one if it is the code shown, the sessions are read again. */
 function onPaired(ev: PairedEvent) {
   if (pairing.code?.id === ev.id) Object.assign(pairing, { code: null, paired: ev.device })
-  toast('success', 'Appareil appairé', ev.device)
+  toast('success', t('store.pairing.paired'), ev.device)
   loadAccess().catch(() => {})
 }

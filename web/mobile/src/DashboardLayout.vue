@@ -1,30 +1,35 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, useTemplateRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import type { PluginListenerHandle } from '@capacitor/core'
 import { App as CapApp } from '@capacitor/app'
 import AppSidebar from '@app/components/AppSidebar.vue'
 import AppHeader from '@app/components/AppHeader.vue'
 import BottomNav from '@app/components/BottomNav.vue'
+import { sidebarCollapsed } from '@app/composables/useSidebar'
 import { connect, disconnect, loadPage, pause, refresh, resume, state, toast } from '@app/composables/useFm'
 import { shell } from '@app/lib/shell'
-import { currentInstance } from './lib/instances'
+import { deviceLabel } from './lib/device'
+import { currentInstance, displayAddress, displayName, isDemo } from './lib/instances'
 import { mountNativeTabBar, nativeTabs } from './lib/nativeTabBar'
 import { INSTANCES } from './router'
 
 // Dashboard layout (web/app pages), on the instance chosen in the list.
+const { t } = useI18n()
 const router = useRouter()
 const inst = currentInstance()!
 
 // What the shared sidebar shows: this instance, and the way back to the list.
-shell.name = inst.name
-shell.address = inst.url.replace('https://', '')
+shell.name = displayName(inst)
+shell.address = displayAddress(inst)
 shell.switchTo = INSTANCES.path
 
 let appState: PluginListenerHandle | undefined
 let unmountTabBar: (() => void) | undefined
 onMounted(async () => {
-  connect(inst, { mode: 'remote', client: 'App FrankenManager' })
+  // The demo runs on the phone itself: like the dashboard on its own machine, no password asked again.
+  connect(inst, { mode: isDemo(inst) ? 'local' : 'remote', client: deviceLabel() })
   // On iPhone, the native tab bar (Liquid Glass since iOS 26) replaces BottomNav.
   void mountNativeTabBar(router).then((fn) => { unmountTabBar = fn })
   // Streams paused when the app goes to the background, resumed on return.
@@ -49,7 +54,7 @@ watch([() => route.name, () => state.loaded], ([name, loaded]) => { if (loaded) 
 // Session revoked or expired (401, marked by main.ts): back to the sign-in.
 watch(() => inst.expired, (expired) => {
   if (!expired) return
-  toast('error', 'Session expirée', 'Reconnectez-vous à cette instance.')
+  toast('error', t('mobile.session.expired'), t('mobile.session.expiredHelp'))
   void router.replace(`/instances/${inst.id}/connexion`)
 })
 </script>
@@ -62,7 +67,7 @@ watch(() => inst.expired, (expired) => {
   -->
   <div class="flex h-dvh flex-col overflow-hidden">
     <AppSidebar />
-    <div class="flex min-h-0 flex-1 flex-col md:ml-[72px] xl:ml-[228px]">
+    <div class="flex min-h-0 flex-1 flex-col" :class="sidebarCollapsed ? 'md:ml-[72px]' : 'md:ml-[228px]'">
       <AppHeader />
       <div ref="scroller" class="min-h-0 flex-1 overflow-y-auto">
         <main
@@ -72,8 +77,8 @@ watch(() => inst.expired, (expired) => {
           <UAlert
             v-if="state.error"
             color="error" variant="soft" icon="i-lucide-wifi-off" class="mb-5"
-            :title="`${inst.name} ne répond pas`" :description="state.error"
-            :actions="[{ label: 'Réessayer', color: 'error', variant: 'outline', onClick: () => void refresh() }]"
+            :title="t('mobile.layout.unreachable', { name: displayName(inst) })" :description="state.error"
+            :actions="[{ label: t('common.retry'), color: 'error', variant: 'outline', onClick: () => void refresh() }]"
           />
           <div v-if="!state.loaded" class="flex flex-col gap-4">
             <USkeleton class="h-16 w-2/3" />

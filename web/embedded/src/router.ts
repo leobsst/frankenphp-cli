@@ -5,8 +5,8 @@ import { NAV, SETTINGS } from '@app/nav'
 export const router = createRouter({
   history: createWebHashHistory(),
   routes: [
-    ...NAV.map(({ name, path, label, component }) => ({ name, path, component, meta: { label } })),
-    { name: SETTINGS.name, path: SETTINGS.path, component: () => import('@app/pages/SettingsPage.vue'), meta: { label: SETTINGS.label } },
+    ...NAV.map(({ name, path, labelKey, component }) => ({ name, path, component, meta: { labelKey } })),
+    { name: SETTINGS.name, path: SETTINGS.path, component: () => import('@app/pages/SettingsPage.vue'), meta: { labelKey: SETTINGS.labelKey } },
     { path: '/:pathMatch(.*)*', redirect: '/' },
   ],
 })

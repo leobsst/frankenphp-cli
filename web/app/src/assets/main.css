@@ -144,3 +144,13 @@ body {
 .pt-safe { padding-top: var(--sat); }
 .pb-safe { padding-bottom: var(--sab); }
 .px-safe { padding-left: max(1rem, var(--sal)); padding-right: max(1rem, var(--sar)); }
+
+/*
+ * Height kept free at the bottom of the screen by the navigation: the home indicator, the native tab bar of the app
+ * (--native-tabbar-height, set by nativeTabBar.ts, which already includes the home indicator) or, on phones, the
+ * HTML bottom bar (BottomNav: 4rem + its bottom padding). The toasts placed at the bottom sit above it.
+ */
+:root { --fm-bottom-inset: max(var(--sab), var(--native-tabbar-height, 0px)); }
+@media (max-width: 719px) {
+  :root:has([data-bottom-nav]) { --fm-bottom-inset: calc(4rem + 1px + max(0.875rem, var(--sab))); }
+}

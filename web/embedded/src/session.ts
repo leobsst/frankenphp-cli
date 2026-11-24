@@ -1,6 +1,7 @@
 import { reactive } from 'vue'
 import { connect, disconnect, reconnect } from '@app/composables/useFm'
 import { setUnauthorizedHandler, type Instance } from '@app/lib/api'
+import { t } from '@app/i18n'
 
 /**
  * Connection of the embedded dashboard to its daemon, based on /config.json (served by the daemon with the pages):
@@ -56,7 +57,7 @@ function start(token: string) {
   const inst = instance(token)
   current = token
   bootDelay = 0
-  connect(inst, { mode: session.mode, client: session.mode === 'local' ? 'Navigateur de cette machine' : 'Navigateur' })
+  connect(inst, { mode: session.mode, client: session.mode === 'local' ? t('app.client.local') : t('app.client.remote') })
   session.phase = 'ready'
 }
 
@@ -72,7 +73,7 @@ async function localSession(): Promise<string | null> {
     return token
   }
   if (r.status === 403) return null
-  throw new Error(`Connexion locale refusée (${r.status}).`)
+  throw new Error(t('app.errors.localRefused', { status: r.status }))
 }
 
 export async function boot() {
@@ -81,7 +82,7 @@ export async function boot() {
   if (session.phase !== 'error') session.phase = 'loading'
   try {
     const res = await fetch('config.json', { cache: 'no-store' })
-    if (!res.ok) throw new Error(`config.json : ${res.status}`)
+    if (!res.ok) throw new Error(t('app.errors.config', { status: res.status }))
     const cfg = (await res.json()) as Config
     session.mode = cfg.mode
     session.base = (cfg.api || location.origin).replace(/\/$/, '')
@@ -112,7 +113,7 @@ export async function signIn(password: string): Promise<string | null> {
   })
   if (!r.ok) {
     const body = (await r.json().catch(() => null)) as { error?: string } | null
-    return body?.error ?? `Erreur ${r.status}`
+    return body?.error ?? t('signIn.error', { status: r.status })
   }
   const { token } = (await r.json()) as { token: string }
   write(token)

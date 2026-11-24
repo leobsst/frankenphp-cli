@@ -1,6 +1,8 @@
 import type { Router } from 'vue-router'
 import { App as CapApp } from '@capacitor/app'
 import { Capacitor } from '@capacitor/core'
+import { t } from '@app/i18n'
+import { isScreenshotLink, openScreenshotLink, SCREENSHOT_LINKS, watchScreenshotRequests } from '../demo/screenshots'
 
 /**
  * Pairing with a QR code. The dashboard of an instance (Remote access) shows a QR code holding a pairing link:
@@ -27,7 +29,7 @@ export const PAIR_PATH = '/instances/appairer'
 
 /** Parses a pairing link; throws an Error with a message for the user when it is not one. */
 export function parsePairLink(text: string): PairRequest {
-  const invalid = new Error('Ce QR code n’est pas un code d’appairage FrankenManager.')
+  const invalid = new Error(t('mobile.pair.errors.invalidLink'))
   let link: URL
   try {
     link = new URL(text.trim())
@@ -38,7 +40,7 @@ export function parsePairLink(text: string): PairRequest {
   const target = link.host || link.pathname.replace(/^\/+/, '')
   if (link.protocol !== 'frankenmanager:' || target !== 'pair') throw invalid
   const q = link.searchParams
-  if (q.get('v') !== '1') throw new Error('Ce code d’appairage vient d’une version de FrankenManager que l’app ne gère pas : mettez l’app à jour.')
+  if (q.get('v') !== '1') throw new Error(t('mobile.pair.errors.unsupportedVersion'))
 
   const code = q.get('code')?.trim() ?? ''
   if (!code) throw invalid
@@ -48,7 +50,7 @@ export function parsePairLink(text: string): PairRequest {
   } catch {
     throw invalid
   }
-  if (base.protocol !== 'https:') throw new Error('Code d’appairage refusé : l’adresse de l’instance n’est pas en HTTPS.')
+  if (base.protocol !== 'https:') throw new Error(t('mobile.pair.errors.notHttps'))
   if (base.username || base.password) throw invalid
 
   const ca = q.get('ca')?.trim().toLowerCase() || null
@@ -74,18 +76,18 @@ export async function scanPairing(): Promise<string | null> {
   try {
     const { ScanResult } = await CapacitorBarcodeScanner.scanBarcode({
       hint: CapacitorBarcodeScannerTypeHint.QR_CODE,
-      scanInstructions: 'Visez le QR code d’appairage affiché par le dashboard (Accès distant).',
-      cancelButtonAccessibilityLabel: 'Annuler',
-      torchButtonOnAccessibilityLabel: 'Éteindre la lampe',
-      torchButtonOffAccessibilityLabel: 'Allumer la lampe',
+      scanInstructions: t('mobile.pair.scanner.instructions'),
+      cancelButtonAccessibilityLabel: t('common.cancel'),
+      torchButtonOnAccessibilityLabel: t('mobile.pair.scanner.torchOn'),
+      torchButtonOffAccessibilityLabel: t('mobile.pair.scanner.torchOff'),
     })
     return ScanResult || null
   } catch (e) {
     // Plugin error codes (OS-PLUG-BARC-xxxx): 6 cancelled by the user, nothing to report; 7 camera access refused.
     const { code, message = String(e) } = (e ?? {}) as { code?: string; message?: string }
     if (code === 'OS-PLUG-BARC-0006' || /cancel/i.test(message)) return null
-    if (code === 'OS-PLUG-BARC-0007' || /permission/i.test(message)) throw new Error('L’app n’a pas accès à l’appareil photo : autorisez-le dans les réglages du téléphone.')
-    throw new Error(`Scan impossible : ${message}`)
+    if (code === 'OS-PLUG-BARC-0007' || /permission/i.test(message)) throw new Error(t('mobile.pair.errors.cameraDenied'))
+    throw new Error(t('mobile.pair.errors.scanFailed', { message }))
   }
 }
 
@@ -93,13 +95,20 @@ export async function scanPairing(): Promise<string | null> {
 const handled = new Set<string>()
 
 function handle(router: Router, url: string | undefined) {
-  if (!url || !/^frankenmanager:/i.test(url) || handled.has(url)) return
+  if (!url || !/^frankenmanager:/i.test(url)) return
+  // Screenshot builds only: frankenmanager://demo/… opens a page of the demo (src/demo/screenshots.ts).
+  if (SCREENSHOT_LINKS && isScreenshotLink(url)) {
+    void openScreenshotLink(router, url)
+    return
+  }
+  if (handled.has(url)) return
   handled.add(url)
   void openPairing(router, url)
 }
 
 /** Follows the pairing links that open the app (system camera, link in another app). */
 export async function listenPairingLinks(router: Router) {
+  if (SCREENSHOT_LINKS) watchScreenshotRequests(router)
   if (!Capacitor.isNativePlatform()) return
   await CapApp.addListener('appUrlOpen', ({ url }) => handle(router, url))
   const launch = await CapApp.getLaunchUrl().catch(() => undefined)

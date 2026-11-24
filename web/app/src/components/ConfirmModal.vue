@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { checkPassword, state } from '../composables/useFm'
 
 const props = defineProps<{
@@ -14,6 +15,7 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ confirm: [] }>()
 const open = defineModel<boolean>('open', { default: false })
+const { t } = useI18n()
 
 const typed = ref('')
 // Over remote access, a destructive action asks for the password again (X-FM-Password header, v0.11.0).
@@ -39,12 +41,12 @@ function submit() {
     </template>
     <template v-if="typeToConfirm || note || hint || remote" #body>
       <form class="flex flex-col gap-3" @submit.prevent="submit">
-        <UFormField v-if="typeToConfirm" :label="`Saisissez ${typeToConfirm} pour confirmer`">
+        <UFormField v-if="typeToConfirm" :label="t('confirmModal.typeToConfirm', { value: typeToConfirm })">
           <UInput v-model="typed" autofocus :placeholder="typeToConfirm" class="w-full" />
         </UFormField>
         <UFormField
-          v-if="remote" label="Mot de passe du dashboard" :error="wrong ? 'Mot de passe erroné.' : undefined"
-          help="Demandé pour chaque action destructive depuis l’accès distant." :ui="{ help: 'text-[11px]' }"
+          v-if="remote" :label="t('confirmModal.password')" :error="wrong ? t('confirmModal.wrongPassword') : undefined"
+          :help="t('confirmModal.passwordHelp')" :ui="{ help: 'text-[11px]' }"
         >
           <UInput v-model="password" type="password" :autofocus="!typeToConfirm" class="w-full" @update:model-value="wrong = false" />
         </UFormField>
@@ -53,7 +55,7 @@ function submit() {
       </form>
     </template>
     <template #footer="{ close }">
-      <UButton color="neutral" variant="outline" label="Annuler" @click="close" />
+      <UButton color="neutral" variant="outline" :label="t('common.cancel')" @click="close" />
       <UButton color="error" :label="confirm" :disabled="!ok" @click="submit" />
     </template>
   </UModal>

@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { fr } from '@nuxt/ui/locale'
 import { useToast } from '@nuxt/ui/composables'
 import { App as CapApp } from '@capacitor/app'
 import { Capacitor } from '@capacitor/core'
 import ConfirmPassword from '@app/components/ConfirmPassword.vue'
+import { uiLocale } from '@app/i18n'
 import { bindNotifier, state } from '@app/composables/useFm'
 import { useApplyPrefs } from '@app/composables/usePrefs'
 import { hideSplash } from './lib/splash'
@@ -61,8 +61,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <!-- Notifications below the top safe area (notch, status bar), not behind it. -->
-  <UApp :locale="fr" :toaster="{ position: 'top-center', max: 3, ui: { viewport: 'top-[calc(1rem+var(--sat))]' } }">
+  <!-- Notifications at the top, below the safe area (notch, status bar): the shared theme (web/app/src/theme.ts) offsets them. -->
+  <UApp :locale="uiLocale" :toaster="{ position: 'top-center', max: 3 }">
     <RouterView />
     <ConfirmPassword />
   </UApp>

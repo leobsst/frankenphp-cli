@@ -1,4 +1,5 @@
 import type { components, paths } from './api.gen'
+import { t } from '../i18n'
 
 /**
  * Managed instance: its API address and the session token sent as Bearer. Without a token, the session is the
@@ -49,9 +50,7 @@ export class ApiError extends Error {
 }
 
 /** Message for a request that did not go through: most often an untrusted certificate or closed remote access. */
-export const UNREACHABLE =
-  'Instance injoignable. Vérifiez que le daemon FrankenManager tourne ; depuis un autre appareil, que l’accès distant ' +
-  'est ouvert (DASHBOARD_ACCESS=lan) et que la CA de FrankenManager y est installée et approuvée.'
+export const unreachableMessage = () => t('errors.unreachable', { setting: 'DASHBOARD_ACCESS=lan' })
 
 // ---------- Password confirmation ----------
 
@@ -88,15 +87,42 @@ async function send<T>(base: string, token: string | null, method: string, path:
       signal: AbortSignal.timeout(opts.timeout ?? 15_000),
     })
   } catch {
-    throw new ApiError(0, UNREACHABLE)
+    throw new ApiError(0, unreachableMessage())
   }
   const data = await res.json().catch(() => null)
-  if (!res.ok) throw new ApiError(res.status, (data && data.error) || `Erreur ${res.status}`)
+  if (!res.ok) throw new ApiError(res.status, (data && data.error) || t('errors.http', { status: res.status }))
   return data as T
 }
 
+/**
+ * Server-sent event stream as the store uses it: an EventSource, or a stand-in with the same surface (demo mode).
+ * `readyState` takes the EventSource values (CONNECTING, OPEN, CLOSED).
+ */
+export interface EventStream {
+  readonly readyState: number
+  onopen: ((ev: Event) => void) | null
+  onerror: ((ev: Event) => void) | null
+  addEventListener(type: string, listener: (ev: MessageEvent) => void): void
+  close(): void
+}
+
+/**
+ * Clients for addresses that are not a daemon, by URL scheme (e.g. `demo:`, the mobile app's demo mode): the store
+ * and the pages use them through `client()` without knowing it.
+ */
+const schemes = new Map<string, (inst: Instance) => Client>()
+export function registerClientScheme(scheme: `${string}:`, factory: (inst: Instance) => Client) {
+  schemes.set(scheme, factory)
+}
+const schemeOf = (url: string) => /^[a-z][a-z0-9+.-]*:/i.exec(url)?.[0].toLowerCase() ?? ''
+
 /** Client of a connected instance: Bearer token, password confirmation, expired session. */
-export function client(inst: Instance) {
+export function client(inst: Instance): Client {
+  return schemes.get(schemeOf(inst.url))?.(inst) ?? httpClient(inst)
+}
+
+/** Client of a daemon reached over HTTP(S). */
+function httpClient(inst: Instance) {
   async function request<T>(method: string, path: string, opts: RequestOptions = {}): Promise<T> {
     try {
       return await send<T>(inst.url, inst.token, method, path, opts)
@@ -106,12 +132,20 @@ export function client(inst: Instance) {
         unauthorized(inst)
       }
       if (e.status === 428 && !opts.password) {
-        const password = await confirmer(opts.action ?? 'Confirmer cette action')
-        if (!password) throw new ApiError(428, 'Action annulée.')
+        const password = await confirmer(opts.action ?? t('store.confirmAction'))
+        if (!password) throw new ApiError(428, t('errors.cancelled'))
         return request<T>(method, path, { ...opts, password })
       }
       throw e
     }
+  }
+
+  /** URL of an SSE stream: EventSource sends no headers, the token goes in the query string. */
+  function streamUrl(path: string, params: Record<string, string | string[]> = {}) {
+    const u = new URL(inst.url + path)
+    for (const [k, v] of Object.entries(params)) for (const x of [v].flat()) u.searchParams.append(k, x)
+    if (inst.token) u.searchParams.set('access_token', inst.token)
+    return u.toString()
   }
 
   return {
@@ -126,27 +160,24 @@ export function client(inst: Instance) {
       try {
         res = await fetch(inst.url + path, { method: 'PUT', headers: { ...(inst.token ? { Authorization: `Bearer ${inst.token}` } : {}), 'Content-Type': file.type || 'application/octet-stream' }, body: file })
       } catch {
-        throw new ApiError(0, UNREACHABLE)
+        throw new ApiError(0, unreachableMessage())
       }
       const data = await res.json().catch(() => null)
-      if (!res.ok) throw new ApiError(res.status, (data && data.error) || `Erreur ${res.status}`)
+      if (!res.ok) throw new ApiError(res.status, (data && data.error) || t('errors.http', { status: res.status }))
       return data as Operation
     },
 
-    /** URL of an SSE stream: EventSource sends no headers, the token goes in the query string. */
-    streamUrl(path: string, params: Record<string, string | string[]> = {}) {
-      const u = new URL(inst.url + path)
-      for (const [k, v] of Object.entries(params)) for (const x of [v].flat()) u.searchParams.append(k, x)
-      if (inst.token) u.searchParams.set('access_token', inst.token)
-      return u.toString()
-    },
+    streamUrl,
+
+    /** Opens an SSE stream of the daemon. */
+    stream: (path: string, params: Record<string, string | string[]> = {}): EventStream => new EventSource(streamUrl(path, params)),
 
     /** Follows a queued operation (202 response) until it ends. */
     async wait(op: Operation, onProgress?: (op: Operation) => void): Promise<Operation> {
       const deadline = Date.now() + 15 * 60_000
       let cur = op
       while (cur.status === 'queued' || cur.status === 'running') {
-        if (Date.now() > deadline) throw new ApiError(0, 'L’opération dure trop longtemps.')
+        if (Date.now() > deadline) throw new ApiError(0, t('errors.operationTooLong'))
         await new Promise((r) => setTimeout(r, 800))
         cur = await request<Operation>('GET', `/api/v1/operations/${cur.id}`)
         onProgress?.(cur)
@@ -155,7 +186,7 @@ export function client(inst: Instance) {
     },
   }
 }
-export type Client = ReturnType<typeof client>
+export type Client = ReturnType<typeof httpClient>
 
 /** Daemon version (public route): checks that the address responds before asking for the password. */
 export const health = (url: string) => send<ApiResponse<'/api/health'>>(url, null, 'GET', '/api/health', { timeout: 8_000 })

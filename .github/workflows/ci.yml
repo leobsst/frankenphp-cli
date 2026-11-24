@@ -91,6 +91,10 @@ jobs:
           npm install --global pnpm@10.33.0
           make web
 
+      # The French and English catalogs of the dashboard: same keys, valid messages, every key used in the code
+      - name: Check the dashboard translations
+        run: pnpm --dir web i18n:check
+
       # The TypeScript types of the dashboard are generated from the spec and committed: they must not drift
       - name: Check the API types against the spec
         run: |
