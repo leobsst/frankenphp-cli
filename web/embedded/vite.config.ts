@@ -2,7 +2,7 @@ import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import ui from '@nuxt/ui/vite'
-import { uiTheme } from '../app/src/theme'
+import { uiIcons, uiTheme } from '../app/src/theme'
 import { serviceWorker } from './sw/plugin'
 
 /**
@@ -17,11 +17,8 @@ const daemon = `https://127.0.0.1:${process.env.DASHBOARD_HTTPS_PORT ?? '9444'}`
 export default defineConfig({
   plugins: [
     vue(),
-    ui({
-      ui: uiTheme,
-      // Bundled Lucide icons: no calls to the Iconify API.
-      icon: { clientBundle: { scan: true } },
-    }),
+    // Bundled Lucide icons, the shared pages and .ts files included: no calls to the Iconify API.
+    ui({ ui: uiTheme, icon: uiIcons }),
     // dist/sw.js, the service worker of the installable dashboard (PWA), with the list of the built files.
     serviceWorker(),
   ],

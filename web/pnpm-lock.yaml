@@ -16,6 +16,9 @@ importers:
       '@iconify-json/lucide':
         specifier: ^1.2.154
         version: 1.2.158
+      '@iconify/vue':
+        specifier: 5.0.5
+        version: 5.0.5(vue@3.5.45(typescript@5.9.3))
       '@nuxt/ui':
         specifier: 4.12.0
         version: 4.12.0(a50b459873bc368f53f7678f3ff7c574)
