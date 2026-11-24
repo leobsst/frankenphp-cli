@@ -18,6 +18,7 @@
 		9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9582B6822FE993A50072D4E8 /* SceneDelegate.swift */; };
 		F1A1B2C62DB0000100EA8C5F /* MainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A1B2C52DB0000100EA8C5F /* MainViewController.swift */; };
 		F1A1B2C42DB0000100EA8C5F /* NativeTabBarPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A1B2C32DB0000100EA8C5F /* NativeTabBarPlugin.swift */; };
+		F1A1B2C82DB0000100EA8C5F /* SecureStorePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A1B2C72DB0000100EA8C5F /* SecureStorePlugin.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -33,6 +34,7 @@
 		9582B6822FE993A50072D4E8 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		F1A1B2C52DB0000100EA8C5F /* MainViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainViewController.swift; sourceTree = "<group>"; };
 		F1A1B2C32DB0000100EA8C5F /* NativeTabBarPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeTabBarPlugin.swift; sourceTree = "<group>"; };
+		F1A1B2C72DB0000100EA8C5F /* SecureStorePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureStorePlugin.swift; sourceTree = "<group>"; };
 		958DCC722DB07C7200EA8C5F /* debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = SOURCE_ROOT; };
 		F0F0F0F02DB07C7200EA8C5F /* app.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = app.xcconfig; path = ../app.xcconfig; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
@@ -73,6 +75,7 @@
 				9582B6822FE993A50072D4E8 /* SceneDelegate.swift */,
 				F1A1B2C52DB0000100EA8C5F /* MainViewController.swift */,
 				F1A1B2C32DB0000100EA8C5F /* NativeTabBarPlugin.swift */,
+				F1A1B2C72DB0000100EA8C5F /* SecureStorePlugin.swift */,
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
@@ -170,6 +173,7 @@
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
 				F1A1B2C62DB0000100EA8C5F /* MainViewController.swift in Sources */,
 				F1A1B2C42DB0000100EA8C5F /* NativeTabBarPlugin.swift in Sources */,
+				F1A1B2C82DB0000100EA8C5F /* SecureStorePlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

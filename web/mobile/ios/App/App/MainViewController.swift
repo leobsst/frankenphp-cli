@@ -5,5 +5,6 @@ import UIKit
 class MainViewController: CAPBridgeViewController {
     override func capacitorDidLoad() {
         bridge?.registerPluginInstance(NativeTabBarPlugin())
+        bridge?.registerPluginInstance(SecureStorePlugin())
     }
 }

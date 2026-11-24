@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 11 and earlier (android:fullBackupContent): the secure store (SecureStorePlugin) stays out of backups. Its
+  values are encrypted with a key of this device's Keystore and could not be read once restored elsewhere.
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="frankenmanager_secure_store.xml" />
+</full-backup-content>

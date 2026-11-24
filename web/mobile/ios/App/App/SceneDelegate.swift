@@ -8,7 +8,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         guard let windowScene = scene as? UIWindowScene else { return }
 
         window = UIWindow(windowScene: windowScene)
-        // MainViewController registers the app's own plugins (native tab bar).
+        // MainViewController registers the app's own plugins (native tab bar, secure store).
         window?.rootViewController = MainViewController()
         window?.makeKeyAndVisible()
 

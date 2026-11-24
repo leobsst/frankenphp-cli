@@ -19,7 +19,7 @@ def versionFile = rootProject.file('version.local.properties')
 if (versionFile.exists()) versionFile.withInputStream { appVersion.load(it) }
 
 android {
-    // Package of the code (MainActivity): fixed. The id of the installed app can be changed.
+    // Package of the code (MainActivity, SecureStorePlugin): fixed. The id of the installed app can be changed.
     namespace = "dev.frankenmanager.mobile"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
