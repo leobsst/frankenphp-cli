@@ -44,16 +44,16 @@ async function submit() {
   else if (!err) Object.assign(form, { name: '', user: '', password: '' })
 }
 
-// phpMyAdmin or pgAdmin URL provided by the daemon (dev only).
-const adminUrl = computed(() => state.adminUrl || 'https://localhost')
-const openAdmin = (_e: Db['engine']) => { window.open(adminUrl.value, '_blank') }
+// phpMyAdmin or pgAdmin URL provided by the daemon (dev only); empty: no admin interface to open.
+const adminUrl = computed(() => state.adminUrl)
+const openAdmin = (_e: Db['engine']) => { if (adminUrl.value) window.open(adminUrl.value, '_blank') }
 
 function menuFor(d: Db): DropdownMenuItem[][] {
   const user = d.user || 'root'
   const url = `${d.engine === 'MariaDB' ? 'mysql' : 'pgsql'}://${user}@127.0.0.1:${port(d.engine)}/${d.name}`
   return [
     [
-      { label: d.engine === 'MariaDB' ? 'Ouvrir phpMyAdmin' : 'Ouvrir pgAdmin', icon: 'i-lucide-external-link', onSelect: () => openAdmin(d.engine) },
+      ...(adminUrl.value ? [{ label: d.engine === 'MariaDB' ? 'Ouvrir phpMyAdmin' : 'Ouvrir pgAdmin', icon: 'i-lucide-external-link', onSelect: () => openAdmin(d.engine) }] : []),
       { label: 'Copier la chaîne de connexion', icon: 'i-lucide-copy', onSelect: () => { navigator.clipboard?.writeText(url); toast('info', 'Copié', url) } },
     ],
     [{ label: 'Supprimer la base', icon: 'i-lucide-trash-2', color: 'error', onSelect: () => { drop.value = d } }],
@@ -114,7 +114,7 @@ const userColumns: TableColumn<DbUser>[] = [
       <h2 class="text-[15px] font-semibold text-highlighted">Connexions</h2>
       <p>MariaDB · <span class="font-mono">DB_HOST=franken_mariadb DB_PORT=3306</span></p>
       <p>PostgreSQL · <span class="font-mono">DB_HOST=franken_postgresql DB_PORT=5432</span></p>
-      <p>Depuis la machine hôte : 127.0.0.1 · administration : phpMyAdmin et pgAdmin sur {{ adminUrl }}</p>
+      <p>Depuis la machine hôte : 127.0.0.1<template v-if="adminUrl"> · administration : phpMyAdmin et pgAdmin sur {{ adminUrl }}</template></p>
     </UCard>
 
     <SideForm
@@ -162,7 +162,7 @@ const userColumns: TableColumn<DbUser>[] = [
     </SideForm>
   </TwoColumns>
 
-  <InfoBanner>Les bases et comptes système (mysql, postgres, root…) ne sont ni listés ni supprimables. Pour le reste, phpMyAdmin et pgAdmin restent sur {{ adminUrl }}.</InfoBanner>
+  <InfoBanner>Les bases et comptes système (mysql, postgres, root…) ne sont ni listés ni supprimables.<template v-if="adminUrl"> Pour le reste, phpMyAdmin et pgAdmin restent sur {{ adminUrl }}.</template></InfoBanner>
   <ConfirmModal
     :open="!!drop"
     eyebrow="Action destructive"
