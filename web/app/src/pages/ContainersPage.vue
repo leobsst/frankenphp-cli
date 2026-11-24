@@ -10,6 +10,7 @@ import StateBadge from '../components/StateBadge.vue'
 import SideForm from '../components/SideForm.vue'
 import InfoBanner from '../components/InfoBanner.vue'
 import StopStackModal from '../components/StopStackModal.vue'
+import DockerAlert from '../components/DockerAlert.vue'
 import { DEPRECATED_PHP, SERVICES, actions, active, isServiceBusy, running, serviceEnabled, state, toast, type Container, type ServiceName } from '../composables/useFm'
 
 const tab = ref('all')
@@ -31,7 +32,7 @@ const targetItems = computed(() => state.containers.map((c) => ({ label: `${kind
 const actionItems = computed(() => (selected.value.status === 'stopped'
   ? [{ label: 'Démarrer', value: 'start' }]
   : [{ label: 'Redémarrer', value: 'restart' }, { label: 'Arrêter', value: 'stop' }]))
-const rebuildItems = [{ label: 'Non · Utiliser l’image actuelle', value: false }, { label: 'Oui · Reconstruire (--build)', value: true }]
+const rebuildItems = [{ label: 'Non · Utiliser l’image actuelle', value: false }, { label: 'Oui · Reconstruire les images PHP (--build)', value: true }]
 
 const totalCpu = computed(() => Math.round(state.containers.reduce((a, c) => a + (c.status === 'running' ? c.cpu : 0), 0)))
 const totalMem = computed(() => state.containers.reduce((a, c) => a + (c.status === 'running' ? c.mem : 0), 0))
@@ -43,20 +44,24 @@ const stats = computed(() => [
 const phpImages = computed(() => state.containers.filter((c) => c.kind === 'php'))
 
 function run() {
-  actions.restartContainer(target.value, { rebuild: rebuild.value && action.value !== 'stop', action: action.value })
+  // The rebuild only applies to a PHP container: the choice stays set when the target changes.
+  const build = rebuild.value && action.value !== 'stop' && selected.value.kind === 'php' && state.stack === 'running'
+  actions.restartContainer(target.value, { rebuild: build, action: action.value })
   if (details.value) toast('info', 'Détails de l’opération', `Commande envoyée pour ${target.value}. Consultez les Journaux pour la sortie.`)
 }
 
+// Without Docker, no container action can run.
 function menuFor(c: Container): DropdownMenuItem[][] {
+  const off = !state.docker
   return [
     [
       c.status === 'stopped'
-        ? { label: 'Démarrer', icon: 'i-lucide-play', onSelect: () => actions.restartContainer(c.id, { action: 'start' }) }
-        : { label: 'Redémarrer', icon: 'i-lucide-rotate-cw', disabled: c.status === 'restarting', onSelect: () => actions.restartContainer(c.id) },
-      ...(c.kind === 'php' ? [{ label: 'Reconstruire l’image (--build)', icon: 'i-lucide-hammer', disabled: c.status === 'restarting', onSelect: () => actions.restartContainer(c.id, { rebuild: true }) }] : []),
+        ? { label: 'Démarrer', icon: 'i-lucide-play', disabled: off, onSelect: () => actions.restartContainer(c.id, { action: 'start' }) }
+        : { label: 'Redémarrer', icon: 'i-lucide-rotate-cw', disabled: off || c.status === 'restarting', onSelect: () => actions.restartContainer(c.id) },
+      ...(c.kind === 'php' ? [{ label: 'Reconstruire les images PHP (--build)', icon: 'i-lucide-hammer', disabled: off || state.stack !== 'running' || c.status === 'restarting', onSelect: () => actions.restartContainer(c.id, { rebuild: true }) }] : []),
       { label: 'Sélectionner dans le formulaire', icon: 'i-lucide-mouse-pointer-click', onSelect: () => { target.value = c.id } },
     ],
-    [{ label: 'Arrêter', icon: 'i-lucide-square', color: 'error', disabled: c.status !== 'running', onSelect: () => actions.restartContainer(c.id, { action: 'stop' }) }],
+    [{ label: 'Arrêter', icon: 'i-lucide-square', color: 'error', disabled: off || c.status !== 'running', onSelect: () => actions.restartContainer(c.id, { action: 'stop' }) }],
   ]
 }
 
@@ -98,6 +103,7 @@ const domainsOn = (c: Container) => active.value.filter((d) => d.php === c.php &
       <UButton icon="i-lucide-rotate-cw" label="Redémarrer la stack" size="lg" class="md:w-[205px]" :loading="state.stack !== 'running'" @click="actions.restartStack()" />
     </template>
   </PageHeader>
+  <DockerAlert />
   <MiniStats :items="stats" />
   <UTabs v-model="tab" :items="tabs" :content="false" variant="link" class="mt-5 mb-2" :ui="{ trigger: 'text-xs px-0 me-4 md:me-16 pb-2.5' }" />
 
@@ -123,7 +129,7 @@ const domainsOn = (c: Container) => active.value.filter((d) => d.php === c.php &
       <template #state-cell="{ row }"><StateBadge :value="serviceState(row.original.name)" /></template>
       <template #toggle-cell="{ row }">
         <USwitch
-          :model-value="serviceEnabled(row.original.name)" :disabled="isServiceBusy(row.original.name)"
+          :model-value="serviceEnabled(row.original.name)" :disabled="isServiceBusy(row.original.name) || !state.docker"
           :aria-label="`Activer ${row.original.label}`"
           @update:model-value="(v: boolean) => actions.setService(row.original.name, v)"
         />
@@ -139,7 +145,7 @@ const domainsOn = (c: Container) => active.value.filter((d) => d.php === c.php &
         <StateBadge v-else :value="row.original.status === 'running' ? 'online' : 'offline'" ok="À jour" />
       </template>
       <template #actions-cell="{ row }">
-        <UDropdownMenu :items="[{ label: 'Reconstruire l’image', icon: 'i-lucide-hammer', onSelect: () => actions.restartContainer(row.original.id, { rebuild: true }) }]" :content="{ align: 'end' }">
+        <UDropdownMenu :items="[{ label: 'Reconstruire les images PHP', icon: 'i-lucide-hammer', disabled: !state.docker || state.stack !== 'running', onSelect: () => actions.restartContainer(row.original.id, { rebuild: true }) }]" :content="{ align: 'end' }">
           <UButton color="neutral" variant="ghost" icon="i-lucide-ellipsis" aria-label="Actions" />
         </UDropdownMenu>
       </template>
@@ -154,7 +160,7 @@ const domainsOn = (c: Container) => active.value.filter((d) => d.php === c.php &
       <UFormField label="Service ciblé"><USelect v-model="target" :items="targetItems" size="lg" class="w-full" /></UFormField>
       <UFormField label="Action"><USelect v-model="action" :items="actionItems" size="lg" class="w-full" /></UFormField>
       <UFormField label="Reconstruction de l’image">
-        <USelect v-model="rebuild" :items="rebuildItems" size="lg" class="w-full" :disabled="selected.kind !== 'php' || action === 'stop'" />
+        <USelect v-model="rebuild" :items="rebuildItems" size="lg" class="w-full" :disabled="selected.kind !== 'php' || action === 'stop' || state.stack !== 'running'" />
       </UFormField>
       <USwitch v-model="details" label="Afficher les détails de l’opération" />
       <UButton

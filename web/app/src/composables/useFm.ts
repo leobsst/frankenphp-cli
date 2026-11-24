@@ -1,7 +1,8 @@
 /**
- * Dashboard store, connected version: same exports as the POC's simulated store (frankenmanager-gui-poc), but the
- * state comes from the daemon API of the chosen instance, and the main actions call it. The other POC features
- * (DNS, SSL, Redis, S3, databases, configuration, access) are not part of this demo.
+ * Dashboard store: same exports as the POC's simulated store (frankenmanager-gui-poc), but the state comes from the
+ * daemon API of the connected instance (`/api/v1`, see api/openapi.yaml), kept up to date by its event stream, and
+ * the actions call it. When the daemon stops answering, the store retries with backoff and reopens its streams once
+ * it is back; `state.docker` follows whether the daemon reaches Docker.
  */
 import { computed, nextTick, reactive, ref } from 'vue'
 import { ApiError, client, lastMessage, type Instance, type Client, type Container as ApiContainer, type HostInfo, type Operation, type Stat, type Status, type ApiResponse, type LogLine, type OpEvent, type Schema } from '../lib/api'
@@ -260,6 +261,11 @@ let events: EventSource | null = null
 let logStream: EventSource | null = null
 let timers: ReturnType<typeof setInterval>[] = []
 let refreshSoon: ReturnType<typeof setTimeout> | undefined
+/** Retry after a failed refresh (daemon gone): sooner than the 30 s poll, backing off up to RETRY_MAX. */
+let retryTimer: ReturnType<typeof setTimeout> | undefined
+let retryDelay = 0
+const RETRY_MIN = 2_000
+const RETRY_MAX = 30_000
 let logSeq = 0
 /** Last timestamp read per container: a reopened stream sends back its last lines, already displayed. */
 let lastLogAt: Record<string, string> = {}
@@ -309,11 +315,20 @@ export async function refresh() {
     state.app.version = host.version
     state.dns.ip = host.lan_ip ?? ''
     state.dns.port = Number(state.config.DNS_PORT) || 53
-    state.docker = true
+    // A daemon without the field (older release) is assumed to reach Docker.
+    state.docker = status.docker !== false
+    const recovering = !!state.error || retryDelay > 0
     state.error = ''
+    clearTimeout(retryTimer)
+    retryTimer = undefined
+    retryDelay = 0
+    reopenStreams(recovering)
     void refreshExtras()
   } catch (e) {
+    // 401: the session is gone, the host signs in again (setUnauthorizedHandler).
+    if (e instanceof ApiError && e.status === 401) return
     state.error = e instanceof Error ? e.message : String(e)
+    scheduleRetry()
   } finally {
     state.loaded = true
   }
@@ -370,6 +385,70 @@ function openLogs() {
   })
 }
 
+/** The daemon did not answer: refresh again after a growing delay (2 s, 4 s… 30 s). */
+function scheduleRetry() {
+  if (!api || retryTimer) return
+  retryDelay = Math.min(retryDelay ? retryDelay * 2 : RETRY_MIN, RETRY_MAX)
+  retryTimer = setTimeout(() => {
+    retryTimer = undefined
+    void refresh()
+  }, retryDelay)
+}
+
+/**
+ * Reopens the event stream when closed for good; after an outage (daemon restarted, updated), also the streams still
+ * reconnecting, and the log stream.
+ */
+function reopenStreams(recovering: boolean) {
+  if (!api) return
+  if (!events || events.readyState === EventSource.CLOSED || (recovering && events.readyState !== EventSource.OPEN)) openEvents()
+  if (recovering && state.stack === 'running' && logStream?.readyState !== EventSource.OPEN) openLogs()
+}
+
+/** Daemon event stream: operations, container and Docker changes. */
+function openEvents() {
+  events?.close()
+  if (!api) return
+  const es = new EventSource(api.streamUrl('/api/v1/events'))
+  events = es
+  // Set by an error: messages may have been missed, the state is read again once reconnected.
+  let stale = false
+  es.onopen = () => {
+    state.live = true
+    if (stale) void refresh()
+    stale = false
+  }
+  es.onerror = () => {
+    state.live = false
+    stale = true
+    // Closed for good (daemon restarted without the session…), or reconnecting: either way, check the daemon.
+    if (es.readyState === EventSource.CLOSED && events === es) events = null
+    scheduleRetry()
+  }
+  es.addEventListener('containers', (e) => {
+    const list = JSON.parse((e as MessageEvent).data) as ApiContainer[]
+    state.containers = list.map((c) => toContainer(c, state.containers.find((x) => x.id === c.name)))
+  })
+  es.addEventListener('docker', (e) => {
+    const { reachable } = JSON.parse((e as MessageEvent).data) as Schema<'DockerState'>
+    if (reachable === state.docker) return
+    state.docker = reachable
+    // Stack state and log stream follow Docker.
+    void refresh().then(openLogs)
+  })
+  es.addEventListener('operation', (e) => {
+    const op = JSON.parse((e as MessageEvent).data) as Operation
+    if (op.status === 'succeeded' || op.status === 'failed') {
+      clearTimeout(refreshSoon)
+      refreshSoon = setTimeout(() => { void refresh().then(openLogs) }, 400)
+    }
+  })
+  es.addEventListener('event', (e) => {
+    const ev = JSON.parse((e as MessageEvent).data) as OpEvent
+    if (ev.message && ev.kind !== 'output') pushLog(ev.level === 'error' ? 'ERROR' : ev.level === 'warning' ? 'WARN' : 'INFO', 'FrankenManager', ev.message)
+  })
+}
+
 /** Opens an instance: state reset, then read, event stream and refreshes. */
 export function connect(inst: Instance, opts: { mode?: 'local' | 'remote'; client?: string } = {}) {
   disconnect()
@@ -388,28 +467,20 @@ export function connect(inst: Instance, opts: { mode?: 'local' | 'remote'; clien
 export function resume() {
   if (!api) return
   pause()
+  openEvents()
   void refresh().then(() => { openLogs(); void refreshStats() })
-  events = new EventSource(api.streamUrl('/api/v1/events'))
-  events.onopen = () => { state.live = true }
-  events.onerror = () => { state.live = false }
-  events.addEventListener('containers', (e) => {
-    const list = JSON.parse((e as MessageEvent).data) as ApiContainer[]
-    state.containers = list.map((c) => toContainer(c, state.containers.find((x) => x.id === c.name)))
-  })
-  events.addEventListener('operation', (e) => {
-    const op = JSON.parse((e as MessageEvent).data) as Operation
-    if (op.status === 'succeeded' || op.status === 'failed') {
-      clearTimeout(refreshSoon)
-      refreshSoon = setTimeout(() => { void refresh().then(openLogs) }, 400)
-    }
-  })
-  events.addEventListener('event', (e) => {
-    const ev = JSON.parse((e as MessageEvent).data) as OpEvent
-    if (ev.message && ev.kind !== 'output') pushLog(ev.level === 'error' ? 'ERROR' : ev.level === 'warning' ? 'WARN' : 'INFO', 'FrankenManager', ev.message)
-  })
   timers = [setInterval(refreshStats, 5_000), setInterval(refresh, 30_000)]
   void loadUpdates()
   timers.push(setInterval(() => void loadUpdates(), UPDATE_POLL_MS))
+}
+
+/**
+ * Same instance, new session (local re-sign-in after a daemon restart lost it): the state is kept, the requests and
+ * streams go on with the new token.
+ */
+export function reconnect(inst: Instance) {
+  api = client(inst)
+  resume()
 }
 
 /** Suspends the streams (background) without forgetting the instance. */
@@ -421,6 +492,9 @@ export function pause() {
   timers.forEach(clearInterval)
   timers = []
   clearTimeout(refreshSoon)
+  clearTimeout(retryTimer)
+  retryTimer = undefined
+  retryDelay = 0
 }
 
 export function disconnect() {
@@ -483,7 +557,10 @@ async function restartStack() {
 
 async function restartContainer(id: string, opts: { rebuild?: boolean; action?: 'restart' | 'stop' | 'start' } = {}) {
   if (opts.rebuild) {
-    toast('info', 'Non disponible dans la démo', 'La reconstruction des images PHP passe par le CLI : frankenmanager restart --build.')
+    // `frankenmanager restart --caddy --build`: the images of every active PHP version are rebuilt, their containers
+    // recreated, then the FrankenPHP containers and the reverse proxy restart; the other services keep running.
+    for (const c of state.containers) if (c.kind === 'php') c.status = 'restarting'
+    await operate('Reconstruction des images PHP', (cl) => cl.post('/api/v1/stack/restart', { targets: ['caddy'], build: true }), 'Images PHP reconstruites, conteneurs recréés.')
     return
   }
   const action = opts.action ?? 'restart'
@@ -939,19 +1016,9 @@ export const actions = {
 
 // ---------- FrankenManager updates (GET /api/v1/update) ----------
 /** A release newer than the instance's daemon, with its GitHub notes (Markdown). */
-export interface ReleaseNotes { version: string; name: string; published_at: string; url: string; notes: string }
-export interface UpdateInfo {
-  version: string
-  latest: string | null
-  update_available: boolean
-  /** Releases newer than `version`, newest first. */
-  releases: ReleaseNotes[]
-  /** Command installing the update in a terminal of the host (administrator rights). */
-  command: string
-  checked_at: string
-  /** Failure of the last lookup, when the answer comes from an earlier one. */
-  error?: string
-}
+export type ReleaseNotes = Schema<'ReleaseNotes'>
+/** `GET /api/v1/update`: installed and latest versions, notes of the newer releases. */
+export type UpdateInfo = ApiResponse<'/api/v1/update'>
 
 /** The daemon caches the lookup (one hour): polling it rarely is enough. */
 const UPDATE_POLL_MS = 30 * 60_000

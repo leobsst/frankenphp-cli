@@ -34,7 +34,7 @@ const items = computed<DropdownMenuItem[][]>(() => {
   if (c && d.kind !== 'alias') {
     groups[groups.length - 1].push({
       label: `Redémarrer ${c.id}`, icon: 'i-lucide-refresh-cw',
-      disabled: c.status === 'restarting' || state.stack !== 'running',
+      disabled: c.status === 'restarting' || state.stack !== 'running' || !state.docker,
       onSelect: () => actions.restartContainer(c.id),
     })
   }

@@ -272,7 +272,10 @@ type Service struct {
 }
 
 type statusResponse struct {
-	Running  bool      `json:"running"`
+	Running bool `json:"running"`
+	// Docker tells whether the Docker engine answers: when it does not, the
+	// stack is reported stopped and its containers "not found"
+	Docker   bool      `json:"docker"`
 	Hosts    []Host    `json:"hosts"`
 	Services []Service `json:"services"`
 }
@@ -318,17 +321,24 @@ func servicesOf(ctx context.Context, ws *Workspace) []Service {
 	return out
 }
 
+// status answers quickly even when Docker is stopped or stuck: the
+// dashboard tells "Docker unreachable" from "daemon gone" by it.
 func (s *Server) status(w http.ResponseWriter, r *http.Request) {
 	s.read(w, func(ws *Workspace) (any, error) {
-		ok, err := ws.Running(r.Context())
-		if err != nil {
-			return nil, err
+		ctx := r.Context()
+		up := ws.Stack.Docker.Reachable(ctx)
+		running := false
+		if up {
+			var err error
+			if running, err = ws.Running(ctx); err != nil {
+				return nil, err
+			}
 		}
 		hosts, err := hostsOf(ws.Store)
 		if err != nil {
 			return nil, err
 		}
-		return statusResponse{Running: ok, Hosts: hosts, Services: servicesOf(r.Context(), ws)}, nil
+		return statusResponse{Running: running, Docker: up, Hosts: hosts, Services: servicesOf(ctx, ws)}, nil
 	})
 }
 

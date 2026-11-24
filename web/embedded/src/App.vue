@@ -26,7 +26,7 @@ useApplyPrefs()
         <UIcon name="i-lucide-plug-zap" class="mx-auto size-10 text-error" />
         <h1 class="text-lg font-semibold text-highlighted">Le daemon FrankenManager ne répond pas</h1>
         <p class="text-sm text-muted">{{ session.error }}</p>
-        <p class="text-sm text-muted">Lancez <code class="font-mono">frankenmanager dashboard</code>, qui démarre le daemon s’il ne tourne pas.</p>
+        <p class="text-sm text-muted">Lancez <code class="font-mono">frankenmanager dashboard</code>, qui démarre le daemon s’il ne tourne pas. La page se reconnecte d’elle-même dès qu’il répond.</p>
         <UButton icon="i-lucide-rotate-cw" label="Réessayer" @click="boot()" />
       </div>
       <UIcon v-else name="i-lucide-loader-circle" class="size-8 animate-spin text-primary" aria-label="Chargement" />
