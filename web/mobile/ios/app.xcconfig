@@ -1,0 +1,4 @@
+// Settings of the App target, base of the Release configuration and included by debug.xcconfig: signing and version,
+// each with its default values, replaced by a local file that is not committed.
+#include "signing.xcconfig"
+#include "version.xcconfig"

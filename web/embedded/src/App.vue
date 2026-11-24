@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { watch } from 'vue'
 import { fr } from '@nuxt/ui/locale'
 import { useToast } from '@nuxt/ui/composables'
 import ConfirmPassword from '@app/components/ConfirmPassword.vue'
@@ -6,6 +7,7 @@ import { bindNotifier } from '@app/composables/useFm'
 import { useApplyPrefs } from '@app/composables/usePrefs'
 import DashboardLayout from './DashboardLayout.vue'
 import SignIn from './SignIn.vue'
+import { setupServiceWorker } from './pwa'
 import { boot, session } from './session'
 
 // Store notifications (operation progress), as in the POC.
@@ -15,6 +17,27 @@ bindNotifier(
   (id) => toast.remove(id),
 )
 useApplyPrefs()
+
+// Service worker (installable dashboard), once /config.json told the mode: remote access or this machine.
+let pwa = false
+watch(
+  () => session.phase,
+  (phase) => {
+    if (pwa || phase === 'loading' || phase === 'error') return
+    pwa = true
+    setupServiceWorker(session.mode, (apply) => {
+      if (toast.toasts.value.some((t) => t.id === 'pwa-update')) return
+      toast.add({
+        id: 'pwa-update',
+        title: 'Nouvelle version disponible',
+        description: 'Rechargez pour passer à la nouvelle version du tableau de bord.',
+        icon: 'i-lucide-rotate-cw',
+        duration: 0,
+        actions: [{ label: 'Recharger', icon: 'i-lucide-rotate-cw', onClick: apply }],
+      })
+    })
+  },
+)
 </script>
 
 <template>

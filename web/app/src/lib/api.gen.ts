@@ -11,7 +11,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Version of the daemon */
+        /**
+         * Version, API version and features of the daemon
+         * @description Needs no session (remote access: the allowed addresses only); the daemon token stays required on 127.0.0.1:DASHBOARD_PORT. A daemon older than the `api` and `features` fields answers `version` only.
+         */
         get: {
             parameters: {
                 query?: never;
@@ -207,7 +210,8 @@ export interface paths {
          *     when Docker reports a change (one event stream shared by every client),
          *     `event: docker` with a `DockerState` when Docker stops or comes back answering
          *     (checked every 5 s while it does not answer), and `event: s3.objects` with
-         *     `{bucket}` after an upload. Comments (`: ping`) keep
+         *     `{bucket}` after an upload, and `event: paired` with a `PairedEvent` when a device
+         *     uses a pairing code. Comments (`: ping`) keep
          *     the stream open every 25 s.
          *     A slow client may miss messages: read the operation again.
          *
@@ -2470,6 +2474,117 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/pairing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Make a one-time code to pair a device
+         * @description **Destructive** (remotely, the password again: the code opens a session without it).
+         *     Makes a pairing code for the mobile app: the dashboard shows `qr` as a QR code, the
+         *     app scans it and exchanges the code at `POST /api/v1/auth/pair`, on the remote access.
+         *
+         *     The code holds 128 random bits (URL-safe base64), is valid 5 minutes and once, and is
+         *     kept hashed in the memory of the daemon only (a restart invalidates it); at most 5
+         *     codes are valid at once, a new one replaces the oldest. When a device uses it, the
+         *     event stream sends `event: paired` with a `PairedEvent`.
+         *
+         *     The QR text is `frankenmanager://pair?v=1&url=<url>&code=<code>&name=<name>&ca=<ca_fingerprint>`
+         *     (URL-encoded values, `ca` left out without fingerprint).
+         *
+         *     `409` when the remote access is closed (`DASHBOARD_ACCESS=local`), does not run (no
+         *     password, no certificate) or has no known address: a phone could not reach it.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The code, and the QR text to show. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Pairing"];
+                    };
+                };
+                409: components["responses"]["Error"];
+                428: components["responses"]["Confirm"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/pair": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Exchange a pairing code for a session
+         * @description On the remote access only (the allowed addresses of `DASHBOARD_ALLOWED_IPS`; elsewhere
+         *     `404`), across origins for the mobile app like `POST /api/v1/auth/login`. Opens a
+         *     revocable session named `device` (the User-Agent when empty), logged as `paired`, and
+         *     consumes the code. A wrong, expired or used code answers `401` and counts as a wrong
+         *     password: five lock the address for 15 minutes (`429`), the login too.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        code: string;
+                        /** @description Shown in the sessions; the User-Agent when empty. */
+                        device?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Paired, signed in. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            token: string;
+                            session: components["schemas"]["Session"];
+                        };
+                    };
+                };
+                401: components["responses"]["Error"];
+                404: components["responses"]["Error"];
+                429: components["responses"]["Error"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/logout": {
         parameters: {
             query?: never;
@@ -2663,8 +2778,17 @@ export interface components {
         Error: {
             error: string;
         };
+        /** @description What a client needs to adapt to this daemon. Answered without a session on the remote access: it tells nothing about the settings or the stack. */
         Health: {
+            /** @description The version of the daemon. */
             version: string;
+            /**
+             * @description The major version of the API
+             * @enum {string}
+             */
+            api: "v1";
+            /** @description The capabilities of this daemon, to test before using them: `dashboard` (it serves the pages), `update` (GET /api/v1/update looks up the releases), `docker` (it drives the stack and its containers), `pairing` (POST /api/v1/auth/pairing and POST /api/v1/auth/pair). Unknown values are to be ignored. */
+            features: string[];
         };
         Operation: {
             /** @example op-12 */
@@ -3150,7 +3274,7 @@ export interface components {
             at: string;
             ip: string;
             /** @enum {string} */
-            event: "login" | "login_failed" | "logout" | "revoked" | "refused" | "confirm_failed" | "password_failed" | "password_changed";
+            event: "login" | "login_failed" | "logout" | "revoked" | "refused" | "confirm_failed" | "password_failed" | "password_changed" | "paired" | "pair_failed";
             device?: string;
             remote: boolean;
         };
@@ -3164,8 +3288,31 @@ export interface components {
             remote: boolean;
             /** @enum {string} */
             mode: "local" | "lan" | "internet";
-            /** @description Where the remote access answers */
+            /** @description Where the remote access answers, when on: the LAN address of this machine, or the first name of the certificate of DASHBOARD_TLS_CERT. */
             remote_url?: string;
+        };
+        Pairing: {
+            /** @description Tells which code a `paired` event is about; not secret. */
+            id: string;
+            /** @description The one-time code */
+            code: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** @description Base URL of the remote access, e.g. https://192.168.1.10:9443. */
+            url: string;
+            /** @description The name of this machine. */
+            name: string;
+            /** @description Lowercase hex SHA-256 of the mkcert root CA certificate (DER) that signed the certificate of the remote access. Left out with DASHBOARD_TLS_CERT, or when the CA cannot be read. */
+            ca_fingerprint?: string;
+            /** @description The text of the QR code: frankenmanager://pair?v=1&url=…&code=…&name=…&ca=… */
+            qr: string;
+        };
+        PairedEvent: {
+            /** @description The `id` of the code used. */
+            id: string;
+            device: string;
+            /** @description The id of the new session. */
+            session: string;
         };
         UpdateInfo: {
             /** @description The version of the daemon. */

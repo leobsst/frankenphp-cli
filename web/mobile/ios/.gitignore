@@ -1,0 +1,19 @@
+App/build
+App/Pods
+App/output
+App/App/public
+DerivedData
+xcuserdata
+
+# Cordova plugins for Capacitor
+capacitor-cordova-ios-plugins
+
+# Generated Config files
+App/App/capacitor.config.json
+App/App/config.xml
+
+# Per-developer signing (scripts/ios-signing.mjs)
+signing.local.xcconfig
+
+# Version and build number (scripts/app-version.mjs)
+version.local.xcconfig

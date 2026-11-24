@@ -91,13 +91,14 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 
 // openSession records a new session of device and answers its token: a
 // cookie for a browser of the remote access or of 127.0.0.1:PORT, the token
-// in the answer for an app and for the dashboard listener (Bearer).
-func (s *Server) openSession(w http.ResponseWriter, rq requester, device, event string) {
+// in the answer for an app and for the dashboard listener (Bearer). It
+// returns the session, nil when it could not be recorded (answered).
+func (s *Server) openSession(w http.ResponseWriter, rq requester, device, event string) *store.Session {
 	now := time.Now()
 	st, err := s.openStore()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
-		return
+		return nil
 	}
 	defer func() { _ = st.Close() }()
 	_ = st.RemoveSessions(now.Add(-sessionIdle))
@@ -105,13 +106,14 @@ func (s *Server) openSession(w http.ResponseWriter, rq requester, device, event 
 	sess := store.Session{ID: randomHex(8), Device: device, IP: rq.ip, Remote: rq.remote, Created: now.UTC(), LastSeen: now.UTC()}
 	if err := st.AddSession(sess, hashToken(token)); err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
-		return
+		return nil
 	}
 	s.logAccess(rq, event, device)
 	if !rq.dashboard {
 		setSessionCookie(w, token, rq.remote)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"token": token, "session": sess})
+	return &sess
 }
 
 // localLogin signs in the dashboard of this machine without the password:
@@ -303,9 +305,7 @@ func (s *Server) hostInfo(w http.ResponseWriter, r *http.Request) {
 	if s.LANIP != nil {
 		info.LANIP = s.LANIP()
 	}
-	if s.remote.running() != "" && info.LANIP != "" {
-		info.RemoteURL = "https://" + info.LANIP + ":" + strconv.Itoa(cfg.RemotePort)
-	}
+	info.RemoteURL = s.remoteURL(cfg)
 	writeJSON(w, http.StatusOK, info)
 }
 

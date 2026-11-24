@@ -1,0 +1,14 @@
+node_modules/
+dist/
+
+# Per-developer settings (signing, version): see .env.example
+.env
+.env.*
+!.env.example
+
+# Android signing keys
+*.jks
+*.keystore
+*.p12
+*.mobileprovision
+*.p8

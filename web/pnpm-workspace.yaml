@@ -1,6 +1,7 @@
 packages:
   - app
   - embedded
+  - mobile
 allowBuilds:
   esbuild: true
   vue-demi: true

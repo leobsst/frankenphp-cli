@@ -222,6 +222,7 @@ var publicPaths = map[string]bool{
 	"/api/v1/auth":       true,
 	"/api/v1/auth/login": true,
 	"/api/v1/auth/local": true,
+	"/api/v1/auth/pair":  true,
 }
 
 // streamPaths are the routes a browser opens without custom headers (event

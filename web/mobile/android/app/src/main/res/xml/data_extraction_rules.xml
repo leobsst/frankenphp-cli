@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12 and later (android:dataExtractionRules): the secure store (SecureStorePlugin) stays out of cloud backups
+  and device-to-device transfers. Its values are encrypted with a key of this device's Keystore.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="frankenmanager_secure_store.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="frankenmanager_secure_store.xml" />
+    </device-transfer>
+</data-extraction-rules>

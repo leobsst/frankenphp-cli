@@ -70,6 +70,8 @@ func (s *Server) routeTable() []route {
 		{"GET /api/v1/auth", s.authState},
 		{"POST /api/v1/auth/login", s.login},
 		{"POST /api/v1/auth/local", s.localLogin},
+		{"POST /api/v1/auth/pairing", s.createPairing},
+		{"POST /api/v1/auth/pair", s.pair},
 		{"POST /api/v1/auth/logout", s.logout},
 		{"PUT /api/v1/auth/password", s.setPassword},
 		{"GET /api/v1/auth/sessions", s.sessions},
@@ -173,6 +175,8 @@ var destructive = map[string]func(*http.Request) bool{
 	"POST /api/v1/redis/flush":                        always,
 	"POST /api/v1/databases/{engine}/delete":          always,
 	"POST /api/v1/databases/{engine}/users/delete":    always,
+	// A pairing code opens a session without the password
+	"POST /api/v1/auth/pairing": always,
 	// The access settings could open the dashboard wider
 	"PUT /api/v1/settings/{key}": func(r *http.Request) bool {
 		return strings.HasPrefix(strings.ToUpper(r.PathValue("key")), "DASHBOARD_")
@@ -232,12 +236,39 @@ func running(ctx context.Context, ws *Workspace, notRunning error) (*domains.Ser
 
 // --- Read --------------------------------------------------------------------
 
+// APIVersion is the major version of the API, the prefix of its routes.
+const APIVersion = "v1"
+
+// healthResponse tells the version of the daemon and what it can do, so
+// that a client (the mobile app) adapts to daemons of other versions. It
+// answers without a session on the remote access: nothing about the
+// settings or the stack.
 type healthResponse struct {
 	Version string `json:"version"`
+	// API is the major version of the API (APIVersion)
+	API string `json:"api"`
+	// Features lists the capabilities of this daemon (see features)
+	Features []string `json:"features"`
 }
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, healthResponse{Version: s.Version})
+	writeJSON(w, http.StatusOK, healthResponse{Version: s.Version, API: APIVersion, Features: s.features()})
+}
+
+// features are the capabilities a client may test in GET /api/health:
+// "dashboard" (this build serves the pages), "update" (it looks up the
+// releases, GET /api/v1/update), "docker" (it drives the stack and its
+// containers) and "pairing" (POST /api/v1/auth/pairing and
+// POST /api/v1/auth/pair).
+func (s *Server) features() []string {
+	f := []string{}
+	if s.UI != nil {
+		f = append(f, "dashboard")
+	}
+	if s.Updater != nil {
+		f = append(f, "update")
+	}
+	return append(f, "docker", "pairing")
 }
 
 // stopDaemon stops the daemon once the response is sent: the CLI replaces
