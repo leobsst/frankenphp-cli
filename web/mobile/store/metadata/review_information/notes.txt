@@ -1,0 +1,11 @@
+FrankenManager is the companion app of FrankenManager, an open source tool (github.com/leobsst/frankenphp-cli) that runs a local PHP development environment on a computer. The app manages those computers ("instances") over HTTPS; it has no account and no server of its own.
+
+To review the app, use the demo instance below:
+1. Open the app and tap "Add an instance".
+2. Address: <DEMO_INSTANCE_URL>
+3. Password: <DEMO_PASSWORD>
+4. The dashboard opens: overview, projects, containers, logs, SSL, databases, Redis, S3 and settings can all be browsed. Actions on the demo instance are harmless.
+
+Pairing by QR code (the main way to connect in real use) needs the dashboard of a computer running FrankenManager: "Remote access" > "Pair a device" shows a one-time QR code that the app scans. The camera is used only for that scan.
+
+The app collects no data: it only talks to the instances the user adds.
