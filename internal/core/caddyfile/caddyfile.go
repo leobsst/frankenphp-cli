@@ -618,6 +618,11 @@ type Main struct {
 	// S3Target is the ACL gateway, upstream of s3.frankenmanager.test and
 	// its bucket hosts, "" when disabled (see s3.ProxyTarget).
 	S3Target string
+	// DashboardDomains serve the dashboard on this machine
+	// (frankenmanager.test, <CLI_ALIAS>.test, see dashboard.Domains) from
+	// DashboardTarget, the daemon on 127.0.0.1; none when empty.
+	DashboardDomains []string
+	DashboardTarget  string
 }
 
 // WriteMain rewrites <caddyDir>/Caddyfile: domains, aliases, proxies, static
@@ -686,9 +691,30 @@ func WriteMain(caddyDir string, m Main) error {
 	if m.S3Target != "" && !registered[s3.Domain] && exists(s3Cert) {
 		lines = append(lines, s3Block(m.S3Target)...)
 	}
+	for _, d := range m.DashboardDomains {
+		if m.DashboardTarget != "" && !registered[d] && exists(filepath.Join(caddyDir, "certs", d+".pem")) {
+			lines = append(lines, dashboardBlock(d, m.DashboardTarget)...)
+			registered[d] = true
+		}
+	}
 
 	content := strings.Join(lines, "\n") + "\n"
 	return os.WriteFile(filepath.Join(caddyDir, MainName), []byte(content), fileMode)
+}
+
+// dashboardBlock serves the pages of the dashboard at domain from the daemon
+// (target, on 127.0.0.1), as if asked at the daemon's own address: its
+// guard checks the Host. The API is not served here: the page calls the
+// daemon's HTTPS listener on 127.0.0.1, which only a browser of this machine
+// reaches (see the dashboard package).
+func dashboardBlock(domain, target string) []string {
+	return siteBlock(domain,
+		"\t@api path /api /api/*",
+		"\trespond @api 404",
+		"\treverse_proxy "+target+" {",
+		"\t\theader_up Host "+target,
+		"\t}",
+	)
 }
 
 // s3Block serves the S3 API at s3.frankenmanager.test (path style) and

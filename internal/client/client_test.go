@@ -38,7 +38,7 @@ func serve(t *testing.T, dir, version string) <-chan struct{} {
 	ctx, cancel := context.WithCancel(context.Background())
 	stopped := make(chan struct{})
 	go func() {
-		_ = daemon.New(nil, "", 0, version).Serve(ctx, ln, nil)
+		_ = daemon.New(nil, "", 0, version).Serve(ctx, ln, nil, nil)
 		close(stopped)
 	}()
 	t.Cleanup(func() {

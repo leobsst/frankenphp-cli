@@ -129,7 +129,7 @@ func (a *app) start(ctx context.Context, domains []string, o startOptions) error
 		if _, _, err := a.ensureDaemon(ctx, dir); err != nil {
 			a.log.Warning(i18n.Tf("The dashboard daemon did not start: %v", err))
 		} else {
-			dashboard = "http://127.0.0.1:" + e.Get(env.DashboardPortKey)
+			dashboard = a.dashboardURL(e, dir)
 		}
 	}
 

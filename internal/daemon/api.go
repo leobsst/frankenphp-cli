@@ -68,6 +68,7 @@ func (s *Server) routeTable() []route {
 		{"GET /api/v1/host", s.hostInfo},
 		{"GET /api/v1/auth", s.authState},
 		{"POST /api/v1/auth/login", s.login},
+		{"POST /api/v1/auth/local", s.localLogin},
 		{"POST /api/v1/auth/logout", s.logout},
 		{"PUT /api/v1/auth/password", s.setPassword},
 		{"GET /api/v1/auth/sessions", s.sessions},

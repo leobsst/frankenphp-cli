@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"net/http"
 	"sync"
@@ -42,6 +43,11 @@ type Server struct {
 	RemoteCert func(cfg AccessConfig) (certFile, keyFile string, err error)
 	// LANIP returns the address of the host on the local network
 	LANIP func() string
+	// UI holds the pages of the dashboard (web/embedded/dist), nil when the
+	// build has none; HTTPSPort is the port of the HTTPS listener on
+	// 127.0.0.1 that serves them with the API (see dashboardGuard)
+	UI        fs.FS
+	HTTPSPort int
 	// Logf reports what the remote access does (the daemon log)
 	Logf func(format string, args ...any)
 
@@ -86,9 +92,10 @@ func New(backend Backend, token string, port int, version string) *Server {
 func (s *Server) Handler() http.Handler { return s.routes() }
 
 // Serve runs the queue and serves the API on the socket listener (CLI, no
-// token) and the HTTP one (dashboard, token and headers checked) until ctx
-// is done. Either listener may be nil.
-func (s *Server) Serve(ctx context.Context, socket, local net.Listener) error {
+// token), the HTTP one (127.0.0.1:DASHBOARD_PORT, token and headers
+// checked) and the HTTPS one of the dashboard (127.0.0.1:DASHBOARD_HTTPS_PORT,
+// see dashboardGuard) until ctx is done. Any listener may be nil.
+func (s *Server) Serve(ctx context.Context, socket, local, dashboard net.Listener) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	s.mu.Lock()
@@ -120,7 +127,7 @@ func (s *Server) Serve(ctx context.Context, socket, local net.Listener) error {
 
 	api := s.routes()
 	var servers []*http.Server
-	errs := make(chan error, 2)
+	errs := make(chan error, 3)
 	serve := func(ln net.Listener, h http.Handler) {
 		srv := &http.Server{Handler: h, ReadHeaderTimeout: 10 * time.Second,
 			BaseContext: func(net.Listener) context.Context { return ctx }}
@@ -132,6 +139,9 @@ func (s *Server) Serve(ctx context.Context, socket, local net.Listener) error {
 	}
 	if local != nil {
 		serve(local, s.guard(api))
+	}
+	if dashboard != nil {
+		serve(dashboard, s.dashboardGuard(api))
 	}
 
 	select {

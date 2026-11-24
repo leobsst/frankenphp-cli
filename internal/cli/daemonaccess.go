@@ -14,7 +14,9 @@ import (
 
 	"github.com/leobsst/frankenphp-cli/internal/command"
 	"github.com/leobsst/frankenphp-cli/internal/core/access"
+	"github.com/leobsst/frankenphp-cli/internal/core/dashboard"
 	"github.com/leobsst/frankenphp-cli/internal/core/env"
+	"github.com/leobsst/frankenphp-cli/internal/core/store"
 	"github.com/leobsst/frankenphp-cli/internal/daemon"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
 )
@@ -45,6 +47,17 @@ func loadAccess(dir string) (daemon.AccessConfig, error) {
 	if cfg.Allow, err = access.ParseAllowList(e.Get(env.DashboardAllowedIPsKey)); err != nil {
 		return cfg, err
 	}
+	// The dashboard names a registered host does not take: its pages would
+	// sign in without the password otherwise
+	names := dashboard.Domains(e)
+	if st, err := store.Open(filepath.Join(dir, "db.sqlite")); err == nil {
+		names, err = dashboard.Available(e, st)
+		_ = st.Close()
+		if err != nil {
+			return cfg, err
+		}
+	}
+	cfg.DashboardOrigins = dashboard.Origins(names, e.Get("WEB_HTTPS_PORT"), dashboard.HTTPSPort(e))
 	return cfg, nil
 }
 

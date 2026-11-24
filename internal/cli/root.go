@@ -78,7 +78,7 @@ func NewRootCmd(out, errOut io.Writer, deps Deps) *cobra.Command {
 	root.AddCommand(newStartCmd(a), newStopCmd(a), newRestartCmd(a),
 		newAddHostCmd(a), newAddAliasCmd(a), newRemoveHostCmd(a), newRestoreHostCmd(a), newSwitchPHPCmd(a),
 		newExecCmd(a), newListCmd(a), newDNSClientsCmd(a), newStatusCmd(a), newTrustCACmd(a), newSetupCmd(a), newResetCmd(a), newUpdateCmd(a),
-		newConfigurationCmd(a), newServiceCmd(a), newS3Cmd(a), newDaemonCmd(a), newCompletionCmd(a))
+		newConfigurationCmd(a), newServiceCmd(a), newS3Cmd(a), newDaemonCmd(a), newDashboardCmd(a), newCompletionCmd(a))
 
 	root.AddCommand(newInternalCmds(a)...)
 

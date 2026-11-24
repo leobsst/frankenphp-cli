@@ -183,6 +183,16 @@ const (
 // DefaultDashboardPort is the default port of the dashboard API.
 const DefaultDashboardPort = "9081"
 
+// DashboardHTTPSPortKey is the key of the HTTPS port of the dashboard on
+// 127.0.0.1, read when the daemon starts: the page served at
+// https://frankenmanager.test reaches the daemon there (a browser refuses
+// plain HTTP from an HTTPS page).
+const DashboardHTTPSPortKey = "DASHBOARD_HTTPS_PORT"
+
+// DefaultDashboardHTTPSPort is the default HTTPS port of the dashboard on
+// 127.0.0.1.
+const DefaultDashboardHTTPSPort = "9444"
+
 // AliasKey is the key of the CLI alias.
 const AliasKey = "CLI_ALIAS"
 
@@ -338,6 +348,8 @@ func buildDefinitions() []Definition {
 		{Key: "PGADMIN_PORT", Description: i18n.N("pgAdmin port (dev only)"), Default: static("8081"), Validate: validatePort, Apply: ApplyRecreate},
 		{Key: DashboardPortKey, Description: i18n.N("Port of the dashboard API (frankenmanager daemon), on 127.0.0.1"),
 			Default: static(DefaultDashboardPort), Validate: validatePort, Apply: ApplyNow},
+		{Key: DashboardHTTPSPortKey, Description: i18n.N("HTTPS port of the dashboard on 127.0.0.1, behind https://frankenmanager.test"),
+			Default: static(DefaultDashboardHTTPSPort), Validate: validatePort, Apply: ApplyNow},
 		{Key: DashboardAccessKey, Description: i18n.N("Who reaches the dashboard: local (this machine), lan (also the local networks) or internet (also any address); lan and internet need DASHBOARD_PASSWORD"),
 			Default: static(access.Local), Values: access.Modes, Apply: ApplyDaemon},
 		{Key: DashboardRemotePortKey, Description: i18n.N("HTTPS port of the remote access to the dashboard (lan, internet)"),

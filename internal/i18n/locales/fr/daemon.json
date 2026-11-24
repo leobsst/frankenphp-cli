@@ -75,5 +75,15 @@
   "'%s' is a system account: it cannot be deleted.": "'%s' est un compte système : il ne peut pas être supprimé.",
   "User '%s' deleted from %s.": "Utilisateur '%s' supprimé de %s.",
   "Invalid name '%s': letters, digits and _ only, 63 at most.": "Nom '%s' invalide : lettres, chiffres et _ uniquement, 63 au plus.",
-  "The %s server is not enabled (DB_ENGINES).": "Le serveur %s n'est pas activé (DB_ENGINES)."
+  "The %s server is not enabled (DB_ENGINES).": "Le serveur %s n'est pas activé (DB_ENGINES).",
+  "Not found.": "Introuvable.",
+  "Method not allowed.": "Méthode non autorisée.",
+  "The dashboard is not part of this build (make web).": "Le dashboard ne fait pas partie de ce build (make web).",
+  "The dashboard password is required on this machine too (DASHBOARD_LOCAL_AUTH).": "Le mot de passe du dashboard est demandé sur cette machine aussi (DASHBOARD_LOCAL_AUTH).",
+  "Dashboard HTTPS on 127.0.0.1 is off: %v": "Le HTTPS du dashboard sur 127.0.0.1 est coupé : %v",
+  "Dashboard listening on https://%s": "Dashboard à l'écoute sur https://%s",
+  "Open the dashboard in the browser.": "Ouvrir le dashboard dans le navigateur.",
+  "Print the address without opening the browser": "Afficher l'adresse sans ouvrir le navigateur",
+  "Could not open the browser (%v): open the address above.": "Impossible d'ouvrir le navigateur (%v) : ouvrez l'adresse ci-dessus.",
+  "Open the dashboard in the browser.\n\nThe dashboard answers at https://frankenmanager.test, and at\nhttps://<CLI_ALIAS>.test (https://fkm.test by default), on this machine\nonly: these names are not given to the LAN DNS server, and the page signs in\nby calling the daemon on 127.0.0.1, which no other device reaches. Typed in\nthe browser, they open the dashboard without any password.\n\nBefore the stack runs, the dashboard answers at\nhttps://127.0.0.1:DASHBOARD_HTTPS_PORT. From another device, use the remote\naccess (DASHBOARD_ACCESS), with the password.\n\nExamples:\n    frankenmanager dashboard           # Open it\n    frankenmanager dashboard --print   # Print its address only": "Ouvrir le dashboard dans le navigateur.\n\nLe dashboard répond sur https://frankenmanager.test, et sur\nhttps://<CLI_ALIAS>.test (https://fkm.test par défaut), sur cette machine\nseulement : ces noms ne sont pas donnés au serveur DNS LAN, et la page se\nconnecte en appelant le daemon sur 127.0.0.1, qu'aucun autre appareil\nn'atteint. Tapés dans le navigateur, ils ouvrent le dashboard sans mot de passe.\n\nAvant que la stack tourne, le dashboard répond sur\nhttps://127.0.0.1:DASHBOARD_HTTPS_PORT. Depuis un autre appareil, passez par\nl'accès distant (DASHBOARD_ACCESS), avec le mot de passe.\n\nExemples :\n    frankenmanager dashboard           # L'ouvrir\n    frankenmanager dashboard --print   # Afficher seulement son adresse"
 }
