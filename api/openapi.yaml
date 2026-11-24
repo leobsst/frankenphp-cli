@@ -89,6 +89,44 @@ paths:
             application/json:
               schema: { type: object }
 
+  /api/v1/update:
+    get:
+      tags: [daemon]
+      summary: Installed version, latest release and the notes in between
+      description: |
+        Looks up the releases on GitHub: the latest stable one (drafts and pre-releases
+        are skipped) and the notes of every release newer than the daemon, among the last
+        30 published. The answer is cached one hour (a failure, ten minutes): the
+        dashboards may poll it. A development build reports the latest release but never
+        an update.
+
+        The update is not installed through the API: the binary lives in a system
+        directory (e.g. `/usr/local/lib/frankenmanager`) that the daemon, run as the
+        user, cannot write. Run `command` in a terminal of the host.
+      parameters:
+        - name: refresh
+          in: query
+          description: Look up GitHub again, bypassing the cache.
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: >-
+            The releases. When a lookup failed after an earlier one succeeded, the earlier
+            answer, with `error`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/UpdateInfo" }
+        "502":
+          description: GitHub could not be reached, or its rate limit was reached, and no earlier answer is known.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: This daemon does not check for updates.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
   /api/v1/status:
     get:
       tags: [stack]
@@ -1838,3 +1876,35 @@ components:
         remote: { type: boolean, description: The request came through the remote access (badge Local / Remote). }
         mode: { type: string, enum: [local, lan, internet] }
         remote_url: { type: string, description: Where the remote access answers, when on. }
+
+    UpdateInfo:
+      type: object
+      required: [version, latest, update_available, releases, command, checked_at]
+      properties:
+        version: { type: string, description: The version of the daemon. }
+        latest:
+          type: [string, "null"]
+          description: The latest stable release, null when GitHub lists none.
+        update_available: { type: boolean }
+        releases:
+          type: array
+          description: The releases newer than `version`, newest first.
+          items: { $ref: "#/components/schemas/ReleaseNotes" }
+        command:
+          type: string
+          description: The command installing the update in a terminal of the host (it needs administrator rights).
+          examples: [sudo frankenmanager update]
+        checked_at: { type: string, format: date-time }
+        error:
+          type: string
+          description: The failure of the last lookup, when this answer comes from an earlier one.
+
+    ReleaseNotes:
+      type: object
+      required: [version, name, published_at, url, notes]
+      properties:
+        version: { type: string, examples: ["0.13.1"] }
+        name: { type: string }
+        published_at: { type: string, format: date-time }
+        url: { type: string, description: The page of the release on GitHub. }
+        notes: { type: string, description: The body of the GitHub release (Markdown). }

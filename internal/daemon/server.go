@@ -19,6 +19,7 @@ import (
 
 	"github.com/leobsst/frankenphp-cli/internal/core/access"
 	"github.com/leobsst/frankenphp-cli/internal/core/store"
+	"github.com/leobsst/frankenphp-cli/internal/core/updater"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
 )
 
@@ -50,6 +51,9 @@ type Server struct {
 	HTTPSPort int
 	// Logf reports what the remote access does (the daemon log)
 	Logf func(format string, args ...any)
+	// Updater looks up the releases on GitHub (GET /api/v1/update), nil
+	// when the daemon does not check for updates
+	Updater *updater.Updater
 
 	mu   sync.Mutex
 	stop context.CancelFunc // ends Serve, set while it runs
@@ -58,6 +62,7 @@ type Server struct {
 	accessCfg atomic.Pointer[AccessConfig]
 	limiter   limiter
 	remote    remoteListener
+	updates   updateCache
 }
 
 // accessRefresh is how often the access settings are read again.
