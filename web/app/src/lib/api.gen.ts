@@ -3205,7 +3205,7 @@ export interface components {
                     host?: string;
                 }[];
             }[];
-            /** @description phpMyAdmin or pgAdmin (development). */
+            /** @description phpMyAdmin, or pgAdmin when PostgreSQL is the only engine (development only), as the caller can open it: `https://localhost` on this machine (served by the reverse proxy); through the remote access, `http://<address of this machine>:<PMA_PORT or PGADMIN_PORT>`, the address being the one the request was sent to, and only with `EXPOSE_SERVICES=true` (the ports are otherwise bound to 127.0.0.1). Missing when there is no admin UI (production, no database engine) or the caller cannot reach it. */
             admin_url?: string;
         };
         NamesRequest: {

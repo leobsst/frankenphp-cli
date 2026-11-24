@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 
@@ -146,7 +147,8 @@ func databaseService(ws *Workspace, log events.Log) *databases.Service {
 // answers.
 type DatabasesState struct {
 	Servers []databases.Server `json:"servers"`
-	// AdminURL is phpMyAdmin or pgAdmin (development), "" without
+	// AdminURL is phpMyAdmin or pgAdmin (development) as the requester
+	// reaches it, "" without or when out of its reach (see dbAdminURL)
 	AdminURL string `json:"admin_url,omitempty"`
 }
 
@@ -156,12 +158,37 @@ func (s *Server) databases(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return nil, err
 		}
-		st := DatabasesState{Servers: servers}
-		if ws.Env.DBAdminTarget() != "" {
-			st.AdminURL = "https://localhost"
+		host := (&url.URL{Host: r.Host}).Hostname()
+		if host == "" && s.LANIP != nil {
+			host = s.LANIP()
 		}
-		return st, nil
+		return DatabasesState{
+			Servers:  servers,
+			AdminURL: dbAdminURL(ws.Env.DBAdminPort(), ws.Env.ServicesExposed(), requesterOf(r).remote, host),
+		}, nil
 	})
+}
+
+// dbAdminURL is the address of the database admin UI listening on port
+// (see env.DBAdminPort, "" for none) for a requester of this machine or,
+// when remote, of another device that reached it at host.
+//
+// On this machine, the reverse proxy serves it at https://localhost. That
+// name is the device itself anywhere else, and phpMyAdmin and pgAdmin have
+// no name of their own behind the reverse proxy (nor in the LAN DNS
+// server): another device reaches them on their port only, at the address
+// it reaches this machine at, and only when EXPOSE_SERVICES publishes that
+// port beyond 127.0.0.1. Otherwise there is no address to give: "".
+func dbAdminURL(port string, exposed, remote bool, host string) string {
+	switch {
+	case port == "":
+		return ""
+	case !remote:
+		return "https://localhost"
+	case !exposed || host == "":
+		return ""
+	}
+	return "http://" + net.JoinHostPort(host, port)
 }
 
 func (s *Server) createDatabase(w http.ResponseWriter, r *http.Request) {

@@ -1407,6 +1407,7 @@ Changing a password (`configuration set MARIADB_ROOT_PASSWORD ...`) is applied t
 
 - **phpMyAdmin** runs as soon as MariaDB or MySQL is enabled, on `PMA_PORT` (`8080`) and at `https://localhost`. A single phpMyAdmin connects to every enabled MariaDB/MySQL server, already logged in as `root`: when both are enabled, switch between them with phpMyAdmin's server selector (MariaDB is the default).
 - **pgAdmin** runs as soon as PostgreSQL is enabled, on `PGADMIN_PORT` (`8081`). It is served at `https://localhost` when PostgreSQL is the only engine; otherwise `https://localhost` stays on phpMyAdmin. Log in with `PGADMIN_EMAIL` (`admin@admin.com`) and `POSTGRES_PASSWORD`.
+- The dashboard links to that admin UI: `https://localhost` on this machine; from another device (remote access, mobile app), `http://<address of this machine>:<PMA_PORT or PGADMIN_PORT>`, only with `EXPOSE_SERVICES=true`, as the admin UIs have no name of their own behind the reverse proxy and their ports are otherwise bound to `127.0.0.1` (no link then).
 
 ### Production Mode
 

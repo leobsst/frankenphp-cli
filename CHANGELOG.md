@@ -88,6 +88,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Site Caddyfiles: read, check with the Caddy of the container serving them (`adapt`), save, back to the template
   - Redis cache: stats, keys (SCAN), delete keys, flush, straight on its port
   - Databases and users of MariaDB, MySQL and PostgreSQL: list, create, delete (the passwords and queries never on a command line)
+  - The link to phpMyAdmin or pgAdmin (`admin_url` of `GET /api/v1/databases`) is one the caller can open: `https://localhost` on this machine; through the remote access, the admin port at the address the device reached this machine at, only with `EXPOSE_SERVICES=true` (the ports are otherwise bound to `127.0.0.1`, and the admin UIs have no name behind the reverse proxy), none otherwise, instead of a `https://localhost` pointing at the phone itself
   - S3 objects: list one folder deep, upload, download, public or private, public URL or temporary presigned link
   - Proxy hosts: allow or refuse the WebSocket connections
   - Tells whether Docker answers: `docker` in `GET /api/v1/status` (checked within a few seconds, the stack then reported stopped, no error) and a `docker` message on the event stream when Docker stops or comes back; the container states are read within a bounded time, so a stopped or stuck Docker no longer looks like a daemon gone
