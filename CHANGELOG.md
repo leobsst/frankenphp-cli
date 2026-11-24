@@ -5,13 +5,6 @@ All notable changes to FrankenManager will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### Added
-
-- Dashboard: the sidebar footer tells when a newer FrankenManager release is out (`v0.13.0 · v0.13.1 disponible`) and opens the update window: installed and latest versions, the notes of every release in between, a "Vérifier" button looking up GitHub again, and the install command (`sudo frankenmanager update`) to copy and run in a terminal of the host
-- `GET /api/v1/update` - The installed version, the latest stable release, whether an update is available and the notes of the newer releases (GitHub release bodies, Markdown); cached one hour by the daemon (a failure, ten minutes), `?refresh=true` looks up again; GitHub out of reach or rate limited answers `502` with the reason, or the previous answer with its `error`; a successful lookup also refreshes the cache of the CLI's update notice
-
 ## [1.0.0] - 2026-02-10
 
 ### Added
@@ -100,6 +93,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Tells whether Docker answers: `docker` in `GET /api/v1/status` (checked within a few seconds, the stack then reported stopped, no error) and a `docker` message on the event stream when Docker stops or comes back; the container states are read within a bounded time, so a stopped or stuck Docker no longer looks like a daemon gone
   - The dashboard warns when Docker is unreachable (overview and containers) and disables the container actions until it is back, without a reload; when the daemon stops or restarts (`daemon stop`/`start`, an update), it retries with backoff and reopens its streams, and on this machine signs in again by itself if the session was lost
   - The dashboard rebuilds the PHP images (`restart --caddy --build`: images of the active PHP versions rebuilt, their containers recreated, the other services left running)
+  - Tells whether a newer release is out: `GET /api/v1/update`, with the notes of every newer release (GitHub release bodies, Markdown); cached one hour (a failure, ten minutes), `?refresh=true` looks up again; GitHub out of reach or rate limited answers `502` with the reason, or the previous answer with its `error`; a successful lookup also refreshes the cache of the CLI's update notice
+  - The dashboard shows it in the sidebar footer (`v0.13.0 · v0.13.1 disponible`) and in an update window: installed and latest versions, the notes in between, a check button, and the install command (`sudo frankenmanager update`) to run in a terminal of the host, the daemon having no administrator rights
   - The API is versioned under `/api/v1` (`/api/health` and `/api/daemon/stop` stay unversioned)
   - Remote access (`DASHBOARD_ACCESS=lan` or `internet`): HTTPS on `DASHBOARD_REMOTE_PORT`, with a mkcert certificate or `DASHBOARD_TLS_CERT`/`DASHBOARD_TLS_KEY`; requires `DASHBOARD_PASSWORD` (stored hashed, set with `daemon password`), optionally restricted to `DASHBOARD_ALLOWED_IPS` (IPv4, IPv6, CIDR); revocable sessions per device, a connection log, the destructive actions confirmed by the password again, an address locked after five wrong passwords; `DASHBOARD_LOCAL_AUTH=true` requires the password on the host too
   - A mobile app calls the remote access across origins: the origins of a Capacitor app (`capacitor://localhost`, `https://localhost`) and of its dev server (`http://localhost:<port>`) get the CORS headers, preflights and refusals included, and sign in with a Bearer token, the session cookie never crossing origins
