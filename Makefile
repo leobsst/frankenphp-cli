@@ -17,7 +17,13 @@ TARGETS := darwin/amd64 darwin/arm64 \
 
 export CGO_ENABLED := 0
 
-.PHONY: build build-all test lint i18n hooks clean
+.PHONY: build build-all web test lint i18n hooks clean
+
+## web: the dashboard in web/embedded/dist, embedded in the next Go build
+## (go:embed); without it, the daemon answers that the dashboard is not built
+web:
+	pnpm --dir web install --frozen-lockfile
+	pnpm --dir web build
 
 ## build: native binary in $(OUT)/frankenmanager
 build:

@@ -166,6 +166,12 @@ jobs:
       - name: Set SOURCE_DATE_EPOCH
         run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
 
+      # The dashboard, embedded in the binaries (go:embed of web/embedded/dist)
+      - name: Build the dashboard
+        run: |
+          npm install --global pnpm@10.33.0
+          make web
+
       - name: Build every bundle
         run: go run ./cmd/release stage -version "$VERSION" -out dist
 
