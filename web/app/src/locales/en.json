@@ -1346,6 +1346,13 @@
         "notSupported": "This instance does not support QR code pairing: update FrankenManager on the machine.",
         "tooMany": "Too many attempts: wait a few minutes before trying again."
       }
+    },
+    "demo": {
+      "name": "Demo",
+      "badge": "Demo",
+      "address": "Simulated data, no instance needed",
+      "try": "Try the demo",
+      "help": "No FrankenManager instance at hand? Explore the app with simulated projects and services: nothing is sent anywhere."
     }
   },
   "store": {

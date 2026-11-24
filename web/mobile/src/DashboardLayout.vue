@@ -11,7 +11,7 @@ import { sidebarCollapsed } from '@app/composables/useSidebar'
 import { connect, disconnect, loadPage, pause, refresh, resume, state, toast } from '@app/composables/useFm'
 import { shell } from '@app/lib/shell'
 import { deviceLabel } from './lib/device'
-import { currentInstance } from './lib/instances'
+import { currentInstance, displayAddress, displayName, isDemo } from './lib/instances'
 import { mountNativeTabBar, nativeTabs } from './lib/nativeTabBar'
 import { INSTANCES } from './router'
 
@@ -21,14 +21,15 @@ const router = useRouter()
 const inst = currentInstance()!
 
 // What the shared sidebar shows: this instance, and the way back to the list.
-shell.name = inst.name
-shell.address = inst.url.replace('https://', '')
+shell.name = displayName(inst)
+shell.address = displayAddress(inst)
 shell.switchTo = INSTANCES.path
 
 let appState: PluginListenerHandle | undefined
 let unmountTabBar: (() => void) | undefined
 onMounted(async () => {
-  connect(inst, { mode: 'remote', client: deviceLabel() })
+  // The demo runs on the phone itself: like the dashboard on its own machine, no password asked again.
+  connect(inst, { mode: isDemo(inst) ? 'local' : 'remote', client: deviceLabel() })
   // On iPhone, the native tab bar (Liquid Glass since iOS 26) replaces BottomNav.
   void mountNativeTabBar(router).then((fn) => { unmountTabBar = fn })
   // Streams paused when the app goes to the background, resumed on return.
@@ -76,7 +77,7 @@ watch(() => inst.expired, (expired) => {
           <UAlert
             v-if="state.error"
             color="error" variant="soft" icon="i-lucide-wifi-off" class="mb-5"
-            :title="t('mobile.layout.unreachable', { name: inst.name })" :description="state.error"
+            :title="t('mobile.layout.unreachable', { name: displayName(inst) })" :description="state.error"
             :actions="[{ label: t('common.retry'), color: 'error', variant: 'outline', onClick: () => void refresh() }]"
           />
           <div v-if="!state.loaded" class="flex flex-col gap-4">

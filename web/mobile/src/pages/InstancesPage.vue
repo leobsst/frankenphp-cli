@@ -5,7 +5,7 @@ import { useI18n } from 'vue-i18n'
 import type { DropdownMenuItem } from '@nuxt/ui'
 import { client, logout, type Status } from '@app/lib/api'
 import { formatNumber } from '@app/i18n'
-import { current, removeInstance, setCurrent, store, type Instance } from '../lib/instances'
+import { addDemoInstance, current, displayAddress, displayName, isDemo, removeInstance, setCurrent, store, type Instance } from '../lib/instances'
 import { openPairing, scanPairing } from '../lib/pairing'
 
 const { t } = useI18n()
@@ -47,6 +47,11 @@ async function open(inst: Instance) {
   router.push('/')
 }
 
+/** Demo mode: a simulated instance (src/demo), to try the app without a machine running FrankenManager. */
+async function tryDemo() {
+  await open(await addDemoInstance())
+}
+
 /** Pairing with the QR code of the dashboard. */
 const scanError = ref('')
 async function scan() {
@@ -60,13 +65,14 @@ async function scan() {
 }
 
 const menu = (inst: Instance): DropdownMenuItem[] => [
-  { label: t('mobile.instances.reconnect'), icon: 'i-lucide-key-round', onSelect: () => router.push(`/instances/${inst.id}/connexion`) },
+  // The demo has no session to open again.
+  ...(isDemo(inst) ? [] : [{ label: t('mobile.instances.reconnect'), icon: 'i-lucide-key-round', onSelect: () => router.push(`/instances/${inst.id}/connexion`) }]),
   {
     label: t('mobile.instances.remove'),
     icon: 'i-lucide-trash-2',
     color: 'error',
     onSelect: async () => {
-      await logout(inst)
+      if (!isDemo(inst)) await logout(inst)
       await removeInstance(inst.id)
       if (current.id === inst.id) await setCurrent(null)
     },
@@ -107,6 +113,10 @@ const dot: Record<Probe['state'], string> = {
         </i18n-t>
         <UButton icon="i-lucide-scan-qr-code" :label="t('mobile.pair.scan')" size="lg" block @click="scan" />
         <UButton to="/instances/ajouter" icon="i-lucide-plus" :label="t('mobile.instances.addWithPassword')" color="neutral" variant="outline" size="lg" block />
+        <div class="pt-2 border-t border-default space-y-2">
+          <p class="text-sm text-muted">{{ t('mobile.demo.help') }}</p>
+          <UButton icon="i-lucide-play" :label="t('mobile.demo.try')" color="primary" variant="soft" size="lg" block @click="tryDemo" />
+        </div>
       </div>
 
       <div
@@ -117,9 +127,10 @@ const dot: Record<Probe['state'], string> = {
         <button type="button" class="flex-1 min-w-0 text-left p-4 flex gap-3 items-start" @click="open(inst)">
           <span class="mt-1.5 size-2.5 shrink-0 rounded-full" :class="dot[probes[inst.id]?.state ?? 'loading']" />
           <span class="min-w-0 flex-1 space-y-1">
-            <span class="block font-semibold text-highlighted truncate">{{ inst.name }}</span>
-            <span class="block text-xs text-muted truncate">{{ inst.url.replace('https://', '') }}<template v-if="inst.version"> · v{{ inst.version }}</template></span>
+            <span class="block font-semibold text-highlighted truncate">{{ displayName(inst) }}</span>
+            <span class="block text-xs text-muted truncate">{{ displayAddress(inst) }}<template v-if="inst.version"> · v{{ inst.version }}</template></span>
             <span class="flex flex-wrap gap-1.5 pt-1">
+              <UBadge v-if="isDemo(inst)" color="primary" variant="solid" icon="i-lucide-flask-conical" :label="t('mobile.demo.badge')" />
               <template v-if="probes[inst.id]?.state === 'online'">
                 <UBadge :color="probes[inst.id]?.running ? 'success' : 'neutral'" variant="subtle" :label="probes[inst.id]?.running ? t('mobile.instances.stackOnline') : t('mobile.instances.stackStopped')" />
                 <UBadge color="neutral" variant="outline" :label="t('mobile.instances.domains', { n: formatNumber(probes[inst.id]?.hosts ?? 0) }, probes[inst.id]?.hosts ?? 0)" />
@@ -138,6 +149,7 @@ const dot: Record<Probe['state'], string> = {
       <template v-if="store.list.length">
         <UButton icon="i-lucide-scan-qr-code" :label="t('mobile.pair.scan')" size="lg" block @click="scan" />
         <UButton to="/instances/ajouter" icon="i-lucide-plus" :label="t('mobile.instances.addWithPassword')" color="neutral" variant="outline" size="lg" block />
+        <UButton v-if="!store.list.some(isDemo)" icon="i-lucide-play" :label="t('mobile.demo.try')" color="primary" variant="soft" size="lg" block @click="tryDemo" />
       </template>
 
       <p class="pt-4 text-center text-xs text-dimmed">{{ t('mobile.instances.version', { version, build }) }}</p>
