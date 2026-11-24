@@ -9,6 +9,7 @@ import NameCell from '../components/NameCell.vue'
 import SideForm from '../components/SideForm.vue'
 import InfoBanner from '../components/InfoBanner.vue'
 import ConfirmModal from '../components/ConfirmModal.vue'
+import PairingModal from '../components/PairingModal.vue'
 import { focusField } from '../composables/focus'
 import { accessMode, actions, passwordSet, remoteActive, remoteUrl, state, type AccessEvent, type FieldErrors, type Session } from '../composables/useFm'
 
@@ -32,6 +33,11 @@ const values = computed(() => ({
 }))
 // From remote access, a DASHBOARD_* setting asks for the password again: it could expose the dashboard more widely.
 const confirmOpen = ref(false)
+// Pairing of the mobile app by QR code: the phone reaches the remote access, which must be open and listening.
+const pairingOpen = ref(false)
+const pairingHint = computed(() => accessMode() === 'local'
+  ? 'Ouvrez d’abord l’accès distant (Réseau local ou Internet) : le téléphone doit pouvoir joindre le dashboard.'
+  : 'L’accès distant est fermé tant que le dashboard n’a pas de mot de passe.')
 function save() {
   if (state.connection.mode === 'remote') { confirmOpen.value = true; return }
   apply()
@@ -76,8 +82,10 @@ const EVENTS: Record<AccessEvent['event'], { label: string; color: 'success' | '
   refused: { label: 'Adresse refusée', color: 'warning' },
   confirm_failed: { label: 'Confirmation refusée', color: 'error' },
   password_changed: { label: 'Mot de passe changé', color: 'neutral' },
+  paired: { label: 'Appareil appairé', color: 'success' },
+  pair_failed: { label: 'Code d’appairage erroné', color: 'error' },
 }
-const eventOf = (e: AccessEvent) => EVENTS[e.event]
+const eventOf = (e: AccessEvent) => EVENTS[e.event] ?? { label: e.event, color: 'neutral' as const }
 const logColumns: TableColumn<AccessEvent>[] = [
   { accessorKey: 'event', header: 'Événement / appareil' },
   { id: 'ip', header: 'Adresse', meta: { class: { th: 'w-32 max-md:hidden', td: 'max-md:hidden' } } },
@@ -87,6 +95,9 @@ const logColumns: TableColumn<AccessEvent>[] = [
 
 <template>
   <PageHeader title="Accès distant" subtitle="Ouvrez le dashboard à vos autres appareils, en HTTPS et avec un mot de passe.">
+    <UTooltip :text="pairingHint" :disabled="remoteActive()">
+      <UButton icon="i-lucide-qr-code" label="Appairer un appareil" size="lg" color="neutral" variant="outline" :disabled="!remoteActive()" @click="pairingOpen = true" />
+    </UTooltip>
     <UButton icon="i-lucide-key-round" :label="'Mot de passe'" size="lg" class="md:w-[205px]" @click="tab = 'settings'; focusField(passwordSet() ? 'pw-current' : 'pw-new')" />
   </PageHeader>
   <MiniStats :items="stats" />
@@ -166,6 +177,7 @@ const logColumns: TableColumn<AccessEvent>[] = [
   <InfoBanner v-else-if="accessMode() !== 'local'" tone="warning">L’accès distant reste fermé tant que le dashboard n’a pas de mot de passe.</InfoBanner>
   <InfoBanner v-else>Le dashboard ne répond que sur cette machine (127.0.0.1:{{ c.DASHBOARD_PORT }}, avec le jeton du daemon).</InfoBanner>
 
+  <PairingModal v-model:open="pairingOpen" />
   <ConfirmModal
     v-model:open="confirmOpen"
     eyebrow="Réglage sensible"
