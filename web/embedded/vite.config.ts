@@ -2,6 +2,7 @@ import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import ui from '@nuxt/ui/vite'
+import { serviceWorker } from './sw/plugin'
 
 /**
  * Dashboard embedded in the binary (go:embed of dist/) and served by the daemon. The pages, components and store
@@ -26,6 +27,8 @@ export default defineConfig({
       // Bundled Lucide icons: no calls to the Iconify API.
       icon: { clientBundle: { scan: true } },
     }),
+    // dist/sw.js, the service worker of the installable dashboard (PWA), with the list of the built files.
+    serviceWorker(),
   ],
   resolve: {
     alias: { '@app': fileURLToPath(new URL('../app/src', import.meta.url)) },
