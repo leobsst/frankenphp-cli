@@ -1,0 +1,26 @@
+FrankenManager fait tourner votre environnement de développement PHP local — FrankenPHP, Caddy, bases de données, Redis, stockage S3 — sur votre Mac, Linux ou Windows. Cette app met son dashboard dans votre poche.
+
+Appairage en quelques secondes
+Ouvrez « Accès distant » dans le dashboard de votre machine, touchez « Appairer un appareil » et scannez le QR code. L’app se connecte sans saisir de mot de passe et garde sa session dans le trousseau d’iOS. Chaque code ne sert qu’une fois et expire au bout de 5 minutes.
+
+Toutes vos instances au même endroit
+Ajoutez autant de machines que vous voulez — votre poste, celui d’un collègue, un serveur de test — et passez de l’une à l’autre d’un geste.
+
+Ce que vous pouvez faire
+• Démarrer, arrêter et redémarrer la stack, ou un seul conteneur
+• Ajouter des projets, des sites statiques, des alias et des routes de reverse proxy, changer leur version de PHP
+• Suivre les journaux, le processeur et la mémoire en direct
+• Renouveler les certificats SSL et partager l’autorité de certification locale avec vos appareils
+• Gérer les bases de données et leurs utilisateurs (MariaDB, MySQL, PostgreSQL), les clés Redis et les buckets S3
+• Modifier et vérifier les Caddyfiles des sites
+• Être prévenu quand une nouvelle version de FrankenManager est disponible
+
+Respect de la vie privée
+L’app ne parle qu’aux instances FrankenManager que vous ajoutez, en HTTPS. Pas de compte, pas de statistiques, pas de pistage : rien ne nous est envoyé, ni à personne d’autre.
+
+Prérequis
+• FrankenManager 0.15.0 ou plus récent sur la machine à piloter
+• Son accès distant activé (DASHBOARD_ACCESS=lan, avec un mot de passe)
+• Votre téléphone fait confiance à l’autorité de certification locale de la machine (partagée depuis le dashboard)
+
+FrankenManager est gratuit et open source : github.com/leobsst/frankenphp-cli

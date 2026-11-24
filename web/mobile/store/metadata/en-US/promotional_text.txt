@@ -1,0 +1,1 @@
+Pair your phone with a QR code and manage every FrankenManager instance on your network: projects, containers, logs, SSL, databases and more.

@@ -1,0 +1,1 @@
+First release: manage your FrankenManager instances from your phone, pair them by QR code, and keep their session in the Keychain.
