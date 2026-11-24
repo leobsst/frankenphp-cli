@@ -1,0 +1,4 @@
+node_modules/
+# Le build du dashboard est embarqué par go:embed ; seul .gitkeep est versionné.
+embedded/dist/*
+!embedded/dist/.gitkeep

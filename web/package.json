@@ -1,0 +1,11 @@
+{
+  "name": "frankenmanager-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "pnpm --filter frankenmanager-dashboard build",
+    "dev": "pnpm --filter frankenmanager-dashboard dev",
+    "typecheck": "pnpm --filter frankenmanager-dashboard typecheck"
+  },
+  "packageManager": "pnpm@10.33.0"
+}
