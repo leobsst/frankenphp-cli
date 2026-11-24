@@ -11,9 +11,13 @@ import App from './App.vue'
 import { router } from './router'
 import { loadCurrent, loadInstances, patchInstance } from './lib/instances'
 import { handOffNativeSplash } from './lib/splash'
+import { registerDemo } from './demo'
 
 // The HTML splash screen is already displayed (index.html): the native one can go.
 handOffNativeSplash()
+
+// Demo mode: the `demo:` instance is answered in memory (src/demo), before anything connects.
+registerDemo()
 
 // Session rejected by the daemon (revoked, expired, password changed): the instance is marked, DashboardLayout then
 // leads to its sign-in, and the list shows it.

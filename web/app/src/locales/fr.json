@@ -1346,6 +1346,13 @@
         "notSupported": "Cette instance ne propose pas l’appairage par QR code : mettez FrankenManager à jour sur la machine.",
         "tooMany": "Trop de tentatives : patientez quelques minutes avant de réessayer."
       }
+    },
+    "demo": {
+      "name": "Démo",
+      "badge": "Démo",
+      "address": "Données simulées, sans instance",
+      "try": "Essayer la démo",
+      "help": "Pas d’instance FrankenManager sous la main ? Découvrez l’app avec des projets et des services simulés : rien n’est envoyé nulle part."
     }
   },
   "store": {

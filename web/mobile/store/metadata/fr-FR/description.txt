@@ -3,6 +3,9 @@ FrankenManager fait tourner votre environnement de développement PHP local — 
 Appairage en quelques secondes
 Ouvrez « Accès distant » dans le dashboard de votre machine, touchez « Appairer un appareil » et scannez le QR code. L’app se connecte sans saisir de mot de passe et garde sa session dans le trousseau d’iOS. Chaque code ne sert qu’une fois et expire au bout de 5 minutes.
 
+Essayez d’abord
+Pas encore d’instance ? « Essayer la démo » ouvre une instance simulée : parcourez toutes les pages et lancez des actions sur des projets fictifs, sans serveur.
+
 Toutes vos instances au même endroit
 Ajoutez autant de machines que vous voulez — votre poste, celui d’un collègue, un serveur de test — et passez de l’une à l’autre d’un geste.
 

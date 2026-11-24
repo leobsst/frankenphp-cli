@@ -94,8 +94,35 @@ async function send<T>(base: string, token: string | null, method: string, path:
   return data as T
 }
 
+/**
+ * Server-sent event stream as the store uses it: an EventSource, or a stand-in with the same surface (demo mode).
+ * `readyState` takes the EventSource values (CONNECTING, OPEN, CLOSED).
+ */
+export interface EventStream {
+  readonly readyState: number
+  onopen: ((ev: Event) => void) | null
+  onerror: ((ev: Event) => void) | null
+  addEventListener(type: string, listener: (ev: MessageEvent) => void): void
+  close(): void
+}
+
+/**
+ * Clients for addresses that are not a daemon, by URL scheme (e.g. `demo:`, the mobile app's demo mode): the store
+ * and the pages use them through `client()` without knowing it.
+ */
+const schemes = new Map<string, (inst: Instance) => Client>()
+export function registerClientScheme(scheme: `${string}:`, factory: (inst: Instance) => Client) {
+  schemes.set(scheme, factory)
+}
+const schemeOf = (url: string) => /^[a-z][a-z0-9+.-]*:/i.exec(url)?.[0].toLowerCase() ?? ''
+
 /** Client of a connected instance: Bearer token, password confirmation, expired session. */
-export function client(inst: Instance) {
+export function client(inst: Instance): Client {
+  return schemes.get(schemeOf(inst.url))?.(inst) ?? httpClient(inst)
+}
+
+/** Client of a daemon reached over HTTP(S). */
+function httpClient(inst: Instance) {
   async function request<T>(method: string, path: string, opts: RequestOptions = {}): Promise<T> {
     try {
       return await send<T>(inst.url, inst.token, method, path, opts)
@@ -111,6 +138,14 @@ export function client(inst: Instance) {
       }
       throw e
     }
+  }
+
+  /** URL of an SSE stream: EventSource sends no headers, the token goes in the query string. */
+  function streamUrl(path: string, params: Record<string, string | string[]> = {}) {
+    const u = new URL(inst.url + path)
+    for (const [k, v] of Object.entries(params)) for (const x of [v].flat()) u.searchParams.append(k, x)
+    if (inst.token) u.searchParams.set('access_token', inst.token)
+    return u.toString()
   }
 
   return {
@@ -132,13 +167,10 @@ export function client(inst: Instance) {
       return data as Operation
     },
 
-    /** URL of an SSE stream: EventSource sends no headers, the token goes in the query string. */
-    streamUrl(path: string, params: Record<string, string | string[]> = {}) {
-      const u = new URL(inst.url + path)
-      for (const [k, v] of Object.entries(params)) for (const x of [v].flat()) u.searchParams.append(k, x)
-      if (inst.token) u.searchParams.set('access_token', inst.token)
-      return u.toString()
-    },
+    streamUrl,
+
+    /** Opens an SSE stream of the daemon. */
+    stream: (path: string, params: Record<string, string | string[]> = {}): EventStream => new EventSource(streamUrl(path, params)),
 
     /** Follows a queued operation (202 response) until it ends. */
     async wait(op: Operation, onProgress?: (op: Operation) => void): Promise<Operation> {
@@ -154,7 +186,7 @@ export function client(inst: Instance) {
     },
   }
 }
-export type Client = ReturnType<typeof client>
+export type Client = ReturnType<typeof httpClient>
 
 /** Daemon version (public route): checks that the address responds before asking for the password. */
 export const health = (url: string) => send<ApiResponse<'/api/health'>>(url, null, 'GET', '/api/health', { timeout: 8_000 })

@@ -5,7 +5,7 @@
  * it is back; `state.docker` follows whether the daemon reaches Docker.
  */
 import { computed, nextTick, reactive, ref } from 'vue'
-import { ApiError, client, lastMessage, type Instance, type Client, type Container as ApiContainer, type HostInfo, type Operation, type Stat, type Status, type ApiResponse, type LogLine, type OpEvent, type Schema } from '../lib/api'
+import { ApiError, client, lastMessage, type Instance, type Client, type Container as ApiContainer, type HostInfo, type Operation, type Stat, type Status, type ApiResponse, type LogLine, type OpEvent, type Schema, type EventStream } from '../lib/api'
 import { defaultRoot } from './caddyfile'
 import { formatNumber, formatTime, setLanguage, t, type LanguagePref } from '../i18n'
 
@@ -264,8 +264,8 @@ function bytes(s: string) {
 
 // ---------- Connection to an instance ----------
 let api: Client | null = null
-let events: EventSource | null = null
-let logStream: EventSource | null = null
+let events: EventStream | null = null
+let logStream: EventStream | null = null
 let timers: ReturnType<typeof setInterval>[] = []
 let refreshSoon: ReturnType<typeof setTimeout> | undefined
 /** Retry after a failed refresh (daemon gone): sooner than the 30 s poll, backing off up to RETRY_MAX. */
@@ -387,7 +387,7 @@ async function refreshStats() {
 function openLogs() {
   logStream?.close()
   if (!api || state.stack !== 'running') return
-  logStream = new EventSource(api.streamUrl('/api/v1/logs', { tail: '30' }))
+  logStream = api.stream('/api/v1/logs', { tail: '30' })
   logStream.addEventListener('log', (e) => {
     const l = JSON.parse((e as MessageEvent).data) as LogLine
     const last = lastLogAt[l.container]
@@ -421,7 +421,7 @@ function reopenStreams(recovering: boolean) {
 function openEvents() {
   events?.close()
   if (!api) return
-  const es = new EventSource(api.streamUrl('/api/v1/events'))
+  const es = api.stream('/api/v1/events')
   events = es
   // Set by an error: messages may have been missed, the state is read again once reconnected.
   let stale = false

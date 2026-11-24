@@ -3,6 +3,8 @@ import { Preferences } from '@capacitor/preferences'
 import type { Instance as ApiInstance } from '@app/lib/api'
 import { t } from '@app/i18n'
 import { secureGet, secureRemove, secureSet } from './secureStore'
+import { DEMO_ID, DEMO_URL, isDemoUrl } from '../demo'
+import { resetDemo } from '../demo/server'
 
 /**
  * A FrankenManager instance managed by the app: the address of its remote access (HTTPS) and the session opened with
@@ -55,6 +57,8 @@ export async function loadInstances() {
   let migrated = false
   store.list = await Promise.all(
     stored.map(async ({ token: legacy, ...rest }): Promise<Instance> => {
+      // The demo instance has no session: nothing to read from the secure store.
+      if (isDemoUrl(rest.url)) return { ...rest, token: '', expired: false }
       if (legacy) {
         try {
           await secureSet(tokenKey(rest.id), legacy)
@@ -108,6 +112,25 @@ export async function removeInstance(id: string) {
   await save()
   await secureRemove(tokenKey(id)).catch(() => {})
 }
+
+/** The demo instance (simulated data, see src/demo): never a token, so never in the secure store. */
+export const isDemo = (inst: Pick<Instance, 'url'>) => isDemoUrl(inst.url)
+
+/** Adds the demo instance, fresh, unless it is already in the list; returns it. */
+export async function addDemoInstance(): Promise<Instance> {
+  const existing = store.list.find(isDemo)
+  if (existing) return existing
+  resetDemo()
+  const inst: Instance = { id: DEMO_ID, name: 'Demo', url: DEMO_URL, token: '', session: '', added: Date.now() }
+  store.list.push(inst)
+  await save()
+  return inst
+}
+
+/** Name shown for an instance: the demo's follows the interface language. */
+export const displayName = (inst: Instance) => (isDemo(inst) ? t('mobile.demo.name') : inst.name)
+/** Address shown for an instance: the demo has none, it says its data is simulated. */
+export const displayAddress = (inst: Instance) => (isDemo(inst) ? t('mobile.demo.address') : inst.url.replace('https://', ''))
 
 export const newId = () => Math.random().toString(36).slice(2, 10)
 

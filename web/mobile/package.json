@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build && vue-tsc --noEmit",
     "typecheck": "vue-tsc --noEmit",
+    "build:screenshots": "vite build --mode screenshots && cap sync ios",
     "ios": "node scripts/ios-signing.mjs && node scripts/app-version.mjs && pnpm build && cap sync ios",
     "android": "node scripts/app-version.mjs && pnpm build && cap sync android",
     "sync": "node scripts/app-version.mjs && pnpm build && cap sync",
