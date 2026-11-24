@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import AppSidebar from '@app/components/AppSidebar.vue'
 import AppHeader from '@app/components/AppHeader.vue'
 import BottomNav from '@app/components/BottomNav.vue'
+import { sidebarCollapsed } from '@app/composables/useSidebar'
 import { disconnect, loadPage, pause, refresh, resume, state } from '@app/composables/useFm'
 
 // Dashboard layout (POC), on the instance connected by session.ts.
@@ -28,7 +29,7 @@ onBeforeUnmount(() => {
 <template>
   <div class="flex h-dvh flex-col overflow-hidden">
     <AppSidebar />
-    <div class="flex min-h-0 flex-1 flex-col md:ml-[72px] xl:ml-[228px]">
+    <div class="flex min-h-0 flex-1 flex-col" :class="sidebarCollapsed ? 'md:ml-[72px]' : 'md:ml-[228px]'">
       <AppHeader />
       <div ref="scroller" class="min-h-0 flex-1 overflow-y-auto">
         <main class="mx-auto w-full max-w-7xl px-5 pt-6 pb-28 md:px-6 md:pt-7 md:pb-10 xl:px-8 xl:pt-[30px]">

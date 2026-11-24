@@ -5,14 +5,17 @@ import type { CommandPaletteGroup, CommandPaletteItem } from '@nuxt/ui'
 import { defineShortcuts } from '@nuxt/ui/composables'
 import { NAV, SETTINGS } from '../nav'
 import { domainIcon, envLabel, state } from '../composables/useFm'
+import { navBurger } from '../composables/useSidebar'
 import SidebarContent from './SidebarContent.vue'
 
 const route = useRoute()
 const router = useRouter()
 const searchOpen = ref(false)
-// Mobile: the sidebar is hidden, the burger opens the full navigation.
+// Phone (no sidebar) and tablet with the icon bar: the burger opens the full navigation, closed on navigation or
+// when the burger is no longer offered (sidebar expanded, wider screen).
 const menuOpen = ref(false)
 watch(() => route.fullPath, () => { menuOpen.value = false })
+watch(navBurger, (shown) => { if (!shown) menuOpen.value = false })
 
 defineShortcuts({ meta_k: () => { searchOpen.value = true } })
 
@@ -38,11 +41,11 @@ const groups = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() => {
 
 <template>
   <header class="z-10 shrink-0 box-content flex h-(--ui-header-height) pt-safe items-center gap-5 border-b border-default bg-default px-5 md:px-6 xl:px-8">
-    <!-- Mobile: burger + logo -->
-    <div class="flex items-center gap-2.5 md:hidden">
-      <UButton color="neutral" variant="ghost" icon="i-lucide-menu" class="-ml-1.5" aria-label="Ouvrir le menu" @click="menuOpen = true" />
-      <span class="grid size-8 place-items-center rounded-lg bg-primary text-inverted"><UIcon name="i-lucide-square-terminal" class="size-5" /></span>
-      <span class="text-[15px] font-semibold text-highlighted">frankenmanager</span>
+    <!-- Burger (phone, tablet icon bar) + logo (phone only: the sidebar shows it elsewhere) -->
+    <div v-if="navBurger" class="flex items-center gap-2.5">
+      <UButton color="neutral" variant="ghost" icon="i-lucide-menu" class="-ml-1.5" aria-label="Ouvrir le menu" :aria-expanded="menuOpen" @click="menuOpen = true" />
+      <span class="grid size-8 place-items-center rounded-lg bg-primary text-inverted md:hidden"><UIcon name="i-lucide-square-terminal" class="size-5" /></span>
+      <span class="text-[15px] font-semibold text-highlighted md:hidden">frankenmanager</span>
     </div>
 
     <UBreadcrumb
