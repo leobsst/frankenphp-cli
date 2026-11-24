@@ -1,20 +1,30 @@
 <script setup lang="ts" generic="T extends Record<string, any>">
 import { computed, ref } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
+import TablePagination from './TablePagination.vue'
+import { usePagination } from '../composables/usePagination'
 
 /**
- * "List" card of the resource pages: title, collapsible search and UTable.
+ * "List" card of the resource pages: title, collapsible search, UTable and pagination footer.
  * The `<column>-cell` slots are forwarded to UTable.
+ * The page size is remembered under `storageKey` (the title by default: pass a key when the title is dynamic);
+ * the page goes back to 1 when the search or the title (i.e. the displayed data set) changes.
+ * `paginate: false` shows every row (e.g. a folder explorer, where pages would split a directory).
  */
-const props = defineProps<{ title: string; data: T[]; columns: TableColumn<T>[]; searchKey?: keyof T; empty?: string }>()
+const props = withDefaults(defineProps<{
+  title: string; data: T[]; columns: TableColumn<T>[]; searchKey?: keyof T; empty?: string; storageKey?: string; paginate?: boolean
+}>(), { paginate: true })
 
 const q = ref('')
 const searching = ref(false)
-const rows = computed(() => {
+const filtered = computed(() => {
   const key = props.searchKey
   const s = q.value.trim().toLowerCase()
   return key && s ? props.data.filter((r) => String(r[key]).toLowerCase().includes(s)) : props.data
 })
+const pager = usePagination(filtered, { key: () => props.storageKey ?? props.title, resetOn: [q, () => props.title] })
+const { page, pageSize, total, from, to } = pager
+const rows = computed(() => (props.paginate ? pager.rows.value : filtered.value))
 </script>
 
 <template>
@@ -41,5 +51,9 @@ const rows = computed(() => {
         <slot :name="name" v-bind="slotData" />
       </template>
     </UTable>
+    <TablePagination
+      v-if="paginate" v-model:page="page" :total="total" :from="from" :to="to" :page-size="pageSize"
+      class="border-t border-default" @update:page-size="pager.setPageSize"
+    />
   </UCard>
 </template>

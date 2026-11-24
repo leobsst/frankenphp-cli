@@ -129,7 +129,7 @@ const logColumns: TableColumn<AccessEvent>[] = [
       <USwitch v-model="form.localAuth" label="Exiger le mot de passe sur cette machine aussi" description="DASHBOARD_LOCAL_AUTH : sinon, 127.0.0.1 n’a besoin que du jeton du daemon." />
       <UButton label="Enregistrer l’accès" size="lg" class="self-end" @click="save" />
     </UCard>
-    <ResourceTable v-else-if="tab === 'sessions'" title="Appareils connectés" :data="state.access.sessions" :columns="sessionColumns" search-key="device" empty="Aucun appareil connecté.">
+    <ResourceTable v-else-if="tab === 'sessions'" storage-key="access-sessions" title="Appareils connectés" :data="state.access.sessions" :columns="sessionColumns" search-key="device" empty="Aucun appareil connecté.">
       <template #device-cell="{ row }">
         <NameCell :icon="row.original.remote ? 'i-lucide-smartphone' : 'i-lucide-laptop'" :name="row.original.device" :sub="`${row.original.ip}${row.original.current ? ' · cet appareil' : ''}`" />
       </template>
@@ -141,7 +141,7 @@ const logColumns: TableColumn<AccessEvent>[] = [
         </UDropdownMenu>
       </template>
     </ResourceTable>
-    <ResourceTable v-else title="Journal des connexions" :data="state.access.log" :columns="logColumns" empty="Aucune connexion.">
+    <ResourceTable v-else title="Journal des connexions" storage-key="access-log" :data="state.access.log" :columns="logColumns" empty="Aucune connexion.">
       <template #event-cell="{ row }">
         <div class="flex min-w-0 items-center gap-3">
           <UBadge :label="eventOf(row.original).label" :color="eventOf(row.original).color" variant="soft" class="shrink-0" />

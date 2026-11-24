@@ -84,7 +84,7 @@ const userColumns: TableColumn<DbUser>[] = [
   <UTabs v-model="tab" :items="tabs" :content="false" variant="link" class="mt-5 mb-2" :ui="{ trigger: 'text-xs px-0 me-16 pb-2.5' }" @update:model-value="errors = {}" />
 
   <TwoColumns>
-    <ResourceTable v-if="tab === 'local'" title="Bases de données" :data="state.databases" :columns="columns" search-key="name">
+    <ResourceTable v-if="tab === 'local'" storage-key="databases" title="Bases de données" :data="state.databases" :columns="columns" search-key="name">
       <template #name-cell="{ row }"><NameCell icon="i-lucide-database" :name="row.original.name" :sub="`${row.original.engine} · :${port(row.original.engine)}`" /></template>
       <template #size-cell="{ row }">{{ row.original.size ? `${row.original.size} Mo` : '—' }}</template>
       <template #state-cell="{ row }"><StateBadge :value="up(row.original.engine) ? 'online' : 'offline'" /></template>
@@ -94,7 +94,7 @@ const userColumns: TableColumn<DbUser>[] = [
         </UDropdownMenu>
       </template>
     </ResourceTable>
-    <ResourceTable v-else-if="tab === 'users'" title="Utilisateurs" :data="state.dbUsers" :columns="userColumns" search-key="name" empty="Aucun utilisateur.">
+    <ResourceTable v-else-if="tab === 'users'" storage-key="db-users" title="Utilisateurs" :data="state.dbUsers" :columns="userColumns" search-key="name" empty="Aucun utilisateur.">
       <template #name-cell="{ row }">
         <NameCell icon="i-lucide-user-round" :name="row.original.host ? `${row.original.name}@'${row.original.host}'` : row.original.name" :sub="row.original.engine" />
       </template>

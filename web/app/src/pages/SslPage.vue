@@ -42,7 +42,7 @@ const columns: TableColumn<Domain>[] = [
   <UTabs v-model="tab" :items="tabs" :content="false" variant="link" class="mt-5 mb-2" :ui="{ trigger: 'text-xs px-0 me-16 pb-2.5' }" />
 
   <TwoColumns>
-    <ResourceTable v-if="tab === 'certs'" title="Certificats des domaines" :data="active" :columns="columns" search-key="name">
+    <ResourceTable v-if="tab === 'certs'" storage-key="ssl-certs" title="Certificats des domaines" :data="active" :columns="columns" search-key="name">
       <template #name-cell="{ row }"><NameCell icon="i-lucide-globe" :name="row.original.name" sub="Autorité locale · mkcert" /></template>
       <template #validity-cell>Valide · &gt; 1 an</template>
       <template #state-cell="{ row }">

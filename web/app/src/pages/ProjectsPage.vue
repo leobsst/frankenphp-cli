@@ -81,6 +81,7 @@ const columns: TableColumn<Domain>[] = [
 
   <TwoColumns>
     <ResourceTable
+      storage-key="projects"
       :title="tab === 'active' ? 'Domaines enregistrés' : 'Domaines archivés'"
       :data="tab === 'active' ? active : archived"
       :columns="columns"

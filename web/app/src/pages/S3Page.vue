@@ -163,7 +163,7 @@ function copyEnv() {
   <TwoColumns>
     <!-- Buckets -->
     <template v-if="tab === 'buckets'">
-      <ResourceTable title="Buckets" :data="s3.buckets" :columns="bucketColumns" search-key="name" empty="Aucun bucket. Créez-en un avec le formulaire.">
+      <ResourceTable title="Buckets" storage-key="s3-buckets" :data="s3.buckets" :columns="bucketColumns" search-key="name" empty="Aucun bucket. Créez-en un avec le formulaire.">
         <template #name-cell="{ row }">
           <NameCell
             icon="i-lucide-folder" :name="row.original.name"
@@ -204,7 +204,7 @@ function copyEnv() {
 
     <!-- Access keys -->
     <template v-else-if="tab === 'keys'">
-      <ResourceTable title="Clés limitées à un bucket" :data="s3.keys" :columns="keyColumns" search-key="name" empty="Aucune clé : les applications utilisent la clé globale.">
+      <ResourceTable title="Clés limitées à un bucket" storage-key="s3-keys" :data="s3.keys" :columns="keyColumns" search-key="name" empty="Aucune clé : les applications utilisent la clé globale.">
         <template #name-cell="{ row }">
           <NameCell icon="i-lucide-key-round" :name="row.original.name" :sub="revealed === row.original.id ? `${row.original.id} · ${row.original.secret}` : row.original.id" />
         </template>

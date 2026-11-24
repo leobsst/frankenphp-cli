@@ -61,7 +61,7 @@ const columns: TableColumn<RedisKey>[] = [
   <UTabs v-model="tab" :items="tabs" :content="false" variant="link" class="mt-5 mb-2" :ui="{ trigger: 'text-xs px-0 me-16 pb-2.5' }" />
 
   <TwoColumns>
-    <ResourceTable v-if="tab === 'keys'" :title="applied === '*' ? 'Clés du cache' : `Clés ${applied}`" :data="shown" :columns="columns" search-key="key" empty="Aucune clé ne correspond.">
+    <ResourceTable v-if="tab === 'keys'" storage-key="redis-keys" :title="applied === '*' ? 'Clés du cache' : `Clés ${applied}`" :data="shown" :columns="columns" search-key="key" empty="Aucune clé ne correspond.">
       <template #key-cell="{ row }"><NameCell icon="i-lucide-key-round" :name="row.original.key" :sub="`${row.original.type} · ${row.original.size}`" /></template>
       <template #ttl-cell="{ row }"><span :class="row.original.ttl >= 0 && row.original.ttl < 60 ? 'text-warning' : ''">{{ ttl(row.original.ttl) }}</span></template>
       <template #actions-cell="{ row }">

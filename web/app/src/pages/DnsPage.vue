@@ -76,7 +76,7 @@ const clientColumns: TableColumn<DnsClient>[] = [
   <UTabs v-model="tab" :items="tabs" :content="false" variant="link" class="mt-5 mb-2" :ui="{ trigger: 'text-xs px-0 me-4 md:me-16 pb-2.5' }" />
 
   <TwoColumns>
-    <ResourceTable v-if="tab === 'records'" title="Zone locale .test" :data="active" :columns="recordColumns" search-key="name">
+    <ResourceTable v-if="tab === 'records'" storage-key="dns-records" title="Zone locale .test" :data="active" :columns="recordColumns" search-key="name">
       <template #name-cell="{ row }"><NameCell icon="i-lucide-globe" :name="row.original.name" sub="Enregistrement A · LAN" /></template>
       <template #ip-cell>{{ state.dns.ip }}</template>
       <template #state-cell><StateBadge :value="up ? 'online' : busy ? 'restarting' : 'offline'" ok="Actif" /></template>
@@ -88,7 +88,7 @@ const clientColumns: TableColumn<DnsClient>[] = [
     </ResourceTable>
 
     <ResourceTable
-        v-else-if="tab === 'clients'" :title="showIdle ? 'Tous les appareils (30 jours)' : 'Appareils connectés'" :data="clients" :columns="clientColumns" search-key="ip"
+        v-else-if="tab === 'clients'" storage-key="dns-clients" :title="showIdle ? 'Tous les appareils (30 jours)' : 'Appareils connectés'" :data="clients" :columns="clientColumns" search-key="ip"
         :empty="up ? 'Aucun appareil n’a interrogé le serveur dans les 5 dernières minutes.' : 'Le serveur DNS est arrêté.'"
       >
         <template #ip-cell="{ row }">

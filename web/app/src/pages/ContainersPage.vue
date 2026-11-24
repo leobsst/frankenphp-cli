@@ -108,7 +108,7 @@ const domainsOn = (c: Container) => active.value.filter((d) => d.php === c.php &
   <UTabs v-model="tab" :items="tabs" :content="false" variant="link" class="mt-5 mb-2" :ui="{ trigger: 'text-xs px-0 me-4 md:me-16 pb-2.5' }" />
 
   <TwoColumns>
-    <ResourceTable v-if="tab === 'all'" title="Services Docker" :data="state.containers" :columns="columns" search-key="id">
+    <ResourceTable v-if="tab === 'all'" storage-key="containers" title="Services Docker" :data="state.containers" :columns="columns" search-key="id">
       <template #id-cell="{ row }"><NameCell icon="i-lucide-box" :name="row.original.id" :sub="row.original.port ? `${row.original.label} · :${row.original.port}` : row.original.label" /></template>
       <template #res-cell="{ row }">{{ row.original.status === 'running' ? `${fmtCpu(row.original)} · ${row.original.mem} Mo` : '—' }}</template>
       <template #state-cell="{ row }">
@@ -120,7 +120,7 @@ const domainsOn = (c: Container) => active.value.filter((d) => d.php === c.php &
         </UDropdownMenu>
       </template>
     </ResourceTable>
-    <ResourceTable v-else-if="tab === 'services'" title="Services optionnels" :data="services" :columns="serviceColumns">
+    <ResourceTable v-else-if="tab === 'services'" storage-key="containers-services" title="Services optionnels" :data="services" :columns="serviceColumns">
       <template #label-cell="{ row }">
         <RouterLink :to="row.original.to" class="block min-w-0 hover:opacity-80">
           <NameCell :icon="row.original.icon" :name="row.original.label" :sub="row.original.desc" />
@@ -135,7 +135,7 @@ const domainsOn = (c: Container) => active.value.filter((d) => d.php === c.php &
         />
       </template>
     </ResourceTable>
-    <ResourceTable v-else title="Images FrankenPHP" :data="phpImages" :columns="imageColumns">
+    <ResourceTable v-else title="Images FrankenPHP" storage-key="containers-images" :data="phpImages" :columns="imageColumns">
       <template #id-cell="{ row }">
         <NameCell icon="i-lucide-server" :name="`dunglas/frankenphp:php${row.original.php}`" :sub="DEPRECATED_PHP.includes(row.original.php!) ? 'Version dépréciée' : 'Version supportée'" />
       </template>
