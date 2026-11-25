@@ -399,3 +399,47 @@ func eachLine(ctx context.Context, r io.Reader, fn func()) error {
 	}
 	return io.ErrUnexpectedEOF
 }
+
+// Info is what the Docker daemon tells about itself and its host.
+type Info struct {
+	Version string `json:"version"`
+	OS      string `json:"os,omitempty"`
+	CPUs    int    `json:"cpus,omitempty"`
+	Memory  int64  `json:"memory,omitempty"`
+}
+
+// Info reads GET /info on the Engine API, or `docker info` without it
+// (Windows). It fails when Docker does not answer.
+func (m *Manager) Info(ctx context.Context) (*Info, error) {
+	var raw struct {
+		ServerVersion   string `json:"ServerVersion"`
+		OperatingSystem string `json:"OperatingSystem"`
+		NCPU            int    `json:"NCPU"`
+		MemTotal        int64  `json:"MemTotal"`
+	}
+	if e := m.engine(ctx); e != nil {
+		res, err := e.get(ctx, "/info", nil)
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = res.Body.Close() }()
+		if err := json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&raw); err != nil {
+			return nil, err
+		}
+	} else {
+		res, err := m.run(ctx, "info", "--format", "{{json .}}")
+		if err != nil {
+			return nil, err
+		}
+		if res.ExitCode != 0 {
+			return nil, fmt.Errorf("docker info exited with %d", res.ExitCode)
+		}
+		if err := json.Unmarshal(res.Stdout, &raw); err != nil {
+			return nil, err
+		}
+	}
+	if raw.ServerVersion == "" {
+		return nil, errors.New("docker engine: no version")
+	}
+	return &Info{Version: raw.ServerVersion, OS: raw.OperatingSystem, CPUs: raw.NCPU, Memory: raw.MemTotal}, nil
+}

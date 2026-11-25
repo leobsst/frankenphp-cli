@@ -1045,6 +1045,21 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/HostInfo" }
 
+  /api/v1/host/system:
+    get:
+      tags: [auth]
+      summary: The machine the daemon runs on, in detail
+      description: >-
+        System, CPU, memory, disks, network and Docker of the machine (the Machine page of the dashboard).
+        Every field is best-effort: one that cannot be read is left out. Slower than `/api/v1/host`, which
+        stays the light call of the sign-in.
+      responses:
+        "200":
+          description: The machine.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HostSystem" }
+
   /api/v1/auth:
     get:
       tags: [auth]
@@ -1991,6 +2006,72 @@ components:
           description: >-
             Where the remote access answers, when on: the LAN address of this machine, or the first name of the
             certificate of DASHBOARD_TLS_CERT.
+
+    HostSystem:
+      type: object
+      required: [hostname, os, os_name, arch, cpu, memory, disks, daemon, network]
+      properties:
+        hostname: { type: string }
+        os: { type: string, description: "runtime.GOOS: darwin, linux or windows." }
+        os_name: { type: string, description: "Pretty name of the system, e.g. macOS 26.1, Ubuntu 24.04.1 LTS, Windows 11 Pro 24H2." }
+        kernel: { type: string, description: The kernel release; the build number on Windows. }
+        arch: { type: string, description: "runtime.GOARCH: amd64 or arm64, arm on a 32-bit ARM." }
+        cpu:
+          type: object
+          required: [cores]
+          properties:
+            model: { type: string }
+            cores: { type: integer, description: Logical cores. }
+        memory:
+          type: object
+          required: [total]
+          properties:
+            total: { type: integer, format: int64, description: Physical memory, in bytes. }
+        uptime: { type: integer, format: int64, description: Seconds since the host booted. }
+        disks:
+          type: array
+          description: The filesystems of the data directory and of the projects directory.
+          items:
+            type: object
+            required: [label, path, total, free]
+            properties:
+              label: { type: string, enum: [data, projects] }
+              path: { type: string }
+              total: { type: integer, format: int64, description: Bytes. }
+              free: { type: integer, format: int64, description: Bytes available to the user. }
+        daemon:
+          type: object
+          required: [version, go, pid, started_at]
+          properties:
+            version: { type: string }
+            go: { type: string, description: The Go version the daemon was built with. }
+            pid: { type: integer }
+            started_at: { type: string, format: date-time }
+        docker:
+          type: [object, "null"]
+          description: The Docker engine; null when it does not answer.
+          required: [version]
+          properties:
+            version: { type: string }
+            os: { type: string }
+            cpus: { type: integer }
+            memory: { type: integer, format: int64, description: Memory available to Docker, in bytes. }
+        network:
+          type: object
+          required: [interfaces]
+          properties:
+            lan_ip: { type: string }
+            interfaces:
+              type: array
+              description: The interfaces with an address, the loopback excepted.
+              items:
+                type: object
+                required: [name, up, addresses]
+                properties:
+                  name: { type: string }
+                  mac: { type: string }
+                  up: { type: boolean }
+                  addresses: { type: array, items: { type: string }, description: In CIDR notation. }
 
     Pairing:
       type: object

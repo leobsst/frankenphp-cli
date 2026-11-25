@@ -2341,6 +2341,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/host/system": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The machine the daemon runs on, in detail
+         * @description System, CPU, memory, disks, network and Docker of the machine (the Machine page of the dashboard). Every field is best-effort: one that cannot be read is left out. Slower than `/api/v1/host`, which stays the light call of the sign-in.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The machine. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["HostSystem"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth": {
         parameters: {
             query?: never;
@@ -3290,6 +3329,80 @@ export interface components {
             mode: "local" | "lan" | "internet";
             /** @description Where the remote access answers, when on: the LAN address of this machine, or the first name of the certificate of DASHBOARD_TLS_CERT. */
             remote_url?: string;
+        };
+        HostSystem: {
+            hostname: string;
+            /** @description runtime.GOOS: darwin, linux or windows. */
+            os: string;
+            /** @description Pretty name of the system, e.g. macOS 26.1, Ubuntu 24.04.1 LTS, Windows 11 Pro 24H2. */
+            os_name: string;
+            /** @description The kernel release; the build number on Windows. */
+            kernel?: string;
+            /** @description runtime.GOARCH: amd64 or arm64, arm on a 32-bit ARM. */
+            arch: string;
+            cpu: {
+                model?: string;
+                /** @description Logical cores. */
+                cores: number;
+            };
+            memory: {
+                /**
+                 * Format: int64
+                 * @description Physical memory
+                 */
+                total: number;
+            };
+            /**
+             * Format: int64
+             * @description Seconds since the host booted.
+             */
+            uptime?: number;
+            /** @description The filesystems of the data directory and of the projects directory. */
+            disks: {
+                /** @enum {string} */
+                label: "data" | "projects";
+                path: string;
+                /**
+                 * Format: int64
+                 * @description Bytes.
+                 */
+                total: number;
+                /**
+                 * Format: int64
+                 * @description Bytes available to the user.
+                 */
+                free: number;
+            }[];
+            daemon: {
+                version: string;
+                /** @description The Go version the daemon was built with. */
+                go: string;
+                pid: number;
+                /** Format: date-time */
+                started_at: string;
+            };
+            /** @description The Docker engine; null when it does not answer. */
+            docker?: {
+                version: string;
+                os?: string;
+                cpus?: number;
+                /**
+                 * Format: int64
+                 * @description Memory available to Docker
+                 */
+                memory?: number;
+            } | null;
+            network: {
+                lan_ip?: string;
+                /** @description The interfaces with an address, the loopback excepted. */
+                interfaces: {
+                    name: string;
+                    mac?: string;
+                    up: boolean;
+                    /** @description In CIDR notation. */
+                    addresses: string[];
+                }[];
+            };
         };
         Pairing: {
             /** @description Tells which code a `paired` event is about; not secret. */
