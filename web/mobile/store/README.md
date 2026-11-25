@@ -52,13 +52,16 @@ taken from the demo mode (fictional data only) in the iOS Simulator, with the na
 
 | Device | Simulator | Size (pixels) | Files |
 |---|---|---|---|
-| iPhone 6.9" | iPhone 17 Pro Max | 1320 × 2868 | `iphone69_0N_*.png` |
-| iPad 13" | iPad Pro 13-inch (M5) | 2064 × 2752 | `ipad13_0N_*.png` |
+| iPhone 6.9" | iPhone 17 Pro Max | 1320 × 2868 | `<lang>_iphone69_0N_*.png` |
+| iPhone 6.1" / 6.3" (Dynamic Island) | iPhone 17 Pro | 1206 × 2622 | `<lang>_iphone63_0N_*.png` |
+| iPhone Duo (folded) | iPhone Duo | 1398 × 2034 | `<lang>_iphoneduo_0N_*.png` |
+| iPad 13" | iPad Pro 13-inch (M5) | 2064 × 2752 | `<lang>_ipad13_0N_*.png` |
 
-`01_overview`, `02_projects`, `03_containers`, `04_add_project`, `05_pairing`, `06_ssl`, in `en-US` and `fr-FR`.
-fastlane deliver tells the device from the image size; the number sets the order. Apple scales them down for the
-smaller devices. To take them again, see "Screenshot builds" in [`../README.md`](../README.md). Never use a real
-machine's domains.
+`<lang>` is `en` or `fr`, then `01_overview`, `02_projects`, `03_containers`, `04_add_project`, `05_pairing`,
+`06_ssl`, in `en-US` and `fr-FR`. fastlane deliver tells the device from the image size; the number sets the order.
+Apple scales the 6.9" set down for the sizes without their own set. The iPhone Duo set is the folded screen: the
+unfolded one (2007 × 2853) needs Simulator.app to unfold the device. To take them again, see "Screenshot builds" in
+[`../README.md`](../README.md). Never use a real machine's domains.
 
 ## Version
 

@@ -63,16 +63,23 @@ added again fresh.
 `pnpm build:screenshots` (inside `web/mobile`: `vite build --mode screenshots`, then `cap sync ios`) adds a hook for
 the App Store screenshots, left out of the other builds: a link opens a page of the demo, in a language, after tapping
 buttons by their label. In the iOS Simulator, write it to the app preferences (no confirmation prompt, unlike
-`xcrun simctl openurl`):
+`xcrun simctl openurl`). The preferences domain is the app identifier: `IOS_BUNDLE_ID` when set, otherwise
+`dev.frankenmanager.mobile`.
 
 ```bash
-xcrun simctl spawn <device> defaults write dev.frankenmanager.mobile CapacitorStorage.fm-screenshot \
-  'frankenmanager://demo/projets?lang=fr&tap=Ajouter%20un%20projet&n=1'   # change n to replay the same link
+APP_ID=dev.frankenmanager.mobile   # or your IOS_BUNDLE_ID
+xcrun simctl launch <device> $APP_ID -AppleLanguages '(en)' -AppleLocale en_US   # interface language of the series
+xcrun simctl spawn <device> defaults write $APP_ID CapacitorStorage.fm-screenshot \
+  'frankenmanager://demo/projets?tap=Add%20a%20project&n=1'   # change n to replay the same link
 xcrun simctl io <device> screenshot shot.png
 ```
 
-The shots of `store/screenshots/` were taken this way (iPhone 17 Pro Max and iPad Pro 13-inch simulators, status bar
-set with `xcrun simctl status_bar … override --time 9:41`).
+Launch the app in the language of the series (`-AppleLanguages`): the `lang` parameter of the link is not enough
+for a whole series. The taps match the labels of that language. The iPhone Duo simulator (runtime
+`iOS-27-2-iPhone19-4`) has two screens: `xcrun simctl io <device> screenshot --display=1` takes the folded one.
+
+The shots of `store/screenshots/` were taken this way (iPhone 17 Pro Max, iPhone 17 Pro, iPhone Duo and iPad Pro
+13-inch simulators, status bar set with `xcrun simctl status_bar … override --time 9:41`).
 
 ## Session tokens
 

@@ -9,7 +9,7 @@ import { addDemoInstance, setCurrent } from '../lib/instances'
  * either through the URL scheme (iOS asks to confirm), or, without any prompt, through the app preferences, read
  * every half second:
  *
- *   xcrun simctl spawn <device> defaults write dev.frankenmanager.mobile CapacitorStorage.fm-screenshot \
+ *   xcrun simctl spawn <device> defaults write <app id> CapacitorStorage.fm-screenshot \
  *     'frankenmanager://demo/projets?lang=fr&tap=Ajouter%20un%20projet&n=1'
  *
  * The path is the app route ("/" by default, "instances" for the list); `lang` sets the interface language; each
