@@ -23,7 +23,8 @@ func readSystem() System {
 	var si unix.Sysinfo_t
 	if unix.Sysinfo(&si) == nil {
 		s.MemTotal = int64(si.Totalram) * int64(si.Unit)
-		s.Uptime = int64(si.Uptime)
+		// Uptime is an int32 on 32-bit Linux: the conversion is needed there.
+		s.Uptime = int64(si.Uptime) //nolint:unconvert
 	}
 	return s
 }
