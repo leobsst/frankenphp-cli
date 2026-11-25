@@ -1,4 +1,7 @@
-# FrankenManager
+<h1>
+  <img src="web/mobile/assets/icon-foreground.png" alt="logo" height="100" align="absmiddle" />
+  FrankenManager
+</h1>
 
 [![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat-square&logo=go&logoColor=white)](https://go.dev)
 [![PHP](https://img.shields.io/badge/PHP-8.2%20|%208.3%20|%208.4%20|%208.5-777BB4?style=flat-square&logo=php&logoColor=white)](https://php.net)
