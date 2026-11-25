@@ -3,6 +3,7 @@ import '@app/lib/icons'
 
 import { createApp } from 'vue'
 import ui from '@nuxt/ui/vue-plugin'
+import { Capacitor } from '@capacitor/core'
 import { Device } from '@capacitor/device'
 import { i18n, setLanguage, setSystemLanguages } from '@app/i18n'
 import { state } from '@app/composables/useFm'
@@ -12,6 +13,10 @@ import { router } from './router'
 import { loadCurrent, loadInstances, patchInstance } from './lib/instances'
 import { handOffNativeSplash } from './lib/splash'
 import { registerDemo } from './demo'
+import { loadAppLock } from './lib/appLock'
+import { setUpDisplay } from './lib/display'
+import { setSettingsCard } from '@app/lib/shell'
+import AppLockSettings from './components/AppLockSettings.vue'
 
 // The HTML splash screen is already displayed (index.html): the native one can go.
 handOffNativeSplash()
@@ -37,5 +42,9 @@ async function loadPhoneLanguage() {
   }
 }
 
-void Promise.all([loadInstances().then(loadCurrent), loadPhoneLanguage()])
+// Settings › the lock of the app, only where it exists (iPhone, iPad, Android).
+if (Capacitor.isNativePlatform()) setSettingsCard(AppLockSettings)
+
+// Before mounting: the lock (nothing shows before LockScreen) and the interface size (the first screen has it).
+void Promise.all([loadInstances().then(loadCurrent), loadPhoneLanguage(), loadAppLock().catch(() => {}), setUpDisplay()])
   .then(() => createApp(App).use(i18n).use(router).use(ui).mount('#app'))

@@ -29,6 +29,7 @@ export type ApiResponse<P extends keyof paths, M extends Method = 'get'> =
   paths[P][M] extends { responses: infer R } ? JsonBody<R[Extract<keyof R, 200 | 201 | 202>]> : never
 
 export type HostInfo = Schema<'HostInfo'>
+export type HostSystem = Schema<'HostSystem'>
 export type Host = Schema<'Host'>
 export type Service = Schema<'Service'>
 export type Status = Schema<'Status'>

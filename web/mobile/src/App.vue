@@ -5,6 +5,7 @@ import { useToast } from '@nuxt/ui/composables'
 import { App as CapApp } from '@capacitor/app'
 import { Capacitor } from '@capacitor/core'
 import ConfirmPassword from '@app/components/ConfirmPassword.vue'
+import LockScreen from './components/LockScreen.vue'
 import { uiLocale } from '@app/i18n'
 import { bindNotifier, state } from '@app/composables/useFm'
 import { useApplyPrefs } from '@app/composables/usePrefs'
@@ -65,5 +66,6 @@ onMounted(() => {
   <UApp :locale="uiLocale" :toaster="{ position: 'top-center', max: 3 }">
     <RouterView />
     <ConfirmPassword />
+    <LockScreen />
   </UApp>
 </template>

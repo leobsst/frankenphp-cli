@@ -74,7 +74,7 @@ async function confirm() {
 </script>
 
 <template>
-  <div class="h-dvh overflow-y-auto pt-safe pb-safe">
+  <div class="fixed inset-0 overflow-y-auto pt-safe pb-safe">
     <header class="px-safe flex items-center gap-2 pt-3 pb-2">
       <UButton icon="i-lucide-chevron-left" color="neutral" variant="ghost" size="lg" :aria-label="t('common.back')" to="/instances" />
       <h1 class="text-lg font-semibold text-highlighted">{{ t('mobile.pair.title') }}</h1>

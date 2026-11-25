@@ -28,6 +28,7 @@
     "kb": "{n} KB",
     "mb": "{n} MB",
     "gb": "{n} GB",
+    "tb": "{n} TB",
     "percent": "{n}%",
     "hours": "{n} h"
   },
@@ -43,6 +44,7 @@
     "websocket": "WebSocket",
     "databases": "Databases",
     "configuration": "Configuration",
+    "machine": "Machine",
     "access": "Remote access",
     "logs": "Logs",
     "settings": "Settings"
@@ -68,6 +70,17 @@
     "primaryHelp": "Main buttons and the selected navigation item.",
     "accent": "Accent color",
     "accentHelp": "Charts, markers and highlighted elements.",
+    "textSize": "Text size",
+    "textSizes": {
+      "auto": "Auto",
+      "sm": "Small",
+      "md": "Default",
+      "lg": "Large",
+      "xl": "Larger",
+      "xxl": "Largest"
+    },
+    "textSizeHelp": "The whole interface follows this size. Auto: the size meant for this device.",
+    "textSizeAutoDevice": "The whole interface follows this size. Auto: {percent} on this Mac, which shows iPad apps smaller.",
     "languageTitle": "Language and formats",
     "language": "Interface language",
     "languageSystem": "System language ({language})",
@@ -94,6 +107,75 @@
     "reset": "Defaults",
     "saved": "Settings saved",
     "savedHelp": "The dashboard preferences are applied."
+  },
+  "machine": {
+    "subtitle": "{host} · {os}",
+    "subtitleLoading": "The system, hardware, storage and network of the host machine.",
+    "refresh": "Refresh",
+    "unknown": "Unknown",
+    "since": "Since {date}",
+    "cores": "{n} core | {n} cores",
+    "duration": {
+      "days": "{d} d {h} h",
+      "hours": "{h} h {m} min",
+      "minutes": "{m} min"
+    },
+    "stats": {
+      "system": "System",
+      "cpu": "Processor",
+      "memory": "Memory",
+      "physical": "Physical memory",
+      "uptime": "Up for"
+    },
+    "system": {
+      "title": "System and hardware",
+      "hostname": "Machine name",
+      "os": "System",
+      "kernel": "Kernel",
+      "arch": "Architecture",
+      "cpu": "Processor",
+      "cores": "Logical cores",
+      "memory": "Memory",
+      "booted": "Booted on"
+    },
+    "storage": {
+      "title": "Storage",
+      "none": "Disk space unreadable.",
+      "data": "FrankenManager data",
+      "projects": "Projects",
+      "free": "{free} free of {total}",
+      "used": "{pct} used"
+    },
+    "daemon": {
+      "title": "FrankenManager",
+      "version": "Version",
+      "go": "Go",
+      "pid": "Daemon PID",
+      "uptime": "Daemon up for",
+      "access": "Dashboard access"
+    },
+    "access": {
+      "local": "This machine only",
+      "lan": "Local network",
+      "internet": "Internet"
+    },
+    "docker": {
+      "title": "Docker",
+      "up": "Reachable",
+      "down": "Unreachable",
+      "downHelp": "The Docker engine does not answer: start Docker on the host machine.",
+      "version": "Engine version",
+      "os": "System",
+      "cpus": "Allocated CPUs",
+      "memory": "Allocated memory"
+    },
+    "network": {
+      "title": "Network",
+      "lan": "Local address",
+      "none": "No active network interface.",
+      "up": "Up",
+      "down": "Down"
+    }
   },
   "languages": {
     "fr": "Français",
@@ -1353,6 +1435,30 @@
       "address": "Simulated data, no instance needed",
       "try": "Try the demo",
       "help": "No FrankenManager instance at hand? Explore the app with simulated projects and services: nothing is sent anywhere."
+    },
+    "lock": {
+      "reason": "Unlock FrankenManager",
+      "title": "FrankenManager is locked",
+      "help": "Authenticate to reach your instances.",
+      "unlockWith": {
+        "faceId": "Unlock with Face ID",
+        "touchId": "Unlock with Touch ID",
+        "biometric": "Unlock",
+        "none": "Unlock with passcode"
+      },
+      "biometry": {
+        "faceId": "Face ID",
+        "touchId": "Touch ID",
+        "biometric": "biometrics",
+        "none": "the device passcode"
+      },
+      "settingsTitle": "Security",
+      "toggle": "Lock with {name}",
+      "toggleHelp": "Ask for {name} when the app opens, and on every return after 30 seconds.",
+      "unsupported": "Set up a passcode or biometrics on this device to lock the app.",
+      "immediate": "Applied right away, on this device only.",
+      "enabled": "Lock with {name} turned on",
+      "disabled": "Lock turned off"
     }
   },
   "store": {

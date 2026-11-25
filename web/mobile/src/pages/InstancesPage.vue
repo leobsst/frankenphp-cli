@@ -88,7 +88,7 @@ const dot: Record<Probe['state'], string> = {
 </script>
 
 <template>
-  <div class="h-dvh overflow-y-auto pt-safe pb-safe">
+  <div class="fixed inset-0 overflow-y-auto pt-safe pb-safe">
     <header class="px-safe flex items-center justify-between gap-3 pt-4 pb-2">
       <div class="flex items-center gap-2">
         <div class="size-9 rounded-md bg-primary grid place-items-center text-white">

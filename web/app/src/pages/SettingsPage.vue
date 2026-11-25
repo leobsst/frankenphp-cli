@@ -2,8 +2,9 @@
 import { computed, ref, watch } from 'vue'
 import PageHeader from '../components/PageHeader.vue'
 import ColorSwatches from '../components/ColorSwatches.vue'
-import { DEFAULT_PREFS, actions, state, toast, type Prefs } from '../composables/useFm'
-import { draftPrefs as draft } from '../composables/usePrefs'
+import { DEFAULT_PREFS, TEXT_SCALES, actions, state, toast, type Prefs, type TextSize } from '../composables/useFm'
+import { draftPrefs as draft, textScale } from '../composables/usePrefs'
+import { shell } from '../lib/shell'
 import { formatDate, formatTime, LANGUAGES, systemLanguage, type LanguagePref } from '../i18n'
 import { useI18n } from 'vue-i18n'
 
@@ -37,6 +38,10 @@ function save() {
 }
 const revert = () => { draft.value = { ...state.prefs } }
 const reset = () => { draft.value = { ...DEFAULT_PREFS } }
+
+// Text sizes: « Aa » drawn at the size it gives (13px, the body text, times the scale).
+const TEXT_SIZES: TextSize[] = ['auto', ...(Object.keys(TEXT_SCALES) as TextSize[])]
+const percent = (size: TextSize) => `${Math.round(textScale(size) * 100)} %`
 
 const toggles = ['autoRefresh', 'notifications', 'reduceMotion'] as const
 
@@ -90,6 +95,22 @@ const languages = computed<{ label: string; value: LanguagePref }[]>(() => [
         <template #leading><span class="size-[18px] rounded" :style="{ background: draft.accent }" /></template>
       </UInput>
       <p class="mt-2 text-[11px] text-muted">{{ t('settings.accentHelp') }}</p>
+
+      <h3 class="mt-6 text-[13px] font-semibold text-highlighted">{{ t('settings.textSize') }}</h3>
+      <div class="mt-3.5 grid grid-cols-3 gap-3 sm:grid-cols-6" role="radiogroup" :aria-label="t('settings.textSize')">
+        <button
+          v-for="size in TEXT_SIZES" :key="size" type="button" role="radio" :aria-checked="draft.textSize === size"
+          class="flex flex-col items-center justify-end gap-1.5 rounded-lg border bg-default px-2 pt-3 pb-2.5 transition-colors"
+          :class="draft.textSize === size ? 'border-primary ring-1 ring-primary' : 'border-default hover:border-accented'"
+          @click="draft.textSize = size"
+        >
+          <UIcon v-if="size === 'auto'" name="i-lucide-wand-sparkles" class="size-5 text-highlighted" />
+          <span v-else class="leading-none font-semibold text-highlighted" :style="{ fontSize: `${Math.round(13 * textScale(size))}px` }">Aa</span>
+          <span class="text-xs font-medium text-highlighted">{{ t(`settings.textSizes.${size}`) }}</span>
+          <span class="text-[10px] text-muted">{{ percent(size) }}</span>
+        </button>
+      </div>
+      <p class="mt-2 text-[11px] text-muted">{{ shell.autoScale !== 1 ? t('settings.textSizeAutoDevice', { percent: percent('auto') }) : t('settings.textSizeHelp') }}</p>
     </UCard>
 
     <div class="flex flex-col gap-6">
@@ -117,6 +138,8 @@ const languages = computed<{ label: string; value: LanguagePref }[]>(() => [
         </div>
         <p class="mt-8 text-[10px] text-muted">{{ t('settings.localOnly') }}</p>
       </UCard>
+      <!-- The application's own settings (mobile app: the Face ID lock). -->
+      <component :is="shell.settingsCard" v-if="shell.settingsCard" />
     </div>
   </div>
 

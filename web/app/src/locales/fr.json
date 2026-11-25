@@ -28,6 +28,7 @@
     "kb": "{n} Ko",
     "mb": "{n} Mo",
     "gb": "{n} Go",
+    "tb": "{n} To",
     "percent": "{n} %",
     "hours": "{n} h"
   },
@@ -43,6 +44,7 @@
     "websocket": "WebSocket",
     "databases": "Bases de données",
     "configuration": "Configuration",
+    "machine": "Machine",
     "access": "Accès distant",
     "logs": "Journaux",
     "settings": "Paramètres"
@@ -68,6 +70,17 @@
     "primaryHelp": "Boutons principaux et navigation sélectionnée.",
     "accent": "Couleur d’accentuation",
     "accentHelp": "Graphiques, repères et éléments mis en évidence.",
+    "textSize": "Taille du texte",
+    "textSizes": {
+      "auto": "Auto",
+      "sm": "Petite",
+      "md": "Normale",
+      "lg": "Grande",
+      "xl": "Très grande",
+      "xxl": "Maximale"
+    },
+    "textSizeHelp": "Toute l’interface suit cette taille. Auto : la taille prévue pour cet appareil.",
+    "textSizeAutoDevice": "Toute l’interface suit cette taille. Auto : {percent} sur ce Mac, qui affiche les apps iPad en plus petit.",
     "languageTitle": "Langue et formats",
     "language": "Langue de l’interface",
     "languageSystem": "Langue du système ({language})",
@@ -94,6 +107,75 @@
     "reset": "Par défaut",
     "saved": "Configuration enregistrée",
     "savedHelp": "Les préférences du dashboard sont appliquées."
+  },
+  "machine": {
+    "subtitle": "{host} · {os}",
+    "subtitleLoading": "Le système, le matériel, le stockage et le réseau de la machine hôte.",
+    "refresh": "Actualiser",
+    "unknown": "Inconnu",
+    "since": "Depuis le {date}",
+    "cores": "{n} cœur | {n} cœurs",
+    "duration": {
+      "days": "{d} j {h} h",
+      "hours": "{h} h {m} min",
+      "minutes": "{m} min"
+    },
+    "stats": {
+      "system": "Système",
+      "cpu": "Processeur",
+      "memory": "Mémoire",
+      "physical": "Mémoire physique",
+      "uptime": "Allumée depuis"
+    },
+    "system": {
+      "title": "Système et matériel",
+      "hostname": "Nom de la machine",
+      "os": "Système",
+      "kernel": "Noyau",
+      "arch": "Architecture",
+      "cpu": "Processeur",
+      "cores": "Cœurs logiques",
+      "memory": "Mémoire",
+      "booted": "Démarrée le"
+    },
+    "storage": {
+      "title": "Stockage",
+      "none": "Espace disque illisible.",
+      "data": "Données de FrankenManager",
+      "projects": "Projets",
+      "free": "{free} libres sur {total}",
+      "used": "{pct} utilisés"
+    },
+    "daemon": {
+      "title": "FrankenManager",
+      "version": "Version",
+      "go": "Go",
+      "pid": "PID du daemon",
+      "uptime": "Daemon lancé depuis",
+      "access": "Accès au dashboard"
+    },
+    "access": {
+      "local": "Cette machine uniquement",
+      "lan": "Réseau local",
+      "internet": "Internet"
+    },
+    "docker": {
+      "title": "Docker",
+      "up": "Joignable",
+      "down": "Injoignable",
+      "downHelp": "Le moteur Docker ne répond pas : lancez Docker sur la machine hôte.",
+      "version": "Version du moteur",
+      "os": "Système",
+      "cpus": "Processeurs alloués",
+      "memory": "Mémoire allouée"
+    },
+    "network": {
+      "title": "Réseau",
+      "lan": "Adresse locale",
+      "none": "Aucune interface réseau active.",
+      "up": "Active",
+      "down": "Inactive"
+    }
   },
   "languages": {
     "fr": "Français",
@@ -1353,6 +1435,30 @@
       "address": "Données simulées, sans instance",
       "try": "Essayer la démo",
       "help": "Pas d’instance FrankenManager sous la main ? Découvrez l’app avec des projets et des services simulés : rien n’est envoyé nulle part."
+    },
+    "lock": {
+      "reason": "Déverrouillez FrankenManager",
+      "title": "FrankenManager est verrouillé",
+      "help": "Identifiez-vous pour accéder à vos instances.",
+      "unlockWith": {
+        "faceId": "Déverrouiller avec Face ID",
+        "touchId": "Déverrouiller avec Touch ID",
+        "biometric": "Déverrouiller",
+        "none": "Déverrouiller avec le code"
+      },
+      "biometry": {
+        "faceId": "Face ID",
+        "touchId": "Touch ID",
+        "biometric": "la biométrie",
+        "none": "le code de l’appareil"
+      },
+      "settingsTitle": "Sécurité",
+      "toggle": "Verrouiller avec {name}",
+      "toggleHelp": "Demander {name} à l’ouverture de l’app et à chaque retour après 30 secondes.",
+      "unsupported": "Configurez un code ou la biométrie sur cet appareil pour verrouiller l’app.",
+      "immediate": "Appliqué immédiatement, sur cet appareil uniquement.",
+      "enabled": "Verrouillage avec {name} activé",
+      "disabled": "Verrouillage désactivé"
     }
   },
   "store": {

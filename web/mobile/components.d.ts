@@ -11,6 +11,8 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    AppLockSettings: typeof import('./src/components/AppLockSettings.vue')['default']
+    LockScreen: typeof import('./src/components/LockScreen.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
     UAlert: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_a50b459873bc368f53f7678f3ff7c574/node_modules/@nuxt/ui/dist/runtime/components/Alert.vue')['default']
@@ -32,6 +34,7 @@ declare module 'vue' {
     UNavigationMenu: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_a50b459873bc368f53f7678f3ff7c574/node_modules/@nuxt/ui/dist/runtime/components/NavigationMenu.vue')['default']
     UPagination: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_a50b459873bc368f53f7678f3ff7c574/node_modules/@nuxt/ui/dist/runtime/components/Pagination.vue')['default']
     UPopover: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_a50b459873bc368f53f7678f3ff7c574/node_modules/@nuxt/ui/dist/runtime/components/Popover.vue')['default']
+    UProgress: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_a50b459873bc368f53f7678f3ff7c574/node_modules/@nuxt/ui/dist/runtime/components/Progress.vue')['default']
     URadioGroup: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_a50b459873bc368f53f7678f3ff7c574/node_modules/@nuxt/ui/dist/runtime/components/RadioGroup.vue')['default']
     USelect: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_a50b459873bc368f53f7678f3ff7c574/node_modules/@nuxt/ui/dist/runtime/components/Select.vue')['default']
     USeparator: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_a50b459873bc368f53f7678f3ff7c574/node_modules/@nuxt/ui/dist/runtime/components/Separator.vue')['default']

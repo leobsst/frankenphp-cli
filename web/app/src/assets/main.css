@@ -114,8 +114,17 @@ html.reduce-motion *::after {
   animation-duration: 0ms !important;
 }
 
+/*
+ * Interface size (Settings › Text size): the whole page is zoomed, the px sizes of the mockup included. --fm-zoom stays
+ * 1 when the application zooms natively (iOS WebView). Full-screen containers are `fixed inset-0` rather than h-dvh:
+ * a zoomed 100dvh would overflow the screen.
+ */
+html { zoom: var(--fm-zoom, 1); }
+
 body {
   @apply bg-muted text-default antialiased;
+  /* No double-tap zoom (the viewport already forbids the others). */
+  touch-action: manipulation;
   font-size: 13px;
   -webkit-tap-highlight-color: transparent;
 }

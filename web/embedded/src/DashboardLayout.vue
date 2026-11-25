@@ -29,7 +29,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="flex h-dvh flex-col overflow-hidden">
+  <div class="fixed inset-0 flex flex-col overflow-hidden">
     <AppSidebar />
     <div class="flex min-h-0 flex-1 flex-col" :class="sidebarCollapsed ? 'md:ml-[72px]' : 'md:ml-[228px]'">
       <AppHeader />

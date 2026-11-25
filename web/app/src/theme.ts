@@ -6,8 +6,21 @@
  * the toasts above the bottom navigation (--fm-bottom-inset). The classes are listed here in full so that Tailwind
  * finds them (main.css scans web/app/src).
  */
+/**
+ * Input fields on phones: text-sm instead of the text-base of the md / lg / xl sizes, closer to the rest of the
+ * interface. iOS zooms in on a focused field under 16px: the viewport forbids zooming (index.html of each app).
+ */
+const phoneFieldText = { compoundVariants: [{ size: ['md', 'lg', 'xl'], class: { base: 'max-md:text-sm/5' } }] }
+
 export const uiTheme = {
   colors: { primary: 'brand', info: 'accent', success: 'brand', warning: 'amber', error: 'red', neutral: 'sage' as 'zinc' },
+  input: phoneFieldText,
+  textarea: phoneFieldText,
+  select: phoneFieldText,
+  selectMenu: phoneFieldText,
+  inputMenu: phoneFieldText,
+  inputNumber: phoneFieldText,
+  inputTags: phoneFieldText,
   // Active navigation item: pale background + primary text (mockup).
   navigationMenu: {
     compoundVariants: [{ variant: 'pill', active: true, highlight: false, class: { link: 'before:bg-primary/10 font-semibold' } }],
@@ -23,7 +36,7 @@ export const uiTheme = {
         scrollable: false,
         fullscreen: false,
         class: {
-          content: 'top-[calc(50%_+_(var(--sat)_-_var(--sab))_/_2)] w-[calc(100vw_-_2rem_-_var(--sal)_-_var(--sar))] max-h-[calc(100dvh_-_2rem_-_var(--sat)_-_var(--sab))] sm:max-h-[calc(100dvh_-_4rem_-_var(--sat)_-_var(--sab))]',
+          content: 'top-[calc(50%_+_(var(--sat)_-_var(--sab))_/_2)] w-[calc(100vw_/_var(--fm-zoom,1)_-_2rem_-_var(--sal)_-_var(--sar))] max-h-[calc(100dvh_/_var(--fm-zoom,1)_-_2rem_-_var(--sat)_-_var(--sab))] sm:max-h-[calc(100dvh_/_var(--fm-zoom,1)_-_4rem_-_var(--sat)_-_var(--sab))]',
         },
       },
       {

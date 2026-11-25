@@ -15,6 +15,7 @@ export const NAV = [
   { name: 'databases', labelKey: 'nav.databases', path: '/bases-de-donnees', icon: 'i-lucide-database', component: () => import('./pages/DatabasesPage.vue') },
   { name: 'configuration', labelKey: 'nav.configuration', path: '/configuration', icon: 'i-lucide-file-cog', component: () => import('./pages/ConfigurationPage.vue') },
   { name: 'access', labelKey: 'nav.access', path: '/acces-distant', icon: 'i-lucide-shield-check', component: () => import('./pages/AccessPage.vue') },
+  { name: 'machine', labelKey: 'nav.machine', path: '/machine', icon: 'i-lucide-monitor-cog', component: () => import('./pages/MachinePage.vue') },
   { name: 'logs', labelKey: 'nav.logs', path: '/journaux', icon: 'i-lucide-square-terminal', component: () => import('./pages/LogsPage.vue') },
 ] as const
 

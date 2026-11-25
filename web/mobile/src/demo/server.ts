@@ -108,6 +108,29 @@ function hostInfo(): Schema<'HostInfo'> {
   }
 }
 
+/** The demo Mac in detail (Machine page); its uptimes count from when the demo started. */
+const demoStart = Date.now()
+function hostSystem(): Schema<'HostSystem'> {
+  const since = Math.round((Date.now() - demoStart) / 1000)
+  return {
+    hostname: DEMO_HOSTNAME, os: 'darwin', os_name: 'macOS 26.1', kernel: '25.1.0', arch: 'arm64',
+    cpu: { model: 'Apple M3 Pro', cores: 12 }, memory: { total: 36 * 1024 ** 3 }, uptime: 4 * 86_400 + 5 * 3600 + since,
+    disks: [
+      { label: 'data', path: '/Users/demo/Library/Application Support/FrankenManager', total: 994_662_584_320, free: 412_318_253_056 },
+      { label: 'projects', path: '/Users/demo/Developer', total: 994_662_584_320, free: 412_318_253_056 },
+    ],
+    daemon: { version: DEMO_VERSION, go: 'go1.26.0', pid: 4812, started_at: new Date(demoStart - 2 * 86_400_000).toISOString() },
+    docker: { version: '29.0.1', os: 'Docker Desktop', cpus: 12, memory: 16 * 1024 ** 3 },
+    network: {
+      lan_ip: DEMO_LAN_IP,
+      interfaces: [
+        { name: 'en0', mac: 'a4:83:e7:12:9c:4f', up: true, addresses: [`${DEMO_LAN_IP}/24`, 'fe80::1c2d:3e4f:5a6b:7c8d/64'] },
+        { name: 'bridge100', mac: 'a6:83:e7:4b:21:64', up: true, addresses: ['192.168.64.1/24'] },
+      ],
+    },
+  }
+}
+
 function bucketInfo(b: DemoBucket): Schema<'Bucket'> {
   return {
     name: b.name, public: b.public, objects: b.objects.length, public_objects: b.objects.filter((o) => b.public || o.public).length,
@@ -247,6 +270,7 @@ function get(path: string, q: URLSearchParams): unknown {
   switch (path) {
     case '/api/health': return { version: DEMO_VERSION, api: 'v1', features: ['dashboard', 'update', 'docker', 'pairing'] }
     case '/api/v1/host': return hostInfo()
+    case '/api/v1/host/system': return hostSystem()
     case '/api/v1/status': return status()
     case '/api/v1/containers': return containers()
     case '/api/v1/stats': return stats()

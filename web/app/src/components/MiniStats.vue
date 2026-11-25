@@ -1,9 +1,9 @@
 <script setup lang="ts">
-defineProps<{ items: { label: string; value: string | number; sub: string }[] }>()
+defineProps<{ items: { label: string; value: string | number; sub: string }[]; cols?: 3 | 4 }>()
 </script>
 
 <template>
-  <div class="mt-6 grid grid-cols-2 gap-2.5 md:grid-cols-3 md:gap-3">
+  <div class="mt-6 grid grid-cols-2 gap-2.5 md:gap-3" :class="cols === 4 ? 'md:grid-cols-4' : 'md:grid-cols-3'">
     <UCard
       v-for="s in items" :key="s.label"
       class="min-w-0 last:odd:max-md:col-span-2"

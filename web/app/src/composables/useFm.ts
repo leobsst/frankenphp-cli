@@ -5,7 +5,7 @@
  * it is back; `state.docker` follows whether the daemon reaches Docker.
  */
 import { computed, nextTick, reactive, ref } from 'vue'
-import { ApiError, client, lastMessage, type Instance, type Client, type Container as ApiContainer, type HostInfo, type Operation, type Stat, type Status, type ApiResponse, type LogLine, type OpEvent, type Schema, type EventStream } from '../lib/api'
+import { ApiError, client, lastMessage, type Instance, type Client, type Container as ApiContainer, type HostInfo, type HostSystem, type Operation, type Stat, type Status, type ApiResponse, type LogLine, type OpEvent, type Schema, type EventStream } from '../lib/api'
 import { defaultRoot } from './caddyfile'
 import { formatNumber, formatTime, setLanguage, t, type LanguagePref } from '../i18n'
 
@@ -68,10 +68,15 @@ export interface Prefs {
   reduceMotion: boolean
   /** Interface language, or the system's (stored per device, like the other preferences). */
   language: LanguagePref
+  /** Interface size: `auto` follows the device (see TEXT_SCALES and shell.autoScale). */
+  textSize: TextSize
 }
+export type TextSize = 'auto' | 'sm' | 'md' | 'lg' | 'xl' | 'xxl'
+/** Scale of the whole interface (text, spacing, icons) for each size but `auto`. */
+export const TEXT_SCALES: Record<Exclude<TextSize, 'auto'>, number> = { sm: 0.9, md: 1, lg: 1.15, xl: 1.3, xxl: 1.5 }
 export const DEFAULT_PREFS: Prefs = {
   theme: 'system', primary: '#2563EB', accent: '#8B5CF6',
-  autoRefresh: true, notifications: true, reduceMotion: false, language: 'system',
+  autoRefresh: true, notifications: true, reduceMotion: false, language: 'system', textSize: 'auto',
 }
 
 export const PROJECTS_ROOT = '/projects'
@@ -115,6 +120,8 @@ const blank = () => ({
   siteFiles: {} as Record<string, { path: string; content: string; template: string; modified: boolean }>,
   connection: { mode: 'remote' as 'local' | 'remote', host: '', address: '', client: '', signedIn: true },
   app: { version: '', latest: null as string | null },
+  /** The machine of the instance in detail (`GET /api/v1/host/system`), read by the Machine page. */
+  system: null as HostSystem | null,
   prefs: loadPrefs(),
 })
 
@@ -705,8 +712,14 @@ export async function loadPage(name: string) {
   if (!api) return
   const loaders: Record<string, () => Promise<void>> = {
     dns: loadDns, ssl: refreshExtras, redis: loadRedis, databases: loadDatabases, s3: loadS3, access: loadAccess, overview: loadDatabases,
+    machine: loadSystem,
   }
   await loaders[name]?.().catch((e) => toast('error', t('store.loadFailed'), e instanceof Error ? e.message : String(e)))
+}
+
+export async function loadSystem() {
+  if (!api) return
+  state.system = await api.get<HostSystem>('/api/v1/host/system')
 }
 
 async function loadDns() {
