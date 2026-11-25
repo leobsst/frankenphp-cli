@@ -48,7 +48,8 @@ Contact information (first name, last name, phone, email) is entered in App Stor
 ## Screenshots (`screenshots/<locale>/`)
 
 The app runs on iPhone and iPad, so both sets are required, portrait, 1 to 10 per locale. Six per device and locale,
-taken from the demo mode (fictional data only) in the iOS Simulator, with the native tab bar on iPhone:
+taken from the demo mode (fictional data only) in the iOS Simulator, with the native tab bar on iPhone. Each shot shows
+both themes, cut along the diagonal: light above, dark below.
 
 | Device | Simulator | Size (pixels) | Files |
 |---|---|---|---|

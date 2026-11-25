@@ -79,7 +79,17 @@ for a whole series. The taps match the labels of that language. The iPhone Duo s
 `iOS-27-2-iPhone19-4`) has two screens: `xcrun simctl io <device> screenshot --display=1` takes the folded one.
 
 The shots of `store/screenshots/` were taken this way (iPhone 17 Pro Max, iPhone 17 Pro, iPhone Duo and iPad Pro
-13-inch simulators, status bar set with `xcrun simctl status_bar … override --time 9:41`).
+13-inch simulators, status bar set with `xcrun simctl status_bar … override --time 9:41`). Each one mixes the two
+themes: the app follows the system theme, so one shot is taken in light, then `xcrun simctl ui <device> appearance
+dark` and a second shot of the same screen, a second later. The two are then cut along the diagonal (light above,
+dark below), with a thin light line on the cut:
+
+```bash
+W=1206; H=2622   # size of the shots
+magick light.png dark.png \( -size ${W}x${H} xc:black -fill white -draw "polygon $W,0 $W,$H 0,$H" \) \
+  -alpha off -compose over -composite -stroke 'rgba(255,255,255,0.55)' -strokewidth 6 -draw "line $W,0 0,$H" \
+  -strip mixed.png
+```
 
 ## Session tokens
 
