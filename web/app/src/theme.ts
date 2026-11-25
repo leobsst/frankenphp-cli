@@ -32,18 +32,19 @@ export const uiTheme = {
     },
     compoundVariants: [
       {
-        // Centred dialog: its height leaves the status bar and the home indicator free, and it is centred between them.
+        // Centred dialog: its size leaves the safe areas free (status bar, home indicator, side cutout), and it is
+        // centred between them.
         scrollable: false,
         fullscreen: false,
         class: {
-          content: 'top-[calc(50%_+_(var(--sat)_-_var(--sab))_/_2)] w-[calc(100vw_/_var(--fm-zoom,1)_-_2rem_-_var(--sal)_-_var(--sar))] max-h-[calc(100dvh_/_var(--fm-zoom,1)_-_2rem_-_var(--sat)_-_var(--sab))] sm:max-h-[calc(100dvh_/_var(--fm-zoom,1)_-_4rem_-_var(--sat)_-_var(--sab))]',
+          content: 'top-[calc(50%_+_(var(--sat)_-_var(--sab))_/_2)] left-[calc(50%_+_(var(--sal)_-_var(--sar))_/_2)] w-[calc(100vw_/_var(--fm-zoom,1)_-_2rem_-_var(--sal)_-_var(--sar))] max-h-[calc(100dvh_/_var(--fm-zoom,1)_-_2rem_-_var(--sat)_-_var(--sab))] sm:max-h-[calc(100dvh_/_var(--fm-zoom,1)_-_4rem_-_var(--sat)_-_var(--sab))]',
         },
       },
       {
         // Scrollable dialog: the overlay scrolls, its padding covers the safe areas.
         scrollable: true,
         fullscreen: false,
-        class: { overlay: 'pt-[calc(1rem_+_var(--sat))] pb-[calc(1rem_+_var(--sab))] sm:pt-[calc(2rem_+_var(--sat))] sm:pb-[calc(2rem_+_var(--sab))]' },
+        class: { overlay: 'pt-[calc(1rem_+_var(--sat))] pb-[calc(1rem_+_var(--sab))] ps-[calc(1rem_+_var(--sal))] pe-[calc(1rem_+_var(--sar))] sm:pt-[calc(2rem_+_var(--sat))] sm:pb-[calc(2rem_+_var(--sab))]' },
       },
     ],
   },
@@ -68,6 +69,9 @@ export const uiTheme = {
         'top-right': { viewport: 'right-[calc(1rem_+_var(--sar))]' },
         'bottom-left': { viewport: 'left-[calc(1rem_+_var(--sal))]' },
         'bottom-right': { viewport: 'right-[calc(1rem_+_var(--sar))]' },
+        // Centred: between the side insets, its width leaving them free.
+        'top-center': { viewport: 'left-[calc(50%_+_(var(--sal)_-_var(--sar))_/_2)] w-[calc(100%_-_2rem_-_var(--sal)_-_var(--sar))]' },
+        'bottom-center': { viewport: 'left-[calc(50%_+_(var(--sal)_-_var(--sar))_/_2)] w-[calc(100%_-_2rem_-_var(--sal)_-_var(--sar))]' },
       },
     },
     compoundVariants: [

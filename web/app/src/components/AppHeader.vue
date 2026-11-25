@@ -42,7 +42,7 @@ const groups = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() => {
 </script>
 
 <template>
-  <header class="z-10 shrink-0 box-content flex h-(--ui-header-height) pt-safe items-center gap-5 border-b border-default bg-default px-5 md:px-6 xl:px-8">
+  <header class="z-10 shrink-0 box-content flex h-(--ui-header-height) pt-safe items-center gap-5 border-b border-default bg-default px-gutter [--gutter:1.25rem] md:[--gutter:1.5rem] xl:[--gutter:2rem]">
     <!-- Burger (phone, tablet icon bar) + logo (phone only: the sidebar shows it elsewhere) -->
     <div v-if="navBurger" class="flex items-center gap-2.5">
       <UButton color="neutral" variant="ghost" icon="i-lucide-menu" class="-ml-1.5" :aria-label="t('header.openMenu')" :aria-expanded="menuOpen" @click="menuOpen = true" />

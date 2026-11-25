@@ -71,7 +71,7 @@ watch(() => inst.expired, (expired) => {
       <AppHeader />
       <div ref="scroller" class="min-h-0 flex-1 overflow-y-auto">
         <main
-          class="mx-auto w-full max-w-7xl px-5 pt-6 md:px-6 md:pt-7 md:pb-[calc(2.5rem+var(--sab))] xl:px-8 xl:pt-[30px]"
+          class="mx-auto w-full max-w-7xl px-gutter pt-6 [--gutter:1.25rem] md:pt-7 md:[--gutter:1.5rem] md:pb-[calc(2.5rem+var(--sab))] xl:pt-[30px] xl:[--gutter:2rem]"
           :class="nativeTabs ? 'pb-[calc(var(--native-tabbar-height)+1.5rem)]' : 'pb-[calc(7.5rem+var(--sab))]'"
         >
           <UAlert

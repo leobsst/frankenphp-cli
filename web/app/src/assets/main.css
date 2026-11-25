@@ -153,6 +153,13 @@ body {
 .pt-safe { padding-top: var(--sat); }
 .pb-safe { padding-bottom: var(--sab); }
 .px-safe { padding-left: max(1rem, var(--sal)); padding-right: max(1rem, var(--sar)); }
+/*
+ * Dashboard side gutters (--gutter, set per breakpoint by the element) that also keep clear of the side safe areas:
+ * the camera cutout of the folded iPhone Duo (right inset, with no top inset), the notch in landscape. From md up the
+ * sidebar takes the left side.
+ */
+.px-gutter { padding-left: max(var(--gutter), var(--sal)); padding-right: max(var(--gutter), var(--sar)); }
+@media (min-width: 45rem) { .px-gutter { padding-left: var(--gutter); } }
 
 /*
  * Height kept free at the bottom of the screen by the navigation: the home indicator, the native tab bar of the app
