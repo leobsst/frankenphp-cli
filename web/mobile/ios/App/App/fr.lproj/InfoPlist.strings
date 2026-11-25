@@ -1,3 +1,4 @@
 /* Localized Info.plist strings (French). */
 "NSLocalNetworkUsageDescription" = "FrankenManager se connecte aux instances de votre réseau local pour les piloter.";
 "NSCameraUsageDescription" = "FrankenManager utilise l’appareil photo pour scanner le QR code d’appairage affiché par le dashboard.";
+"NSFaceIDUsageDescription" = "FrankenManager utilise Face ID pour déverrouiller l’app quand son verrouillage est activé.";

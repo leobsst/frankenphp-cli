@@ -6,5 +6,7 @@ class MainViewController: CAPBridgeViewController {
     override func capacitorDidLoad() {
         bridge?.registerPluginInstance(NativeTabBarPlugin())
         bridge?.registerPluginInstance(SecureStorePlugin())
+        bridge?.registerPluginInstance(AppLockPlugin())
+        bridge?.registerPluginInstance(DisplayPlugin())
     }
 }

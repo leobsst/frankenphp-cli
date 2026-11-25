@@ -10,6 +10,8 @@
 	<false/>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>FrankenManager connects to the instances on your local network to manage them.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>FrankenManager uses Face ID to unlock the app when its lock is turned on.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>FrankenManager uses the camera to scan the pairing QR code shown by the dashboard.</string>
 	<key>CFBundleURLTypes</key>
