@@ -27,7 +27,9 @@ export function serviceWorker(): Plugin {
     configResolved(config) {
       outDir = resolve(config.root, config.build.outDir)
     },
-    closeBundle() {
+    // Also called when the build fails: nothing is written then, and the error of the build stays the one reported.
+    closeBundle(error?: Error) {
+      if (error) return
       const files = walk(outDir).filter((f) => !skipped(f)).sort()
       const hash = createHash('sha256')
       for (const file of ['index.html', ...files]) hash.update(`${file}\0`).update(readFileSync(join(outDir, file)))

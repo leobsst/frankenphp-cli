@@ -150,5 +150,5 @@ const clientColumns = computed<TableColumn<DnsClient>[]>(() => [
     </div>
   </TwoColumns>
 
-  <InfoBanner v-else>{{ t('dns.banner.process') }}</InfoBanner>
+  <InfoBanner>{{ t('dns.banner.process') }}</InfoBanner>
 </template>
