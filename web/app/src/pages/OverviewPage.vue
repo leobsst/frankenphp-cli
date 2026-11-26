@@ -230,6 +230,12 @@ const statCard = { body: 'p-0 sm:p-0 h-[112px] px-[15px] py-[13px] sm:px-[15px] 
         <ULink to="/journaux" class="text-[11px] font-medium text-primary">{{ t('overview.activity.seeLogs') }}</ULink>
       </div>
       <ul class="mt-3.5 flex flex-col gap-4">
+        <!-- Waiting for the first lines of the log stream. -->
+        <template v-if="!state.logsReady && !activity.length">
+          <li v-for="i in 3" :key="i" class="flex items-center gap-3" :aria-busy="true">
+            <USkeleton class="h-2.5 w-12" /><USkeleton class="size-1.5 rounded-full" /><USkeleton class="h-3 flex-1" />
+          </li>
+        </template>
         <li v-for="l in activity" :key="l.id" class="grid grid-cols-[16px_minmax(0,1fr)] items-center gap-y-0.5 md:grid-cols-[70px_18px_minmax(0,1fr)_200px]">
           <time class="text-[11px] text-muted max-md:col-start-2 max-md:row-start-2">{{ l.time }}</time>
           <span class="size-1.5 rounded-full" :class="l.level === 'WARN' ? 'bg-warning' : l.level === 'ERROR' ? 'bg-error' : 'bg-primary'" />

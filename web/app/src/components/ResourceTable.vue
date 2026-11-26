@@ -11,9 +11,11 @@ import { usePagination } from '../composables/usePagination'
  * The page size is remembered under `storageKey` (the title by default: pass a key when the title is dynamic);
  * the page goes back to 1 when the search or the title (i.e. the displayed data set) changes.
  * `paginate: false` shows every row (e.g. a folder explorer, where pages would split a directory).
+ * `loading`: the data has not been read yet: skeleton rows instead of the "nothing here" message.
  */
 const props = withDefaults(defineProps<{
   title: string; data: T[]; columns: TableColumn<T>[]; searchKey?: keyof T; empty?: string; storageKey?: string; paginate?: boolean
+  loading?: boolean
 }>(), { paginate: true })
 const { t } = useI18n()
 
@@ -40,7 +42,19 @@ const rows = computed(() => (props.paginate ? pager.rows.value : filtered.value)
       />
       <UButton v-else-if="searchKey" color="neutral" variant="ghost" icon="i-lucide-search" class="size-8 justify-center" :aria-label="t('common.search')" @click="searching = true" />
     </template>
+    <!-- Loading: rows shaped like the real ones (an icon, a name and its detail, a badge). -->
+    <div v-if="loading" class="flex flex-col divide-y divide-default" :aria-busy="true" :aria-label="t('common.loading')">
+      <div v-for="i in 4" :key="i" class="flex items-center gap-3 py-3">
+        <USkeleton class="size-5 shrink-0 rounded-md" />
+        <div class="flex min-w-0 flex-1 flex-col gap-1.5">
+          <USkeleton class="h-3 w-2/5" />
+          <USkeleton class="h-2.5 w-1/4" />
+        </div>
+        <USkeleton class="h-5 w-16 rounded-md" />
+      </div>
+    </div>
     <UTable
+      v-else
       :data="rows"
       :columns="columns"
       :empty="empty ?? t('resourceTable.empty')"
@@ -55,7 +69,7 @@ const rows = computed(() => (props.paginate ? pager.rows.value : filtered.value)
       </template>
     </UTable>
     <TablePagination
-      v-if="paginate" v-model:page="page" :total="total" :from="from" :to="to" :page-size="pageSize"
+      v-if="paginate && !loading" v-model:page="page" :total="total" :from="from" :to="to" :page-size="pageSize"
       class="border-t border-default" @update:page-size="pager.setPageSize"
     />
   </UCard>

@@ -148,7 +148,7 @@ const logColumns = computed<TableColumn<AccessEvent>[]>(() => [
       <USwitch v-model="form.localAuth" :label="t('access.settings.localAuth')" :description="t('access.settings.localAuthHelp', { key: 'DASHBOARD_LOCAL_AUTH' })" />
       <UButton :label="t('access.settings.save')" size="lg" class="self-end" @click="save" />
     </UCard>
-    <ResourceTable v-else-if="tab === 'sessions'" storage-key="access-sessions" :title="t('access.sessions.title')" :data="state.access.sessions" :columns="sessionColumns" search-key="device" :empty="t('access.sessions.empty')">
+    <ResourceTable v-else-if="tab === 'sessions'" :loading="!state.pageData.access" storage-key="access-sessions" :title="t('access.sessions.title')" :data="state.access.sessions" :columns="sessionColumns" search-key="device" :empty="t('access.sessions.empty')">
       <template #device-cell="{ row }">
         <NameCell :icon="row.original.remote ? 'i-lucide-smartphone' : 'i-lucide-laptop'" :name="row.original.device" :sub="row.original.current ? t('access.sessions.thisDevice', { ip: row.original.ip }) : row.original.ip" />
       </template>
@@ -160,7 +160,7 @@ const logColumns = computed<TableColumn<AccessEvent>[]>(() => [
         </UDropdownMenu>
       </template>
     </ResourceTable>
-    <ResourceTable v-else :title="t('access.log.title')" storage-key="access-log" :data="state.access.log" :columns="logColumns" :empty="t('access.log.empty')">
+    <ResourceTable v-else :title="t('access.log.title')" :loading="!state.pageData.access" storage-key="access-log" :data="state.access.log" :columns="logColumns" :empty="t('access.log.empty')">
       <template #event-cell="{ row }">
         <div class="flex min-w-0 items-center gap-3">
           <UBadge :label="eventOf(row.original).label" :color="eventOf(row.original).color" variant="soft" class="shrink-0" />

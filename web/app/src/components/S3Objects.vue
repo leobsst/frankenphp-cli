@@ -18,8 +18,18 @@ const { t } = useI18n()
 const prefix = ref('')
 watch(bucket, () => { prefix.value = '' })
 // The daemon lists one folder at a time: the open folder is reloaded on every change (none before a bucket is chosen).
-watch([bucket, prefix], ([b, p]) => {
-  if (b) void loadObjects(b, p).catch((e) => toast('error', t('s3Objects.readFailed'), String(e?.message ?? e)))
+// Skeleton while a folder is read for the first time (its rows are not known yet).
+const loadingFolder = ref(false)
+watch([bucket, prefix], async ([b, p]) => {
+  if (!b) return
+  loadingFolder.value = true
+  try {
+    await loadObjects(b, p)
+  } catch (e) {
+    toast('error', t('s3Objects.readFailed'), String((e as Error)?.message ?? e))
+  } finally {
+    if (bucket.value === b && prefix.value === p) loadingFolder.value = false
+  }
 }, { immediate: true })
 const b = computed(() => state.s3.buckets.find((x) => x.name === bucket.value))
 
@@ -125,7 +135,7 @@ async function submitUpload() {
       <p class="max-w-xs text-[11px] text-muted">{{ t('s3Objects.pickHelp') }}</p>
     </div>
   </UCard>
-  <ResourceTable v-else :title="t('s3Objects.title', { bucket })" :paginate="false" :data="rows" :columns="columns" search-key="name" :empty="t('s3Objects.empty')">
+  <ResourceTable v-else :title="t('s3Objects.title', { bucket })" :loading="loadingFolder && !rows.some((r) => !r.parent)" :paginate="false" :data="rows" :columns="columns" search-key="name" :empty="t('s3Objects.empty')">
     <template #name-cell="{ row }">
       <button v-if="row.original.parent" type="button" class="text-left" @click="prefix = parent">
         <NameCell icon="i-lucide-corner-left-up" :name="t('s3Objects.parentFolder')" :sub="`${bucket}/${parent}`" />

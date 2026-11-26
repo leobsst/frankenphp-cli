@@ -95,7 +95,7 @@ const userColumns = computed<TableColumn<DbUser>[]>(() => [
   <PageTabs v-model="tab" :items="tabs" @update:model-value="errors = {}" />
 
   <TwoColumns>
-    <ResourceTable v-if="tab === 'local'" storage-key="databases" :title="t('nav.databases')" :data="state.databases" :columns="columns" search-key="name">
+    <ResourceTable v-if="tab === 'local'" :loading="!state.pageData.databases" storage-key="databases" :title="t('nav.databases')" :data="state.databases" :columns="columns" search-key="name">
       <template #name-cell="{ row }"><NameCell icon="i-lucide-database" :name="row.original.name" :sub="`${row.original.engine} · :${port(row.original.engine)}`" /></template>
       <template #size-cell="{ row }">{{ row.original.size ? formatMegabytes(row.original.size) : t('common.none') }}</template>
       <template #state-cell="{ row }"><StateBadge :value="up(row.original.engine) ? 'online' : 'offline'" /></template>
@@ -105,7 +105,7 @@ const userColumns = computed<TableColumn<DbUser>[]>(() => [
         </UDropdownMenu>
       </template>
     </ResourceTable>
-    <ResourceTable v-else-if="tab === 'users'" storage-key="db-users" :title="t('databases.tabs.users')" :data="state.dbUsers" :columns="userColumns" search-key="name" :empty="t('databases.empty.users')">
+    <ResourceTable v-else-if="tab === 'users'" :loading="!state.pageData.databases" storage-key="db-users" :title="t('databases.tabs.users')" :data="state.dbUsers" :columns="userColumns" search-key="name" :empty="t('databases.empty.users')">
       <template #name-cell="{ row }">
         <NameCell icon="i-lucide-user-round" :name="row.original.host ? `${row.original.name}@'${row.original.host}'` : row.original.name" :sub="row.original.engine" />
       </template>

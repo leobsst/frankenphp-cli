@@ -93,7 +93,7 @@ const clientColumns = computed<TableColumn<DnsClient>[]>(() => [
 
     <ResourceTable
         v-else-if="tab === 'clients'" storage-key="dns-clients" :title="showIdle ? t('dns.clients.all', { days: 30 }) : t('dns.stats.devices')" :data="clients" :columns="clientColumns" search-key="ip"
-        :empty="up ? t('dns.clients.empty') : t('dns.clients.stopped')"
+        :empty="up ? t('dns.clients.empty') : t('dns.clients.stopped')" :loading="!state.pageData.dns"
       >
         <template #ip-cell="{ row }">
           <NameCell :icon="clientIcon(row.original)" :name="row.original.name ?? t('dns.clients.unknown')" :sub="`${row.original.ip} · ${t('dns.clients.queries', { n: formatNumber(row.original.queries) }, row.original.queries)}`" />

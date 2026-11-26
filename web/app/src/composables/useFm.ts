@@ -105,6 +105,10 @@ const blank = () => ({
   domains: [] as Domain[],
   containers: [] as Container[],
   logs: [] as LogEntry[],
+  /** The log stream answered (or has nothing to send): until then the log lists show a loading skeleton. */
+  logsReady: false,
+  /** Pages whose own data has been read once since connecting (loadPage): their lists show a skeleton until then. */
+  pageData: {} as Record<string, boolean>,
   cpuHistory: Array(12).fill(0) as number[],
   memGo: 0,
   memTotalGo: 0,
@@ -403,11 +407,16 @@ async function refreshStats() {
 }
 
 /** Log stream of all containers: feeds the recent activity and the Logs page. */
+let logsReadyTimer: ReturnType<typeof setTimeout> | undefined
 function openLogs() {
   logStream?.close()
-  if (!api || state.stack !== 'running') return
+  clearTimeout(logsReadyTimer)
+  if (!api || state.stack !== 'running') { state.logsReady = true; return }
   logStream = api.stream('/api/v1/logs', { tail: '30' })
+  // The last lines come at once; a quiet stack sends none: the lists stop waiting after a moment.
+  logsReadyTimer = setTimeout(() => { state.logsReady = true }, 2500)
   logStream.addEventListener('log', (e) => {
+    state.logsReady = true
     const l = JSON.parse((e as MessageEvent).data) as LogLine
     const last = lastLogAt[l.container]
     if (last && l.time && l.time <= last) return
@@ -745,6 +754,8 @@ export async function loadPage(name: string) {
     machine: loadSystem,
   }
   await loaders[name]?.().catch((e) => toast('error', t('store.loadFailed'), e instanceof Error ? e.message : String(e)))
+  // Read, or failed (reported): the lists show what there is rather than loading forever.
+  state.pageData[name] = true
 }
 
 export async function loadSystem() {

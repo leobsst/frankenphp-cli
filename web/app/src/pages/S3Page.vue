@@ -167,7 +167,7 @@ function copyEnv() {
   <TwoColumns>
     <!-- Buckets -->
     <template v-if="tab === 'buckets'">
-      <ResourceTable :title="t('s3.tabs.buckets')" storage-key="s3-buckets" :data="s3.buckets" :columns="bucketColumns" search-key="name" :empty="t('s3.empty.buckets')">
+      <ResourceTable :title="t('s3.tabs.buckets')" :loading="!state.pageData.s3" storage-key="s3-buckets" :data="s3.buckets" :columns="bucketColumns" search-key="name" :empty="t('s3.empty.buckets')">
         <template #name-cell="{ row }">
           <NameCell
             icon="i-lucide-folder" :name="row.original.name"
@@ -208,7 +208,7 @@ function copyEnv() {
 
     <!-- Access keys -->
     <template v-else-if="tab === 'keys'">
-      <ResourceTable :title="t('s3.keysTitle')" storage-key="s3-keys" :data="s3.keys" :columns="keyColumns" search-key="name" :empty="t('s3.empty.keys')">
+      <ResourceTable :title="t('s3.keysTitle')" :loading="!state.pageData.s3" storage-key="s3-keys" :data="s3.keys" :columns="keyColumns" search-key="name" :empty="t('s3.empty.keys')">
         <template #name-cell="{ row }">
           <NameCell icon="i-lucide-key-round" :name="row.original.name" :sub="revealed === row.original.id ? `${row.original.id} · ${row.original.secret}` : row.original.id" />
         </template>

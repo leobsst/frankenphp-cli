@@ -70,7 +70,7 @@ const uptime = computed(() => `${t('units.hours', { n: formatNumber(3) })} ${t('
   <PageTabs v-model="tab" :items="tabs" />
 
   <TwoColumns>
-    <ResourceTable v-if="tab === 'keys'" storage-key="redis-keys" :title="applied === '*' ? t('redis.tabs.keys') : t('redis.keysMatching', { pattern: applied })" :data="shown" :columns="columns" search-key="key" :empty="t('redis.empty')">
+    <ResourceTable v-if="tab === 'keys'" :loading="!state.pageData.redis" storage-key="redis-keys" :title="applied === '*' ? t('redis.tabs.keys') : t('redis.keysMatching', { pattern: applied })" :data="shown" :columns="columns" search-key="key" :empty="t('redis.empty')">
       <template #key-cell="{ row }"><NameCell icon="i-lucide-key-round" :name="row.original.key" :sub="`${row.original.type} · ${row.original.size}`" /></template>
       <template #ttl-cell="{ row }"><span :class="row.original.ttl >= 0 && row.original.ttl < 60 ? 'text-warning' : ''">{{ ttl(row.original.ttl) }}</span></template>
       <template #actions-cell="{ row }">

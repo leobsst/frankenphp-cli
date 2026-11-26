@@ -105,7 +105,14 @@ function exportTxt() {
       </div>
       <p class="mt-3 text-xs text-muted">{{ applied.service === 'all' ? t('logs.allServices') : applied.service }} · {{ live ? t('logs.autoRefresh') : t('logs.paused') }}</p>
       <div class="mt-4 flex max-h-[410px] flex-col gap-2.5 overflow-auto pr-1">
-        <UEmpty v-if="!shown.length" icon="i-lucide-search-x" :description="t('logs.empty')" variant="naked" />
+        <!-- Waiting for the first lines of the stream: skeleton rather than "no logs". -->
+        <template v-if="!state.logsReady && !state.logs.length">
+          <div v-for="i in 5" :key="i" class="grid grid-cols-[65px_52px_minmax(0,1fr)] items-center gap-y-1.5 text-xs" :aria-busy="true">
+            <USkeleton class="h-2.5 w-12" /><USkeleton class="h-2.5 w-8" /><USkeleton class="h-3 w-24" />
+            <USkeleton class="col-start-3 h-2.5 w-3/4" />
+          </div>
+        </template>
+        <UEmpty v-else-if="!shown.length" icon="i-lucide-search-x" :description="t('logs.empty')" variant="naked" />
         <div v-for="(l, i) in rows" :key="l.id" class="grid grid-cols-[65px_52px_minmax(0,1fr)] text-xs" :class="{ 'fm-fade-in': i === 0 && live && page === 1 }">
           <time class="pt-0.5 font-mono text-[10px] text-muted">{{ l.time }}</time>
           <span class="pt-0.5 text-[10px] font-semibold" :class="l.level === 'WARN' ? 'text-warning' : l.level === 'ERROR' ? 'text-error' : 'text-primary'">{{ l.level }}</span>
