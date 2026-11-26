@@ -133,7 +133,10 @@ func (e *Extractor) SyncInstalled() (bool, error) {
 
 // EnsurePHPVersionConfig copies php/php.ini and php/php-prod.ini into
 // php/<version>/ when missing there (ensure_php_version_config). Existing
-// copies are the user's and are never overwritten.
+// copies are the user's and are never overwritten. An empty directory where a
+// copy should be is what Docker creates when it mounts a file that does not
+// exist yet (php/<version>/ was created by another command, or the first start
+// failed): it is replaced by the file, otherwise PHP would run without its ini.
 func (e *Extractor) EnsurePHPVersionConfig(phpVersion string) error {
 	versionDir := e.path("php", phpVersion)
 	if err := platform.MakeUserDir(versionDir); err != nil {
@@ -141,6 +144,9 @@ func (e *Extractor) EnsurePHPVersionConfig(phpVersion string) error {
 	}
 	for _, name := range []string{"php.ini", "php-prod.ini"} {
 		base, target := e.path("php", name), filepath.Join(versionDir, name)
+		if err := e.removeEmptyDir(target); err != nil {
+			return err
+		}
 		if exists(target) || !isFile(base) {
 			continue
 		}
@@ -153,6 +159,24 @@ func (e *Extractor) EnsurePHPVersionConfig(phpVersion string) error {
 		}
 		platform.ChownToSudoUser(target)
 	}
+	return nil
+}
+
+// removeEmptyDir removes p when it is an empty directory, where a file is
+// expected. A directory with something in it is left alone (it is not Docker's
+// doing): the copy is then skipped, as for any existing path.
+func (e *Extractor) removeEmptyDir(p string) error {
+	info, err := os.Stat(p)
+	if err != nil || !info.IsDir() {
+		return nil
+	}
+	if err := os.Remove(p); err != nil {
+		if entries, rerr := os.ReadDir(p); rerr == nil && len(entries) > 0 {
+			return nil
+		}
+		return err
+	}
+	e.Log.Warning(i18n.Tf("Removed incorrectly created directory: %s", p))
 	return nil
 }
 

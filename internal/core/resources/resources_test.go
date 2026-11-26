@@ -207,6 +207,36 @@ func TestEnsurePHPVersionConfigKeepsExistingCopies(t *testing.T) {
 	}
 }
 
+// Docker creates a directory when it mounts a file that does not exist: an empty one where a php.ini copy belongs
+// is replaced by the copy, a filled one is left alone.
+func TestEnsurePHPVersionConfigRepairsEmptyDirectories(t *testing.T) {
+	e, _ := newTestExtractor(t, "2.0.0")
+	if err := e.Ensure(); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"php.ini", "php-prod.ini"} {
+		if err := os.Remove(e.path("php", "8.4", name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Mkdir(e.path("php", "8.4", "php.ini"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	filled := e.path("php", "8.4", "php-prod.ini")
+	if err := os.MkdirAll(filepath.Join(filled, "keep"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.EnsurePHPVersionConfig("8.4"); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(t, e, "php/8.4/php.ini"); got != "php/php.ini 2.0.0" {
+		t.Errorf("php.ini not restored over the empty directory: %q", got)
+	}
+	if info, err := os.Stat(filled); err != nil || !info.IsDir() {
+		t.Errorf("a directory with content must stay: %v", err)
+	}
+}
+
 func TestPermissionErrorExplainsTheFix(t *testing.T) {
 	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
 		t.Skip("needs Unix permissions and a non-root user")
