@@ -11,6 +11,9 @@ const config: CapacitorConfig = {
   // The WebView itself does not scroll: each screen has its own scrolling container (with its bounce), so the header
   // stays in place instead of being dragged along by the bounce of the whole page.
   ios: { contentInset: 'never', scrollEnabled: false },
+  // Pinch zoom (accessibility): the viewport limits it on iOS only to avoid the zoom on a focused field, and the iOS
+  // app ignores that limit for the user (MainViewController.swift).
+  zoomEnabled: true,
   plugins: {
     // The native screen stays until the page has painted its identical HTML splash screen (src/lib/splash.ts), which
     // adds the spinner: no blank screen between the two.

@@ -13,7 +13,9 @@ import { shell } from '@app/lib/shell'
 import { deviceLabel } from './lib/device'
 import { currentInstance, displayAddress, displayName, isDemo } from './lib/instances'
 import { mountNativeTabBar, nativeTabs } from './lib/nativeTabBar'
+import { mountNativeSegments, nativeSegments } from './lib/nativeSegments'
 import { INSTANCES } from './router'
+import { pageAvailable } from '@app/nav'
 
 // Dashboard layout (web/app pages), on the instance chosen in the list.
 const { t } = useI18n()
@@ -27,17 +29,21 @@ shell.switchTo = INSTANCES.path
 
 let appState: PluginListenerHandle | undefined
 let unmountTabBar: (() => void) | undefined
+let unmountSegments: (() => void) | undefined
 onMounted(async () => {
   // The demo runs on the phone itself: like the dashboard on its own machine, no password asked again.
   connect(inst, { mode: isDemo(inst) ? 'local' : 'remote', client: deviceLabel() })
   // On iPhone, the native tab bar (Liquid Glass since iOS 26) replaces BottomNav.
   void mountNativeTabBar(router).then((fn) => { unmountTabBar = fn })
+  // On iOS, the tabs of the pages are a native segmented control below the header (phone width).
+  void mountNativeSegments().then((fn) => { unmountSegments = fn })
   // Streams paused when the app goes to the background, resumed on return.
   appState = await CapApp.addListener('appStateChange', ({ isActive }) => (isActive ? resume() : pause()))
 })
 onBeforeUnmount(() => {
   disconnect()
   unmountTabBar?.()
+  unmountSegments?.()
   void appState?.remove()
   shell.name = ''
   shell.address = ''
@@ -51,6 +57,9 @@ const scroller = useTemplateRef<HTMLElement>('scroller')
 watch(() => route.path, () => scroller.value?.scrollTo({ top: 0 }))
 watch([() => route.name, () => state.loaded], ([name, loaded]) => { if (loaded) void loadPage(String(name ?? '')) }, { immediate: true })
 
+// Page hidden while its service is off (nav.ts): back to Containers, where it is turned on.
+watch(() => state.loaded && !pageAvailable(String(route.name ?? '')), (off) => { if (off) void router.replace({ name: 'containers' }) }, { immediate: true })
+
 // Session revoked or expired (401, marked by main.ts): back to the sign-in.
 watch(() => inst.expired, (expired) => {
   if (!expired) return
@@ -63,13 +72,13 @@ watch(() => inst.expired, (expired) => {
   <!--
     Only the content scrolls, in its own container: the header stays in place, even when the content bounces at the
     top or bottom (iOS). On a phone, the bottom padding leaves the navigation bar and the home indicator area below
-    the content.
+    the content, and the top padding of the scrolling container the native page tabs (the content scrolls under them).
   -->
   <div class="fixed inset-0 flex flex-col overflow-hidden">
     <AppSidebar />
     <div class="flex min-h-0 flex-1 flex-col" :class="sidebarCollapsed ? 'md:ml-[72px]' : 'md:ml-[228px]'">
       <AppHeader />
-      <div ref="scroller" class="min-h-0 flex-1 overflow-y-auto">
+      <div ref="scroller" class="min-h-0 flex-1 overflow-y-auto" :class="nativeSegments && 'pt-(--native-segments-height)'">
         <main
           class="mx-auto w-full max-w-7xl px-gutter pt-6 [--gutter:1.25rem] md:pt-7 md:[--gutter:1.5rem] md:pb-[calc(2.5rem+var(--sab))] xl:pt-[30px] xl:[--gutter:2rem]"
           :class="nativeTabs ? 'pb-[calc(var(--native-tabbar-height)+1.5rem)]' : 'pb-[calc(7.5rem+var(--sab))]'"

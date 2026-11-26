@@ -17,6 +17,9 @@ import { loadAppLock } from './lib/appLock'
 import { setUpDisplay } from './lib/display'
 import { setSettingsCard } from '@app/lib/shell'
 import AppLockSettings from './components/AppLockSettings.vue'
+import { allowPinchZoom } from '@app/lib/viewport'
+
+allowPinchZoom()
 
 // The HTML splash screen is already displayed (index.html): the native one can go.
 handOffNativeSplash()

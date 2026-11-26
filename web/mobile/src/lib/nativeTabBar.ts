@@ -5,6 +5,7 @@ import { state } from '@app/composables/useFm'
 import { draftPrefs } from '@app/composables/usePrefs'
 import { language, t } from '@app/i18n'
 import { splashDone } from './splash'
+import { dialogOpen, watchOverlays } from './overlays'
 
 /**
  * Native iOS tab bar (ios/App/App/NativeTabBarPlugin.swift): Liquid Glass from iOS 26 on. It replaces BottomNav on
@@ -50,7 +51,8 @@ export async function mountNativeTabBar(router: Router): Promise<() => void> {
     return () => {}
   }
   nativeTabs.value = true
-  document.documentElement.style.setProperty('--native-tabbar-height', `${height}px`)
+  // Screen points: divided by the interface zoom (main.css) to stay the same on screen.
+  document.documentElement.style.setProperty('--native-tabbar-height', `calc(${height}px / var(--fm-zoom, 1))`)
 
   // Primary colour and theme of the app (Settings): the Settings page previews them before saving them.
   const stopAppearance = watch(
@@ -62,15 +64,14 @@ export async function mountNativeTabBar(router: Router): Promise<() => void> {
   const tap = await NativeTabBar.addListener('tabSelected', ({ id }) => { void router.push(id) })
   const stopRoute = watch(() => router.currentRoute.value.path, () => { void NativeTabBar.select({ id: current() }) })
 
-  // The native bar lies above the whole page: it is hidden while a modal, a slideover or the menu (dialog role in
-  // Nuxt UI) is open, otherwise it would cover its bottom.
+  // The native bar lies above the whole page: it is hidden while a modal, a slideover or the menu is open, otherwise
+  // it would cover its bottom.
+  const stopOverlays = watchOverlays()
   let hidden = false
   const sync = () => {
-    const hide = !!document.querySelector('[role="dialog"], [role="alertdialog"]')
-    if (hide !== hidden) { hidden = hide; void NativeTabBar.setHidden({ hidden: hide }) }
+    if (dialogOpen.value !== hidden) { hidden = dialogOpen.value; void NativeTabBar.setHidden({ hidden }) }
   }
-  const observer = new MutationObserver(sync)
-  observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['role', 'data-state'] })
+  const stopHidden = watch(dialogOpen, sync, { immediate: true })
 
   // Language changed (Settings): the bar is shown again with the new titles. show() reuses the bar and makes it
   // visible, so the hidden state is synced again afterwards.
@@ -79,7 +80,8 @@ export async function mountNativeTabBar(router: Router): Promise<() => void> {
   })
 
   return () => {
-    observer.disconnect()
+    stopHidden()
+    stopOverlays()
     stopLanguage()
     stopRoute()
     stopAppearance()

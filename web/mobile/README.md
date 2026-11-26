@@ -15,8 +15,9 @@ It is a member of the `web/` pnpm workspace: the pages, components and store com
 | `src/lib/instances.ts` | Instance list (Capacitor Preferences) and their tokens (secure store) |
 | `src/lib/secureStore.ts` | Keychain / Keystore access (`SecureStore` plugin of the app) |
 | `src/lib/pairing.ts` | Pairing link parsing, QR code scanner, `frankenmanager://` links |
-| `src/lib/nativeTabBar.ts`, `src/lib/splash.ts` | Native iOS tab bar, splash screen hand-off |
-| `ios/`, `android/` | Native projects, with the app's own plugins (`NativeTabBarPlugin.swift`, `SecureStorePlugin.swift`, `SecureStorePlugin.java`) |
+| `src/lib/nativeTabBar.ts`, `src/lib/nativeSegments.ts`, `src/lib/overlays.ts` | Native iOS tab bar and page tabs, hidden while a modal, the menu or a toast is open |
+| `src/lib/splash.ts`, `src/lib/display.ts` | Splash screen hand-off, automatic text size of the iPad app on a Mac |
+| `ios/`, `android/` | Native projects, with the app's own plugins (`NativeTabBarPlugin.swift`, `NativeSegmentsPlugin.swift`, `SecureStorePlugin.swift`, `SecureStorePlugin.java`) |
 | `scripts/` | Version and build number, iOS signing, extra icons |
 | `assets/` | Sources of the icons and splash screens |
 
@@ -31,6 +32,13 @@ It is a member of the `web/` pnpm workspace: the pages, components and store com
   Liquid Glass from iOS 26 on (classic blurred look before). It replaces the HTML bar (Aperçu, Projets, Services,
   Réglages, with SF Symbols), follows the open page, takes the primary colour of the app, and hides while a modal or
   the menu is open. On Android, in the browser and on iPad (sidebar), the bar stays in HTML.
+- **Native page tabs on iPhone**: `ios/App/App/NativeSegmentsPlugin.swift` pins a `UISegmentedControl` below the
+  header, the content scrolling under it; it scrolls sideways when the labels are long. The pages show it through
+  `PageTabs` (`web/app`, `shell.pageTabs`) at phone width; on Android and in the browser it is drawn in HTML, and
+  from the tablet up the tabs stay underlined.
+- **Text size and zoom**: the size of Settings is a CSS zoom of the page on every platform (the native `pageZoom`
+  of the WebView kept the layout at the unzoomed width: the iPad app on a Mac overflowed its window). Pinching is
+  allowed (`zoomEnabled`, `ignoresViewportScaleLimits`); `maximum-scale=1` only stops iOS zooming in on a field.
 - **Demo mode**: "Try the demo" on the instance list (see below).
 - Left out of the app: updating FrankenManager (`sudo frankenmanager update` on the machine). Changing the dashboard
   password signs the app out too: sign in again, or pair again.

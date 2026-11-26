@@ -2,7 +2,7 @@ import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import ui from '@nuxt/ui/vite'
-import { uiIcons, uiTheme } from '../app/src/theme'
+import { uiCss, uiIcons, uiTheme } from '../app/src/theme'
 // @ts-expect-error Node script without type declarations
 import { appVersion } from './scripts/app-version.mjs'
 
@@ -20,7 +20,7 @@ export default defineConfig({
   plugins: [
     vue(),
     // Bundled Lucide icons, the shared pages and .ts files included: no calls to the Iconify API.
-    ui({ ui: uiTheme, icon: uiIcons }),
+    ui({ ui: uiTheme, icon: uiIcons, ...uiCss }),
   ],
   resolve: {
     alias: { '@app': fileURLToPath(new URL('../app/src', import.meta.url)) },

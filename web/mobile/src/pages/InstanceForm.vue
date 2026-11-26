@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PasswordInput from '@app/components/PasswordInput.vue'
 import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
@@ -102,7 +103,7 @@ async function scan() {
           <UInput v-model="name" placeholder="MacBook-Pro" size="xl" class="w-full" />
         </UFormField>
         <UFormField :label="t('signIn.password')" required>
-          <UInput v-model="password" type="password" size="xl" class="w-full" autocomplete="current-password" />
+          <PasswordInput v-model="password" size="xl" class="w-full" autocomplete="current-password" />
         </UFormField>
 
         <UAlert v-if="error" color="error" variant="subtle" icon="i-lucide-circle-alert" :description="error" />
