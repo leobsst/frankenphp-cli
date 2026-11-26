@@ -10,7 +10,7 @@ import { state } from '@app/composables/useFm'
 import { setUnauthorizedHandler } from '@app/lib/api'
 import App from './App.vue'
 import { router } from './router'
-import { loadCurrent, loadInstances, patchInstance } from './lib/instances'
+import { loadInstances, patchInstance } from './lib/instances'
 import { handOffNativeSplash } from './lib/splash'
 import { registerDemo } from './demo'
 import { loadAppLock } from './lib/appLock'
@@ -49,5 +49,5 @@ async function loadPhoneLanguage() {
 if (Capacitor.isNativePlatform()) setSettingsCard(AppLockSettings)
 
 // Before mounting: the lock (nothing shows before LockScreen) and the interface size (the first screen has it).
-void Promise.all([loadInstances().then(loadCurrent), loadPhoneLanguage(), loadAppLock().catch(() => {}), setUpDisplay()])
+void Promise.all([loadInstances(), loadPhoneLanguage(), loadAppLock().catch(() => {}), setUpDisplay()])
   .then(() => createApp(App).use(i18n).use(router).use(ui).mount('#app'))

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import type { DropdownMenuItem } from '@nuxt/ui'
@@ -67,17 +67,69 @@ async function scan() {
 const menu = (inst: Instance): DropdownMenuItem[] => [
   // The demo has no session to open again.
   ...(isDemo(inst) ? [] : [{ label: t('mobile.instances.reconnect'), icon: 'i-lucide-key-round', onSelect: () => router.push(`/instances/${inst.id}/connexion`) }]),
-  {
-    label: t('mobile.instances.remove'),
-    icon: 'i-lucide-trash-2',
-    color: 'error',
-    onSelect: async () => {
-      if (!isDemo(inst)) await logout(inst)
-      await removeInstance(inst.id)
-      if (current.id === inst.id) await setCurrent(null)
-    },
-  },
+  { label: t('mobile.instances.remove'), icon: 'i-lucide-trash-2', color: 'error', onSelect: () => { removing.value = inst } },
 ]
+
+// Removal, from the menu or a swipe: always confirmed first.
+const removing = ref<Instance | null>(null)
+const removingName = computed(() => (removing.value ? displayName(removing.value) : ''))
+async function confirmRemove() {
+  const inst = removing.value
+  removing.value = null
+  if (!inst) return
+  if (!isDemo(inst)) await logout(inst)
+  await removeInstance(inst.id)
+  if (current.id === inst.id) await setCurrent(null)
+}
+
+/**
+ * Swipe of a row: to the right opens the instance, to the left asks to remove it, once released past SWIPE. The
+ * direction is decided after a few pixels: a vertical move stays a scroll of the list (touch-action: pan-y).
+ */
+const SWIPE = 96
+const swipe = reactive({ id: '', dx: 0, dragging: false })
+let gesture: { id: string; x: number; y: number; axis: '' | 'x' | 'y' } | null = null
+/** A swipe just ended: the click that follows it does not open the instance. */
+let swiped = false
+function down(e: PointerEvent, inst: Instance) {
+  if (e.pointerType === 'mouse' && e.button !== 0) return
+  gesture = { id: inst.id, x: e.clientX, y: e.clientY, axis: '' }
+  swiped = false
+}
+function move(e: PointerEvent) {
+  if (!gesture) return
+  const dx = e.clientX - gesture.x
+  const dy = e.clientY - gesture.y
+  if (!gesture.axis) {
+    if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return
+    gesture.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y'
+    if (gesture.axis === 'x') (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+  }
+  if (gesture.axis !== 'x') return
+  swiped = true
+  // Past the threshold the row follows the finger less: the action is armed.
+  const past = Math.max(0, Math.abs(dx) - SWIPE)
+  Object.assign(swipe, { id: gesture.id, dx: Math.sign(dx) * (Math.min(Math.abs(dx), SWIPE) + past * 0.3), dragging: true })
+}
+function up(inst: Instance) {
+  if (!gesture) return
+  const dx = swipe.id === inst.id ? swipe.dx : 0
+  gesture = null
+  Object.assign(swipe, { dx: 0, dragging: false })
+  if (dx >= SWIPE) void open(inst)
+  else if (dx <= -SWIPE) removing.value = inst
+}
+const dxOf = (inst: Instance) => (swipe.id === inst.id ? swipe.dx : 0)
+function click(inst: Instance) {
+  if (swiped) { swiped = false; return }
+  void open(inst)
+}
+
+/** Badges not known yet (first probe): skeletons of their size, so that the row does not jump. */
+const probing = (inst: Instance) => {
+  const p = probes[inst.id]
+  return !inst.expired && (!p || p.state === 'loading') && p?.hosts === undefined
+}
 
 const dot: Record<Probe['state'], string> = {
   loading: 'bg-dimmed animate-pulse',
@@ -119,31 +171,46 @@ const dot: Record<Probe['state'], string> = {
         </div>
       </div>
 
-      <div
-        v-for="inst in store.list"
-        :key="inst.id"
-        class="rounded-lg border border-default bg-default flex items-stretch overflow-hidden active:bg-elevated"
-      >
-        <button type="button" class="flex-1 min-w-0 text-left p-4 flex gap-3 items-start" @click="open(inst)">
-          <span class="mt-1.5 size-2.5 shrink-0 rounded-full" :class="dot[probes[inst.id]?.state ?? 'loading']" />
-          <span class="min-w-0 flex-1 space-y-1">
-            <span class="block font-semibold text-highlighted truncate">{{ displayName(inst) }}</span>
-            <span class="block text-xs text-muted truncate">{{ displayAddress(inst) }}<template v-if="inst.version"> · v{{ inst.version }}</template></span>
-            <span class="flex flex-wrap gap-1.5 pt-1">
-              <UBadge v-if="isDemo(inst)" color="primary" variant="solid" icon="i-lucide-flask-conical" :label="t('mobile.demo.badge')" />
-              <template v-if="probes[inst.id]?.state === 'online'">
-                <UBadge :color="probes[inst.id]?.running ? 'success' : 'neutral'" variant="subtle" :label="probes[inst.id]?.running ? t('mobile.instances.stackOnline') : t('mobile.instances.stackStopped')" />
-                <UBadge color="neutral" variant="outline" :label="t('mobile.instances.domains', { n: formatNumber(probes[inst.id]?.hosts ?? 0) }, probes[inst.id]?.hosts ?? 0)" />
-              </template>
-              <UBadge v-else-if="probes[inst.id]?.state === 'expired'" color="warning" variant="subtle" :label="t('mobile.instances.expired')" />
-              <UBadge v-else-if="probes[inst.id]?.state === 'offline'" color="error" variant="subtle" :label="t('mobile.instances.unreachable')" />
-            </span>
+      <div v-for="inst in store.list" :key="inst.id" class="relative overflow-hidden rounded-lg border border-default">
+        <!-- Action revealed under the row by a swipe: open (to the right) or remove (to the left). -->
+        <div
+          v-if="dxOf(inst)" aria-hidden="true"
+          class="absolute inset-0 flex items-center px-5 text-sm font-semibold text-inverted"
+          :class="dxOf(inst) > 0 ? 'justify-start bg-primary' : 'justify-end bg-error'"
+        >
+          <span class="flex items-center gap-2" :class="Math.abs(dxOf(inst)) < SWIPE && 'opacity-60'">
+            <template v-if="dxOf(inst) > 0"><UIcon name="i-lucide-log-in" class="size-5" />{{ t('mobile.instances.connect') }}</template>
+            <template v-else>{{ t('mobile.instances.swipeRemove') }}<UIcon name="i-lucide-trash-2" class="size-5" /></template>
           </span>
-          <UIcon name="i-lucide-chevron-right" class="size-5 text-dimmed mt-1" />
-        </button>
-        <UDropdownMenu :items="menu(inst)" :content="{ align: 'end' }">
-          <UButton icon="i-lucide-ellipsis-vertical" color="neutral" variant="ghost" class="rounded-none px-3" :aria-label="t('common.actions')" />
-        </UDropdownMenu>
+        </div>
+        <div
+          class="relative flex items-stretch bg-default touch-pan-y select-none active:bg-elevated"
+          :style="{ transform: `translateX(${dxOf(inst)}px)`, transition: swipe.dragging && swipe.id === inst.id ? 'none' : 'transform 200ms ease' }"
+          @pointerdown="down($event, inst)" @pointermove="move" @pointerup="up(inst)" @pointercancel="up(inst)"
+          >
+          <button type="button" class="flex-1 min-w-0 text-left p-4 flex gap-3 items-start" @click="click(inst)">
+            <span class="mt-1.5 size-2.5 shrink-0 rounded-full" :class="dot[probes[inst.id]?.state ?? 'loading']" />
+            <span class="min-w-0 flex-1 space-y-1">
+              <span class="block font-semibold text-highlighted truncate">{{ displayName(inst) }}</span>
+              <span class="block text-xs text-muted truncate">{{ displayAddress(inst) }}<template v-if="inst.version"> · v{{ inst.version }}</template></span>
+              <span class="flex flex-wrap gap-1.5 pt-1">
+                <UBadge v-if="isDemo(inst)" color="primary" variant="solid" icon="i-lucide-flask-conical" :label="t('mobile.demo.badge')" />
+                <template v-if="probing(inst)">
+                  <USkeleton class="h-5 w-24 rounded-md" /><USkeleton class="h-5 w-20 rounded-md" />
+                </template>
+                <template v-else-if="probes[inst.id]?.state === 'online'">
+                  <UBadge :color="probes[inst.id]?.running ? 'success' : 'neutral'" variant="subtle" :label="probes[inst.id]?.running ? t('mobile.instances.stackOnline') : t('mobile.instances.stackStopped')" />
+                  <UBadge color="neutral" variant="outline" :label="t('mobile.instances.domains', { n: formatNumber(probes[inst.id]?.hosts ?? 0) }, probes[inst.id]?.hosts ?? 0)" />
+                </template>
+                <UBadge v-else-if="probes[inst.id]?.state === 'expired'" color="warning" variant="subtle" :label="t('mobile.instances.expired')" />
+                <UBadge v-else-if="probes[inst.id]?.state === 'offline'" color="error" variant="subtle" :label="t('mobile.instances.unreachable')" />
+              </span>
+            </span>
+          </button>
+          <UDropdownMenu :items="menu(inst)" :content="{ align: 'end' }">
+            <UButton icon="i-lucide-ellipsis-vertical" color="neutral" variant="ghost" class="rounded-none px-3" :aria-label="t('common.actions')" />
+          </UDropdownMenu>
+        </div>
       </div>
 
       <template v-if="store.list.length">
@@ -154,5 +221,16 @@ const dot: Record<Probe['state'], string> = {
 
       <p class="pt-4 text-center text-xs text-dimmed">{{ t('mobile.instances.version', { version, build }) }}</p>
     </main>
+
+    <UModal
+      :open="!!removing" :title="t('mobile.instances.removeTitle', { name: removingName })"
+      :description="removing && isDemo(removing) ? t('mobile.instances.removeDemoHelp') : t('mobile.instances.removeHelp')"
+      :ui="{ footer: 'justify-end gap-2' }" @update:open="(v: boolean) => { if (!v) removing = null }"
+    >
+      <template #footer>
+        <UButton color="neutral" variant="outline" :label="t('common.cancel')" @click="removing = null" />
+        <UButton color="error" icon="i-lucide-trash-2" :label="t('mobile.instances.remove')" @click="confirmRemove" />
+      </template>
+    </UModal>
   </div>
 </template>

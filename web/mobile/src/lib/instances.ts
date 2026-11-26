@@ -158,15 +158,13 @@ export function normalizeUrl(input: string): string {
 const CURRENT = 'fm-current'
 export const current = reactive<{ id: string | null }>({ id: null })
 
-export async function loadCurrent() {
-  const { value } = await Preferences.get({ key: CURRENT }).catch(() => ({ value: null }))
-  current.id = value && findInstance(value) ? value : null
-}
-
+/**
+ * Kept in memory only: a cold start opens the instance list, never straight into the last instance. The key that
+ * earlier versions stored is removed.
+ */
 export async function setCurrent(id: string | null) {
   current.id = id
-  if (id) await Preferences.set({ key: CURRENT, value: id })
-  else await Preferences.remove({ key: CURRENT })
+  await Preferences.remove({ key: CURRENT }).catch(() => {})
 }
 
 export const currentInstance = () => (current.id ? findInstance(current.id) : undefined)

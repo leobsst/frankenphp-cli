@@ -1372,7 +1372,12 @@
       "unreachable": "Injoignable",
       "reconnect": "Se reconnecter",
       "remove": "Retirer de l’app",
-      "version": "FrankenManager mobile {version} ({build})"
+      "version": "FrankenManager mobile {version} ({build})",
+      "connect": "Se connecter",
+      "removeTitle": "Retirer {name} de l’app ?",
+      "removeHelp": "Sa session est fermée sur la machine, où FrankenManager continue de tourner. Pour la retrouver, appairez-la de nouveau.",
+      "removeDemoHelp": "La démo et ses données simulées sont retirées ; vous pourrez la relancer.",
+      "swipeRemove": "Retirer"
     },
     "form": {
       "add": "Ajouter une instance",
