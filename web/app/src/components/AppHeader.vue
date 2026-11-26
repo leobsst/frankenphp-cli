@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import type { CommandPaletteGroup, CommandPaletteItem } from '@nuxt/ui'
 import { defineShortcuts } from '@nuxt/ui/composables'
-import { NAV, SETTINGS } from '../nav'
+import { SETTINGS, visibleNav } from '../nav'
 import { domainIcon, envLabel, state } from '../composables/useFm'
 import { navBurger } from '../composables/useSidebar'
 import SidebarContent from './SidebarContent.vue'
@@ -22,14 +22,11 @@ watch(navBurger, (shown) => { if (!shown) menuOpen.value = false })
 defineShortcuts({ meta_k: () => { searchOpen.value = true } })
 
 const local = computed(() => state.connection.mode === 'local')
-const connectionHint = computed(() => (local.value
-  ? t('header.connectionLocal', { host: state.connection.host, address: state.connection.address })
-  : t('header.connectionRemote', { host: state.connection.host, address: state.connection.address, client: state.connection.client })))
 
 const groups = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() => {
   const go = (path: string) => () => { router.push(path); searchOpen.value = false }
   return [
-    { id: 'pages', label: t('header.pages'), items: [...NAV, SETTINGS].map((p) => ({ label: t(p.labelKey), icon: p.icon, onSelect: go(p.path) })) },
+    { id: 'pages', label: t('header.pages'), items: [...visibleNav.value, SETTINGS].map((p) => ({ label: t(p.labelKey), icon: p.icon, onSelect: go(p.path) })) },
     {
       id: 'domains', label: t('header.domains'), items: state.domains.map((d) => ({
         label: d.name, suffix: d.archived ? t('header.archived') : envLabel(d),
@@ -58,12 +55,6 @@ const groups = computed<CommandPaletteGroup<CommandPaletteItem>[]>(() => {
     />
 
     <div class="ml-auto flex items-center gap-2 md:gap-5">
-      <UTooltip :text="connectionHint">
-        <UBadge
-          :label="local ? t('common.local') : t('common.remote')" :icon="local ? 'i-lucide-monitor' : 'i-lucide-smartphone'"
-          :color="local ? 'primary' : 'warning'" variant="soft" class="max-md:hidden"
-        />
-      </UTooltip>
       <UButton
         color="neutral" variant="outline" icon="i-lucide-search"
         class="w-[220px] flex-nowrap overflow-hidden whitespace-nowrap bg-muted text-xs font-normal text-muted max-md:hidden xl:w-[300px]"

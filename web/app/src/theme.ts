@@ -8,7 +8,8 @@
  */
 /**
  * Input fields on phones: text-sm instead of the text-base of the md / lg / xl sizes, closer to the rest of the
- * interface. iOS zooms in on a focused field under 16px: the viewport forbids zooming (index.html of each app).
+ * interface. iOS zooms in on a focused field under 16px: the maximum-scale of the viewport prevents it (index.html of
+ * each app), pinching stays possible.
  */
 const phoneFieldText = { compoundVariants: [{ size: ['md', 'lg', 'xl'], class: { base: 'max-md:text-sm/5' } }] }
 
@@ -94,4 +95,15 @@ export const uiIcons = {
   clientBundle: {
     scan: { globInclude: ['src/**/*.{vue,ts}', '../app/src/**/*.{vue,ts}'] },
   },
+}
+
+/**
+ * Size of the CSS (Nuxt UI generates the classes of every variant of every component it knows): only the components
+ * used in the sources of the application and of web/app (`@frankenmanager/app`), and only the colours of uiTheme
+ * (no `secondary`). Tailwind itself only generates the utilities found in the sources.
+ */
+export const uiCss = {
+  theme: { colors: ['primary', 'info', 'success', 'warning', 'error'] },
+  scanPackages: ['@frankenmanager/app'],
+  experimental: { componentDetection: true },
 }

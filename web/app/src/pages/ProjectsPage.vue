@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
 import PageHeader from '../components/PageHeader.vue'
 import MiniStats from '../components/MiniStats.vue'
+import PageTabs from '../components/PageTabs.vue'
 import TwoColumns from '../components/TwoColumns.vue'
 import ResourceTable from '../components/ResourceTable.vue'
 import NameCell from '../components/NameCell.vue'
@@ -13,7 +14,7 @@ import DomainActions from '../components/DomainActions.vue'
 import { focusField } from '../composables/focus'
 import { defaultRoot } from '../composables/caddyfile'
 import type { DropdownMenuItem } from '@nuxt/ui'
-import { DEPRECATED_PHP, PHP_VERSIONS, PROJECTS_ROOT, actions, active, archived, domainIcon, domainStatus, envLabel, isProxied, phpVersions, restoreCommand, servedPath, type Domain, type FieldErrors, type NewProject, type Php } from '../composables/useFm'
+import { DEPRECATED_PHP, PHP_VERSIONS, PROJECTS_ROOT, defaultPhp, actions, active, archived, domainIcon, domainStatus, envLabel, isProxied, phpVersions, restoreCommand, servedPath, type Domain, type FieldErrors, type NewProject, type Php } from '../composables/useFm'
 import { formatNumber } from '../i18n'
 import { useI18n } from 'vue-i18n'
 
@@ -24,7 +25,9 @@ const plural = (key: string, n: number) => t(key, { n: formatNumber(n) }, n)
 const tab = ref('active')
 const tabs = computed(() => [{ label: t('projects.tabs.active'), value: 'active' }, { label: t('projects.tabs.archived'), value: 'archived' }])
 
-const form = reactive({ name: 'blog.test', type: 'php' as NewProject['type'], root: '', php: '8.5' as Php, spa: false, alias: 'www.blog.test', ssl: true })
+// Nothing filled in in advance (examples as placeholders), except the PHP version: the one of the configuration.
+const form = reactive({ name: '', type: 'php' as NewProject['type'], root: '', php: defaultPhp(), spa: false, alias: '', ssl: true })
+watch(defaultPhp, (v) => { form.php = v })
 const isStatic = computed(() => form.type === 'static')
 const typeItems = computed(() => [{ label: t('projects.types.php'), value: 'php' }, { label: t('projects.types.static'), value: 'static' }])
 // Default served folder, shown as placeholder: `--root` is optional.
@@ -45,7 +48,7 @@ async function submit() {
   const err = await actions.addProject({ ...form, name: form.name.trim().toLowerCase(), alias: isStatic.value ? undefined : form.alias.trim().toLowerCase() || undefined })
   busy.value = false
   errors.value = err ?? {}
-  if (!err) Object.assign(form, { name: '', root: '', alias: '', spa: false })
+  if (!err) Object.assign(form, { name: '', root: '', php: defaultPhp(), alias: '', spa: false })
 }
 
 const count = (k: Domain['kind']) => active.value.filter((d) => d.kind === k).length
@@ -91,7 +94,7 @@ const columns = computed<TableColumn<Domain>[]>(() => [
     <UButton icon="i-lucide-plus" :label="t('projects.add')" size="lg" class="md:w-[205px]" @click="focusField('project-name')" />
   </PageHeader>
   <MiniStats :items="stats" />
-  <UTabs v-model="tab" :items="tabs" :content="false" variant="link" class="mt-5 mb-2" :ui="{ trigger: 'text-xs px-0 me-16 pb-2.5' }" />
+  <PageTabs v-model="tab" :items="tabs" />
 
   <TwoColumns>
     <ResourceTable
@@ -139,7 +142,7 @@ const columns = computed<TableColumn<Domain>[]>(() => [
         <USelect v-model="form.php" :items="phpItems" size="lg" class="w-full" />
       </UFormField>
       <UFormField v-if="!isStatic" :label="t('projects.form.alias')" :error="errors.alias">
-        <UInput v-model="form.alias" placeholder="www.blog.test" size="lg" class="w-full" @update:model-value="errors = {}" />
+        <UInput v-model="form.alias" :placeholder="`www.${form.name.trim().toLowerCase() || 'blog.test'}`" size="lg" class="w-full" @update:model-value="errors = {}" />
       </UFormField>
       <USwitch v-if="isStatic" v-model="form.spa" :label="t('projects.form.spa')" :description="t('projects.form.spaHelp', { index: '/index.html' })" />
       <USwitch v-else v-model="form.ssl" :label="t('projects.form.ssl')" />

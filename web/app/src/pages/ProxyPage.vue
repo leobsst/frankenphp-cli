@@ -3,6 +3,7 @@ import { computed, reactive, ref } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
 import PageHeader from '../components/PageHeader.vue'
 import MiniStats from '../components/MiniStats.vue'
+import PageTabs from '../components/PageTabs.vue'
 import TwoColumns from '../components/TwoColumns.vue'
 import ResourceTable from '../components/ResourceTable.vue'
 import NameCell from '../components/NameCell.vue'
@@ -23,7 +24,8 @@ const { t } = useI18n()
 
 const tab = ref('routes')
 const tabs = computed(() => [{ label: t('proxy.tabs.routes'), value: 'routes' }, { label: t('proxy.tabs.caddy'), value: 'caddy' }])
-const form = reactive({ source: 'preview.test', target: 'http://127.0.0.1:5173', type: 'address', protocol: 'https', websocket: true })
+// The domain is not filled in in advance: an example as placeholder.
+const form = reactive({ source: '', target: 'http://127.0.0.1:5173', type: 'address', protocol: 'https', websocket: true })
 const errors = ref<FieldErrors>({})
 const archive = ref<string | null>(null)
 const archivedKind = computed(() => state.domains.find((d) => d.name === archive.value)?.kind)
@@ -103,7 +105,7 @@ const columns = computed<TableColumn<Domain>[]>(() => [
     <UButton icon="i-lucide-plus" :label="t('proxy.addRoute')" size="lg" class="md:w-[205px]" @click="focusField('route-source')" />
   </PageHeader>
   <MiniStats :items="stats" />
-  <UTabs v-model="tab" :items="tabs" :content="false" variant="link" class="mt-5 mb-2" :ui="{ trigger: 'text-xs px-0 me-16 pb-2.5' }" />
+  <PageTabs v-model="tab" :items="tabs" />
 
   <TwoColumns>
     <ResourceTable v-if="tab === 'routes'" storage-key="proxy-routes" :title="t('proxy.table.title')" :data="active" :columns="columns" search-key="name">

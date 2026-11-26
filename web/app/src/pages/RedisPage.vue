@@ -3,13 +3,14 @@ import { computed, ref } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
 import PageHeader from '../components/PageHeader.vue'
 import MiniStats from '../components/MiniStats.vue'
+import PageTabs from '../components/PageTabs.vue'
 import TwoColumns from '../components/TwoColumns.vue'
 import ResourceTable from '../components/ResourceTable.vue'
 import NameCell from '../components/NameCell.vue'
 import SideForm from '../components/SideForm.vue'
 import InfoBanner from '../components/InfoBanner.vue'
 import ConfirmModal from '../components/ConfirmModal.vue'
-import { actions, isServiceBusy, redisMatch, serviceEnabled, state, toast, type RedisKey } from '../composables/useFm'
+import { actions, redisMatch, state, toast, type RedisKey } from '../composables/useFm'
 import { formatMegabytes, formatNumber, formatPercent } from '../i18n'
 import { useI18n } from 'vue-i18n'
 
@@ -31,7 +32,6 @@ const shown = computed(() => r.sample.filter((k) => redisMatch(applied.value, k.
 // Server-side SCAN MATCH: the pattern and key count are sent to the daemon.
 const scan = async () => { applied.value = pattern.value.trim() || '*'; await actions.scanRedis(applied.value, count.value) }
 
-const enabled = computed(() => serviceEnabled('redis'))
 const up = computed(() => state.containers.find((c) => c.kind === 'redis')?.status === 'running')
 const hits = computed(() => r.hits)
 const misses = computed(() => r.misses)
@@ -63,11 +63,11 @@ const uptime = computed(() => `${t('units.hours', { n: formatNumber(3) })} ${t('
 
 <template>
   <PageHeader :title="t('nav.redis')" :subtitle="t('redis.subtitle')">
-    <UButton v-if="!enabled" icon="i-lucide-power" :label="t('redis.enable')" size="lg" class="md:w-[205px]" :loading="isServiceBusy('redis')" @click="actions.setService('redis', true)" />
-    <UButton v-else icon="i-lucide-eraser" :label="t('redis.flush.button')" size="lg" class="md:w-[205px]" :disabled="!up || r.keys === 0" @click="flushOpen = true" />
+    <!-- Turned on and off in Configuration only: the page is hidden while Redis is off (nav.ts). -->
+    <UButton icon="i-lucide-eraser" :label="t('redis.flush.button')" size="lg" class="md:w-[205px]" :disabled="!up || r.keys === 0" @click="flushOpen = true" />
   </PageHeader>
   <MiniStats :items="stats" />
-  <UTabs v-model="tab" :items="tabs" :content="false" variant="link" class="mt-5 mb-2" :ui="{ trigger: 'text-xs px-0 me-16 pb-2.5' }" />
+  <PageTabs v-model="tab" :items="tabs" />
 
   <TwoColumns>
     <ResourceTable v-if="tab === 'keys'" storage-key="redis-keys" :title="applied === '*' ? t('redis.tabs.keys') : t('redis.keysMatching', { pattern: applied })" :data="shown" :columns="columns" search-key="key" :empty="t('redis.empty')">
@@ -110,16 +110,10 @@ const uptime = computed(() => `${t('units.hours', { n: formatNumber(3) })} ${t('
         <USelect v-model="count" size="lg" class="w-full" :items="[100, 500, 1000]" />
       </UFormField>
       <UButton type="submit" :label="t('common.search')" icon="i-lucide-search" size="lg" block :disabled="!up" />
-      <USwitch
-        :model-value="enabled" :disabled="isServiceBusy('redis')" :label="t('redis.form.enabled')"
-        :description="t('redis.form.enabledHelp', { command: 'service enable|disable redis' })"
-        @update:model-value="(v: boolean) => actions.setService('redis', v)"
-      />
     </SideForm>
   </TwoColumns>
 
-  <InfoBanner v-if="!enabled" tone="warning">{{ t('redis.banner.disabled', { container: 'franken_redis' }) }}</InfoBanner>
-  <InfoBanner v-else>{{ t('redis.banner.confirm') }}</InfoBanner>
+  <InfoBanner>{{ t('redis.banner.confirm') }}</InfoBanner>
   <ConfirmModal
     v-model:open="flushOpen"
     :eyebrow="t('redis.destructive')"

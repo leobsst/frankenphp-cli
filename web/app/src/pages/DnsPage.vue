@@ -3,6 +3,7 @@ import { computed, reactive, ref } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
 import PageHeader from '../components/PageHeader.vue'
 import MiniStats from '../components/MiniStats.vue'
+import PageTabs from '../components/PageTabs.vue'
 import TwoColumns from '../components/TwoColumns.vue'
 import ResourceTable from '../components/ResourceTable.vue'
 import NameCell from '../components/NameCell.vue'
@@ -20,7 +21,7 @@ const { t } = useI18n()
 
 const tab = ref('records')
 const tabs = computed(() => [{ label: t('dns.tabs.records'), value: 'records' }, { label: t('dns.tabs.clients'), value: 'clients' }, { label: t('dns.tabs.lan'), value: 'lan' }])
-const form = reactive({ ip: state.dns.ip, listen: state.dns.listen, upstream: state.dns.upstream, enabled: state.dns.enabled, port: String(state.dns.port) })
+const form = reactive({ ip: state.dns.ip, listen: state.dns.listen, upstream: state.dns.upstream, port: String(state.dns.port) })
 const error = ref<string>()
 const showIdle = ref(false)
 
@@ -73,11 +74,10 @@ const clientColumns = computed<TableColumn<DnsClient>[]>(() => [
 
 <template>
   <PageHeader :title="t('nav.dns')" :subtitle="t('dns.subtitle', { tld: '.test' })">
-    <UButton v-if="!state.dns.enabled" icon="i-lucide-power" :label="t('dns.enable')" size="lg" class="md:w-[205px]" :loading="busy" @click="actions.setService('dns', true)" />
-    <UButton v-else icon="i-lucide-rotate-cw" :label="t('dns.restart')" size="lg" class="md:w-[205px]" :loading="busy" :disabled="state.stack !== 'running'" @click="actions.restartDns()" />
+    <UButton icon="i-lucide-rotate-cw" :label="t('dns.restart')" size="lg" class="md:w-[205px]" :loading="busy" :disabled="state.stack !== 'running'" @click="actions.restartDns()" />
   </PageHeader>
   <MiniStats :items="stats" />
-  <UTabs v-model="tab" :items="tabs" :content="false" variant="link" class="mt-5 mb-2" :ui="{ trigger: 'text-xs px-0 me-4 md:me-16 pb-2.5' }" />
+  <PageTabs v-model="tab" :items="tabs" />
 
   <TwoColumns>
     <ResourceTable v-if="tab === 'records'" storage-key="dns-records" :title="t('dns.records.title', { tld: '.test' })" :data="active" :columns="recordColumns" search-key="name">
@@ -145,12 +145,10 @@ const clientColumns = computed<TableColumn<DnsClient>[]>(() => [
           <UInput v-model="form.port" inputmode="numeric" size="lg" class="w-full" @update:model-value="error = undefined" />
         </UFormField>
         <UFormField :label="t('dns.form.upstream')"><UInput v-model="form.upstream" size="lg" class="w-full" /></UFormField>
-        <USwitch v-model="form.enabled" :label="t('dns.form.enabled')" />
         <UButton type="submit" :label="t('common.save')" size="lg" block :loading="busy" />
       </SideForm>
     </div>
   </TwoColumns>
 
-  <InfoBanner v-if="!state.dns.enabled" tone="warning">{{ t('dns.banner.disabled', { tld: '.test' }) }}</InfoBanner>
   <InfoBanner v-else>{{ t('dns.banner.process') }}</InfoBanner>
 </template>

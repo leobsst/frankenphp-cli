@@ -2,8 +2,12 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <!-- No zoom: neither pinch nor the automatic zoom of iOS on a focused field (text under 16px, see theme.ts). -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <!--
+      maximum-scale: no automatic zoom of iOS on a focused field (text under 16px, see theme.ts). Pinching stays
+      possible: Safari ignores the limit for the user, and so does the iOS app (ignoresViewportScaleLimits); elsewhere
+      the limit is removed (app/src/lib/viewport.ts).
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
     <meta name="referrer" content="no-referrer" />
     <meta name="description" content="Tableau de bord de FrankenManager : sites, conteneurs et services de cette machine." />

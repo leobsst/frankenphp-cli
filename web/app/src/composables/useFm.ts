@@ -11,6 +11,11 @@ import { formatNumber, formatTime, setLanguage, t, type LanguagePref } from '../
 
 export type Php = '8.2' | '8.3' | '8.4' | '8.5'
 export const PHP_VERSIONS: Php[] = ['8.5', '8.4', '8.3', '8.2']
+/** PHP version of new projects: DEFAULT_PHP_VERSION of the configuration, 8.3 (the daemon's default) otherwise. */
+export const defaultPhp = (): Php => {
+  const v = state.config.DEFAULT_PHP_VERSION as Php
+  return PHP_VERSIONS.includes(v) ? v : '8.3'
+}
 export const DEPRECATED_PHP: Php[] = ['8.2']
 
 export type DomainStatus = 'online' | 'offline' | 'restarting'
@@ -294,8 +299,15 @@ function pushLog(level: LogLevel, source: string, msg: string, at = new Date()) 
   if (state.logs.length > 400) state.logs.length = 400
 }
 
+/**
+ * ANSI escape sequences (colours, styles) that some services write to their logs even without a terminal (Garage:
+ * `ESC[2m…ESC[0m`). The ESC control character is invisible on a desktop but drawn as an empty box on phones.
+ */
+const ANSI = /\x1b\[[0-?]*[ -/]*[@-~]|\x1b[@-_]/g
+
 /** `docker logs` line → log entry: Caddy JSON, or text whose level is guessed. */
-function parseLine(container: string, line: string, time: string) {
+function parseLine(container: string, raw: string, time: string) {
+  const line = raw.replace(ANSI, '')
   let level: LogLevel = /\b(error|fatal|panic|exception|critical)\b/i.test(line) ? 'ERROR' : /\bwarn(ing)?\b/i.test(line) ? 'WARN' : 'INFO'
   let msg = line
   if (line.startsWith('{')) {
@@ -636,10 +648,11 @@ async function regenerateCert(name: string | 'all') {
   state.ssl.regenerating = null
 }
 
-async function setService(name: ServiceName, on: boolean) {
+async function setService(name: ServiceName, on: boolean): Promise<string | null> {
   serviceBusy[name] = true
-  await operate(t(on ? 'store.service.enable' : 'store.service.disable', { service: SERVICES[name].label }), (c) => c.put(`/api/v1/services/${name}`, { enabled: on }), t('store.done'))
+  const err = await operate(t(on ? 'store.service.enable' : 'store.service.disable', { service: SERVICES[name].label }), (c) => c.put(`/api/v1/services/${name}`, { enabled: on }), t('store.done'))
   serviceBusy[name] = false
+  return err
 }
 
 function savePrefs(p: Prefs) {
@@ -672,6 +685,8 @@ export interface AccessEvent { at: number; ip: string; event: string; device?: s
 export type ConfigType = 'bool' | 'port' | 'text' | 'select' | 'secret'
 export interface ConfigDef {
   key: string
+  /** Section of the Configuration page (CONFIG_SECTIONS), and its name in the interface language. */
+  section: ConfigSection
   group: string
   type: ConfigType
   default: string
@@ -684,8 +699,23 @@ export interface ConfigDef {
 }
 type ApiSetting = Schema<'Setting'>
 
-/** Setting prefix → group (key under labels.configGroups). */
-const GROUPS: [RegExp, string][] = [
+/** Sections of the Configuration page, in order, with their icon (name under labels.configGroups). */
+export const CONFIG_SECTIONS = [
+  { id: 'general', icon: 'i-lucide-sliders-horizontal' },
+  { id: 'services', icon: 'i-lucide-power' },
+  { id: 'web', icon: 'i-lucide-server' },
+  { id: 'phpImages', icon: 'i-lucide-layers' },
+  { id: 'databases', icon: 'i-lucide-database' },
+  { id: 'redis', icon: 'i-lucide-zap' },
+  { id: 'websocket', icon: 'i-lucide-radio' },
+  { id: 's3', icon: 'i-lucide-hard-drive' },
+  { id: 'dns', icon: 'i-lucide-globe' },
+  { id: 'dashboard', icon: 'i-lucide-layout-dashboard' },
+] as const
+export type ConfigSection = (typeof CONFIG_SECTIONS)[number]['id']
+/** Setting → section. The switches of the optional services come first: they are only turned on and off here. */
+const GROUPS: [RegExp, ConfigSection][] = [
+  [/^(REDIS_ENABLED|SOKETI_ENABLED|S3_ENABLED|DNS_SERVER)$/, 'services'],
   [/^(DB_|MARIADB_|MYSQL_|POSTGRES_|PMA_|PGADMIN_)/, 'databases'], [/^REDIS_/, 'redis'], [/^SOKETI_/, 'websocket'],
   [/^S3_/, 's3'], [/^DNS_/, 'dns'], [/^(DASHBOARD_|DAEMON_)/, 'dashboard'], [/^WEB_/, 'web'],
   [/^(PHP_IMAGE|INSTALL_|EXTRA_)/, 'phpImages'],
@@ -697,10 +727,10 @@ export const GENERATED_CONFIG: Record<string, string> = {}
 function toConfigDef(s: ApiSetting): ConfigDef {
   const bool = !!s.values && s.values.length === 2 && s.values.includes('true') && s.values.includes('false')
   const type: ConfigType = s.secret ? 'secret' : bool ? 'bool' : s.values?.length ? 'select' : /_PORT$/.test(s.key) ? 'port' : 'text'
-  const group = GROUPS.find(([re]) => re.test(s.key))?.[1] ?? 'general'
+  const section = GROUPS.find(([re]) => re.test(s.key))?.[1] ?? 'general'
   return {
     // Getter: the group name follows the interface language.
-    key: s.key, get group() { return t(`labels.configGroups.${group}`) }, type, default: s.default,
+    key: s.key, section, get group() { return t(`labels.configGroups.${section}`) }, type, default: s.default,
     help: `${s.description}${s.applies ? ` · ${s.applies}` : ''}`, options: s.values, restart: !['now', 'live', 'daemon', 'alias'].includes(s.apply),
   }
 }
@@ -752,6 +782,9 @@ export function redisMatch(pattern: string, key: string) {
 }
 
 const ENGINE_LABEL: Record<string, DbEngine> = { mariadb: 'MariaDB', mysql: 'MySQL', postgresql: 'PostgreSQL' }
+/** Database engines of the machine (DB_ENGINES), in that order. */
+export const dbEngines = computed<DbEngine[]>(() => (state.config.DB_ENGINES || 'mariadb').split(',')
+  .map((e) => ENGINE_LABEL[e.trim().toLowerCase()]).filter((e): e is DbEngine => !!e))
 const engineId = (e: DbEngine) => ({ MariaDB: 'mariadb', MySQL: 'mysql', PostgreSQL: 'postgresql' })[e]
 async function loadDatabases() {
   if (!api) return
@@ -868,7 +901,7 @@ async function resetCaddyfile(name: string) {
 }
 
 /** DNS_* settings: saved one by one, then the DNS server reloads its configuration. */
-async function saveDns(dns: { ip: string; listen: string; port: number; upstream: string; enabled: boolean }) {
+async function saveDns(dns: { ip: string; listen: string; port: number; upstream: string }) {
   const values: Record<string, string> = {
     DNS_IP: dns.ip === state.connection.address ? '' : dns.ip, DNS_LISTEN_IP: dns.listen === '0.0.0.0' ? '' : dns.listen,
     DNS_PORT: String(dns.port), DNS_UPSTREAM: dns.upstream,
@@ -877,7 +910,6 @@ async function saveDns(dns: { ip: string; listen: string; port: number; upstream
     if ((state.config[k] ?? '') === v) continue
     if (await operate(t('store.setting.title', { key: k }), (c) => c.put(`/api/v1/settings/${k}`, { value: v }), t('store.setting.saved', { key: k }))) return
   }
-  if (dns.enabled !== state.dns.enabled) await setService('dns', dns.enabled)
   await loadDns()
 }
 async function restartDns() {

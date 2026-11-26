@@ -1,5 +1,7 @@
 {
   "common": {
+    "showPassword": "Show the password",
+    "hidePassword": "Hide the password",
     "actions": "Actions",
     "cancel": "Cancel",
     "save": "Save",
@@ -191,8 +193,6 @@
     "submit": "Create alias"
   },
   "header": {
-    "connectionLocal": "Local connection to {host} ({address})",
-    "connectionRemote": "Remote connection to {host} ({address}) · {client}",
     "pages": "Pages",
     "domains": "Domains",
     "archived": "Archived",
@@ -215,7 +215,6 @@
     "checkUpdate": "Check for updates",
     "homeLabel": "frankenmanager: overview",
     "hostMachine": "HOST MACHINE",
-    "managedMachine": "Managed machine: {name}",
     "latestAvailable": "· v{version} available",
     "unreachable": "Instance unreachable",
     "live": "Live",
@@ -318,6 +317,10 @@
     "empty": "No items."
   },
   "s3Objects": {
+    "pickTitle": "Choose a bucket",
+    "pickHelp": "Select a bucket to browse its folders and objects.",
+    "bucketPlaceholder": "Choose a bucket",
+    "parentFolder": "Parent folder",
     "readFailed": "Couldn’t list objects",
     "agoMinutes": "{n} min ago",
     "agoHours": "{n} h ago",
@@ -577,7 +580,6 @@
       "images": "PHP images"
     },
     "cpuUnderOne": "< {value}",
-    "enableService": "Enable {name}",
     "actions": {
       "start": "Start",
       "restart": "Restart",
@@ -604,8 +606,7 @@
       "resources": "Resources",
       "image": "Image",
       "domains": "Domains",
-      "service": "Service",
-      "enabled": "Enabled"
+      "service": "Service"
     },
     "table": {
       "docker": "Docker services",
@@ -636,7 +637,8 @@
       "unreachable": "Docker is unreachable. Start Docker Desktop to control the containers.",
       "healthy": "Docker is connected. All health checks pass.",
       "unhealthy": "Docker is connected. {n} service is not responding. | Docker is connected. {n} services are not responding."
-    }
+    },
+    "configureService": "Configure {name}"
   },
   "proxy": {
     "subtitle": "Caddy handles routing and HTTPS termination for your domains.",
@@ -719,7 +721,6 @@
   },
   "dns": {
     "subtitle": "Resolve your {tld} domains from every device on the network.",
-    "enable": "Enable DNS",
     "restart": "Restart DNS",
     "copied": "Copied",
     "tabs": {
@@ -785,11 +786,9 @@
       "listen": "Listen address",
       "port": "Listen port",
       "upstream": "Upstream resolvers",
-      "enabled": "Enable the local DNS server",
       "invalidPort": "Invalid port ({min}-{max})."
     },
     "banner": {
-      "disabled": "The DNS server is disabled: your devices cannot resolve {tld} domains.",
       "process": "The DNS server is not a container: it runs in a FrankenManager background process, which sees each device’s real address."
     }
   },
@@ -830,6 +829,7 @@
       "fingerprint": "SHA-256 fingerprint: {value}"
     },
     "form": {
+      "chooseDomain": "Choose a domain…",
       "title": "Regenerate a certificate",
       "description": "The existing certificate for this domain will be replaced.",
       "hint": "The CA private key is never shared. Turn off sharing after installation.",
@@ -850,7 +850,6 @@
   },
   "redis": {
     "subtitle": "Browse the shared cache keys and monitor its usage.",
-    "enable": "Enable Redis",
     "copied": "Copied",
     "destructive": "Destructive action",
     "tabs": {
@@ -890,12 +889,9 @@
       "description": "The daemon queries Redis with SCAN, without blocking the server.",
       "hint": "{any} matches any sequence of characters, {one} a single character.",
       "pattern": "Pattern (SCAN MATCH)",
-      "count": "Keys per page (COUNT)",
-      "enabled": "Redis service enabled",
-      "enabledHelp": "Started or stopped immediately ({command})."
+      "count": "Keys per page (COUNT)"
     },
     "banner": {
-      "disabled": "Redis is disabled: the {container} container does not exist. Enable it to use the cache.",
       "confirm": "Deleting a key or flushing the cache requires confirmation, plus the dashboard password over remote access."
     },
     "flush": {
@@ -912,8 +908,6 @@
   },
   "s3": {
     "subtitle": "Garage S3 server for your apps’ s3 disks.",
-    "enable": "Enable S3",
-    "disable": "Disable S3",
     "tabs": {
       "buckets": "Buckets",
       "objects": "Objects",
@@ -1024,14 +1018,11 @@
       "note": "A changed port, region or credential applies on the next stop / start. From the command line: {aws} (preconfigured AWS CLI) and {garage}."
     },
     "banner": {
-      "disabled": "S3 is disabled. Enabling it builds the ACL gateway, starts Garage and creates the certificate, hosts, reverse proxy route and DNS records for {domain} and the buckets. Objects stay in {dir} when it is disabled.",
       "enabled": "Buckets are private by default. As on AWS, an object written with the public-read ACL (Laravel’s “public” visibility) is readable without credentials; the others return 403."
     }
   },
   "websocket": {
     "subtitle": "Pusher-compatible server for Laravel Echo and broadcasting.",
-    "enable": "Enable Soketi",
-    "disable": "Disable Soketi",
     "stats": {
       "online": "Online",
       "stopped": "Stopped",
@@ -1059,7 +1050,6 @@
       "note": "A changed credential applies on the next stop / start."
     },
     "banner": {
-      "disabled": "Soketi is disabled. Enabling it creates the container, its certificate, the hosts entry, the reverse proxy route and the DNS record for {domain}.",
       "enabled": "Browsers go through Caddy over wss:// on port 443; your PHP apps publish events to {address}."
     }
   },
@@ -1097,6 +1087,7 @@
       "admin": "admin: phpMyAdmin and pgAdmin at {url}"
     },
     "form": {
+      "chooseEngine": "Choose an engine…",
       "engine": "Database engine"
     },
     "userForm": {
@@ -1167,7 +1158,9 @@
     "reset": "Reset",
     "resetKey": "Reset {key}",
     "empty": "No matching settings.",
-    "banner": "Secrets (passwords, Soketi app secret, S3 secrets) are masked as in {cmd}. Resetting a generated value generates a new one on the next start."
+    "banner": "Secrets (passwords, Soketi app secret, S3 secrets) are masked as in {cmd}. Resetting a generated value generates a new one on the next start.",
+    "sections": "Configuration sections",
+    "servicesHelp": "Optional services are turned on and off here only: their page only shows while they are on."
   },
   "access": {
     "subtitle": "Open the dashboard to your other devices, over HTTPS with a password.",
@@ -1712,7 +1705,8 @@
       "dashboard": "Dashboard",
       "web": "Web server",
       "phpImages": "PHP images",
-      "general": "General"
+      "general": "General",
+      "services": "Optional services"
     }
   }
 }

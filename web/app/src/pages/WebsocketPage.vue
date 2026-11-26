@@ -5,14 +5,13 @@ import MiniStats from '../components/MiniStats.vue'
 import TwoColumns from '../components/TwoColumns.vue'
 import InfoBanner from '../components/InfoBanner.vue'
 import { useI18n } from 'vue-i18n'
-import { actions, isServiceBusy, serviceEnabled, state, toast } from '../composables/useFm'
+import { serviceEnabled, state, toast } from '../composables/useFm'
 
 const { t } = useI18n()
 
 // Soketi (Pusher protocol): `frankenmanager service enable|disable soketi`.
 const reveal = ref(false)
 const enabled = computed(() => serviceEnabled('soketi'))
-const busy = computed(() => isServiceBusy('soketi'))
 const container = computed(() => state.containers.find((c) => c.kind === 'soketi'))
 const up = computed(() => container.value?.status === 'running')
 const c = state.config
@@ -61,13 +60,8 @@ function copyEnv() {
 </script>
 
 <template>
-  <PageHeader title="WebSocket (Soketi)" :subtitle="t('websocket.subtitle')">
-    <UButton
-      v-if="enabled" color="neutral" variant="outline" icon="i-lucide-power-off" :label="t('websocket.disable')" size="lg" class="md:w-[205px]"
-      :loading="busy" @click="actions.setService('soketi', false)"
-    />
-    <UButton v-else icon="i-lucide-power" :label="t('websocket.enable')" size="lg" class="md:w-[205px]" :loading="busy" @click="actions.setService('soketi', true)" />
-  </PageHeader>
+  <!-- Turned on and off in Configuration only: the page is hidden while Soketi is off (nav.ts). -->
+  <PageHeader title="WebSocket (Soketi)" :subtitle="t('websocket.subtitle')" />
   <MiniStats :items="stats" />
 
   <TwoColumns class="mt-6">
@@ -102,6 +96,5 @@ function copyEnv() {
     </UCard>
   </TwoColumns>
 
-  <InfoBanner v-if="!enabled">{{ t('websocket.banner.disabled', { domain: 'ws.frankenmanager.test' }) }}</InfoBanner>
-  <InfoBanner v-else>{{ t('websocket.banner.enabled', { address: `127.0.0.1:${c.SOKETI_PORT}` }) }}</InfoBanner>
+  <InfoBanner>{{ t('websocket.banner.enabled', { address: `127.0.0.1:${c.SOKETI_PORT}` }) }}</InfoBanner>
 </template>

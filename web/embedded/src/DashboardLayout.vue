@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, useTemplateRef, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
+import { pageAvailable } from '@app/nav'
 import { useI18n } from 'vue-i18n'
 import AppSidebar from '@app/components/AppSidebar.vue'
 import AppHeader from '@app/components/AppHeader.vue'
@@ -11,6 +12,7 @@ import { disconnect, loadPage, pause, refresh, resume, state } from '@app/compos
 // Dashboard layout (POC), on the instance connected by session.ts.
 const { t } = useI18n()
 const route = useRoute()
+const router = useRouter()
 
 // The content scrolls in its own container, below the header: it is scrolled back to the top on page change.
 const scroller = useTemplateRef<HTMLElement>('scroller')
@@ -18,6 +20,9 @@ watch(() => route.path, () => scroller.value?.scrollTo({ top: 0 }))
 
 // Page-specific data (Redis, databases, S3, DNS devices, access…): read when opening it, once the instance is loaded.
 watch([() => route.name, () => state.loaded], ([name, loaded]) => { if (loaded) void loadPage(String(name ?? '')) }, { immediate: true })
+
+// Page hidden while its service is off (nav.ts): back to Containers, where it is turned on.
+watch(() => state.loaded && !pageAvailable(String(route.name ?? '')), (off) => { if (off) void router.replace({ name: 'containers' }) }, { immediate: true })
 
 // Hidden tab: the streams stop, and resume on return.
 const onVisibility = () => (document.hidden ? pause() : resume())

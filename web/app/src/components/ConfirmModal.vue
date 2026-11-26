@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PasswordInput from './PasswordInput.vue'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { checkPassword, state } from '../composables/useFm'
@@ -48,7 +49,7 @@ function submit() {
           v-if="remote" :label="t('confirmModal.password')" :error="wrong ? t('confirmModal.wrongPassword') : undefined"
           :help="t('confirmModal.passwordHelp')" :ui="{ help: 'text-[11px]' }"
         >
-          <UInput v-model="password" type="password" :autofocus="!typeToConfirm" class="w-full" @update:model-value="wrong = false" />
+          <PasswordInput v-model="password" :autofocus="!typeToConfirm" class="w-full" @update:model-value="wrong = false" />
         </UFormField>
         <UAlert v-if="note" :color="noteTone ?? 'warning'" variant="soft" :description="note" :ui="{ description: 'text-xs' }" />
         <p v-if="hint" class="text-xs text-muted">{{ hint }}</p>

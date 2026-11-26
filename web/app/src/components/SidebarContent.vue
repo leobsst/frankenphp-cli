@@ -4,7 +4,7 @@ import { useResizeObserver, useScroll } from '@vueuse/core'
 import type { NavigationMenuItem } from '@nuxt/ui'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { NAV, SETTINGS } from '../nav'
+import { SETTINGS, visibleNav } from '../nav'
 import { state, updateAvailable, updates } from '../composables/useFm'
 import { shell } from '../lib/shell'
 import UpdateModal from './UpdateModal.vue'
@@ -16,7 +16,7 @@ const { t } = useI18n()
 
 // Pages are child routes of "/" (dashboard layout): without `exact`, the overview link
 // would stay active on every page.
-const main = computed<NavigationMenuItem[]>(() => NAV.map((n) => ({ label: t(n.labelKey), icon: n.icon, to: n.path, exact: n.path === '/', tooltip: props.collapsed })))
+const main = computed<NavigationMenuItem[]>(() => visibleNav.value.map((n) => ({ label: t(n.labelKey), icon: n.icon, to: n.path, exact: n.path === '/', tooltip: props.collapsed })))
 const bottom = computed<NavigationMenuItem[]>(() => [
   { label: t(SETTINGS.labelKey), icon: SETTINGS.icon, to: SETTINGS.path, tooltip: props.collapsed },
   ...(shell.switchTo ? [{ label: t('sidebar.switchInstance'), icon: 'i-lucide-server-cog', to: shell.switchTo, tooltip: props.collapsed }] : []),
@@ -27,7 +27,6 @@ const router = useRouter()
 /** Managed instance: its name in the app, or else the machine's name. */
 const instName = computed(() => shell.name || state.connection.host)
 const instAddress = computed(() => shell.address || state.connection.address)
-const local = computed(() => state.connection.mode === 'local')
 
 const updateOpen = ref(false)
 const updateTooltip = computed(() => {
@@ -67,19 +66,18 @@ const navUi = {
     <slot name="header-trailing" />
   </div>
 
-  <!-- Managed machine and connection type: local (this machine) or remote (remote access, mobile app). -->
-  <div v-if="!collapsed" class="mt-7 shrink-0">
-    <div class="mx-3 mb-2 flex items-center justify-between gap-2">
-      <p class="text-[10px] font-semibold tracking-[1.4px] text-muted">{{ t('sidebar.hostMachine') }}</p>
-      <UBadge :label="local ? t('common.local') : t('common.remote')" :color="local ? 'primary' : 'warning'" variant="soft" size="sm" />
-    </div>
-    <UTooltip :text="shell.switchTo ? t('sidebar.switchInstance') : t('sidebar.managedMachine', { name: instName })" :content="{ side: 'right' }">
+  <!--
+    Managed machine, only where several can be managed (the mobile app): it leads back to the instance list. The
+    dashboard of the binary only manages its own machine.
+  -->
+  <div v-if="!collapsed && shell.switchTo" class="mt-7 shrink-0">
+    <p class="mx-3 mb-2 text-[10px] font-semibold tracking-[1.4px] text-muted">{{ t('sidebar.hostMachine') }}</p>
+    <UTooltip :text="t('sidebar.switchInstance')" :content="{ side: 'right' }">
       <button
-        class="mx-1 flex h-14 w-[calc(100%-0.5rem)] items-center gap-2.5 rounded-lg border border-default bg-muted px-3 text-left text-muted"
-        :class="shell.switchTo && 'hover:border-accented'"
-        @click="shell.switchTo && router.push(shell.switchTo)"
+        class="mx-1 flex h-14 w-[calc(100%-0.5rem)] items-center gap-2.5 rounded-lg border border-default bg-muted px-3 text-left text-muted hover:border-accented"
+        @click="router.push(shell.switchTo)"
       >
-        <UIcon :name="local ? 'i-lucide-server' : 'i-lucide-smartphone'" class="size-5 shrink-0" />
+        <UIcon name="i-lucide-server" class="size-5 shrink-0" />
         <span class="min-w-0 flex-1">
           <span class="block truncate text-[13px] font-medium text-highlighted">{{ instName }}</span>
           <span class="block truncate font-mono text-[11px]">{{ instAddress }}</span>
@@ -89,7 +87,7 @@ const navUi = {
   </div>
 
   <!-- Only the main pages scroll when height runs short; the header and footer stay visible. -->
-  <div ref="scroller" class="min-h-0 flex-1 overflow-y-auto scrollbar-thin" :class="collapsed ? 'mt-7' : 'mt-5'" :style="fadeMask">
+  <div ref="scroller" class="min-h-0 flex-1 overflow-y-auto scrollbar-thin" :class="collapsed || !shell.switchTo ? 'mt-7' : 'mt-5'" :style="fadeMask">
     <UNavigationMenu :items="main" orientation="vertical" :collapsed="collapsed" :highlight="false" :ui="navUi" />
   </div>
   <UNavigationMenu :items="bottom" orientation="vertical" :collapsed="collapsed" :highlight="false" :ui="navUi" class="shrink-0 pt-4 pb-4" />

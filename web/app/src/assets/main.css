@@ -115,18 +115,36 @@ html.reduce-motion *::after {
 }
 
 /*
- * Interface size (Settings › Text size): the whole page is zoomed, the px sizes of the mockup included. --fm-zoom stays
- * 1 when the application zooms natively (iOS WebView). Full-screen containers are `fixed inset-0` rather than h-dvh:
- * a zoomed 100dvh would overflow the screen.
+ * Interface size (Settings › Text size): the whole page is zoomed, the px sizes of the mockup included, on every
+ * platform (the native zoom of the iOS WebView kept the layout at the unzoomed width: the page overflowed the screen).
+ * Full-screen containers are `fixed inset-0` rather than h-dvh: a zoomed 100dvh would overflow the screen. Lengths
+ * given by the system (safe areas, native tab bar) are divided by --fm-zoom so that they stay the same on screen.
  */
 html { zoom: var(--fm-zoom, 1); }
 
 body {
   @apply bg-muted text-default antialiased;
-  /* No double-tap zoom (the viewport already forbids the others). */
+  /* No double-tap zoom; pinching stays possible. */
   touch-action: manipulation;
   font-size: 13px;
   -webkit-tap-highlight-color: transparent;
+}
+
+/*
+ * Native behaviour that the Tailwind reset changes: no red glow around an invalid field (Firefox; the forms show their
+ * own errors), and the pointer over what can be clicked.
+ */
+@layer base {
+  input:invalid,
+  textarea:invalid,
+  select:invalid {
+    box-shadow: none;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
 }
 
 @keyframes fm-fade-in {
@@ -142,13 +160,13 @@ body {
 
 /*
  * Safe areas (notch, home indicator). iOS provides them through env(); on Android, Capacitor 8 injects them as
- * --safe-area-inset-* variables when the WebView ignores them.
+ * --safe-area-inset-* variables when the WebView ignores them. Screen lengths: divided by the interface zoom.
  */
 :root {
-  --sat: max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px));
-  --sab: max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px));
-  --sal: max(env(safe-area-inset-left, 0px), var(--safe-area-inset-left, 0px));
-  --sar: max(env(safe-area-inset-right, 0px), var(--safe-area-inset-right, 0px));
+  --sat: calc(max(env(safe-area-inset-top, 0px), var(--safe-area-inset-top, 0px)) / var(--fm-zoom, 1));
+  --sab: calc(max(env(safe-area-inset-bottom, 0px), var(--safe-area-inset-bottom, 0px)) / var(--fm-zoom, 1));
+  --sal: calc(max(env(safe-area-inset-left, 0px), var(--safe-area-inset-left, 0px)) / var(--fm-zoom, 1));
+  --sar: calc(max(env(safe-area-inset-right, 0px), var(--safe-area-inset-right, 0px)) / var(--fm-zoom, 1));
 }
 .pt-safe { padding-top: var(--sat); }
 .pb-safe { padding-bottom: var(--sab); }

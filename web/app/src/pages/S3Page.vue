@@ -4,6 +4,7 @@ import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import { useI18n } from 'vue-i18n'
 import PageHeader from '../components/PageHeader.vue'
 import MiniStats from '../components/MiniStats.vue'
+import PageTabs from '../components/PageTabs.vue'
 import TwoColumns from '../components/TwoColumns.vue'
 import ResourceTable from '../components/ResourceTable.vue'
 import NameCell from '../components/NameCell.vue'
@@ -12,7 +13,7 @@ import InfoBanner from '../components/InfoBanner.vue'
 import ConfirmModal from '../components/ConfirmModal.vue'
 import S3Objects from '../components/S3Objects.vue'
 import {
-  S3_DOMAIN, actions, isServiceBusy, s3Up, serviceEnabled, state, toast, validateBucket,
+  S3_DOMAIN, actions, s3Up, serviceEnabled, state, toast, validateBucket,
   type FieldErrors, type S3Bucket, type S3Key,
 } from '../composables/useFm'
 import { formatMegabytes, formatNumber } from '../i18n'
@@ -27,12 +28,11 @@ const tabs = computed(() => [
   { label: t('s3.tabs.buckets'), value: 'buckets' }, { label: t('s3.tabs.objects'), value: 'objects' },
   { label: t('s3.tabs.keys'), value: 'keys' }, { label: t('s3.tabs.laravel'), value: 'laravel' },
 ])
-// Bucket browsed in the Objects tab.
-const browsing = ref(s3.buckets[0]?.name ?? '')
-watch(() => s3.buckets.map((b) => b.name), (names) => { if (!names.includes(browsing.value)) browsing.value = names[0] ?? '' })
+// Bucket browsed in the Objects tab: none until one is chosen (in the tab, or Browse in the menu of a bucket).
+const browsing = ref('')
+watch(() => s3.buckets.map((b) => b.name), (names) => { if (!names.includes(browsing.value)) browsing.value = '' })
 
 const enabled = computed(() => serviceEnabled('s3'))
-const busy = computed(() => isServiceBusy('s3'))
 const up = computed(() => s3Up())
 
 const totalSize = computed(() => s3.buckets.reduce((a, b) => a + b.size, 0))
@@ -42,8 +42,9 @@ const stats = computed(() => [
     value: up.value ? t('s3.stats.online') : enabled.value ? t('s3.stats.stopped') : t('s3.stats.disabled'),
     sub: up.value ? t('s3.stats.onlineSub') : enabled.value ? t('s3.stats.stoppedSub') : 'service enable s3',
   },
-  { label: t('s3.stats.endpoint'), value: S3_DOMAIN, sub: t('s3.stats.endpointSub', { port: c.S3_PORT, region: c.S3_REGION }) },
   { label: t('s3.tabs.buckets'), value: s3.buckets.length, sub: t('s3.stats.bucketsSub', { size: formatMegabytes(totalSize.value), dir: c.S3_DIR }) },
+  // Last: on a phone, the card of the endpoint (the longest value) takes the full width.
+  { label: t('s3.stats.endpoint'), value: S3_DOMAIN, sub: t('s3.stats.endpointSub', { port: c.S3_PORT, region: c.S3_REGION }) },
 ])
 
 const keysOf = (b: string) => s3.keys.filter((k) => k.bucket === b).length
@@ -158,15 +159,10 @@ function copyEnv() {
 </script>
 
 <template>
-  <PageHeader :title="t('nav.s3')" :subtitle="t('s3.subtitle')">
-    <UButton
-      v-if="enabled" color="neutral" variant="outline" icon="i-lucide-power-off" :label="t('s3.disable')" size="lg" class="md:w-[205px]"
-      :loading="busy" @click="actions.setService('s3', false)"
-    />
-    <UButton v-else icon="i-lucide-power" :label="t('s3.enable')" size="lg" class="md:w-[205px]" :loading="busy" @click="actions.setService('s3', true)" />
-  </PageHeader>
+  <!-- Turned on and off in Configuration only: the page is hidden while S3 is off (nav.ts). -->
+  <PageHeader :title="t('nav.s3')" :subtitle="t('s3.subtitle')" />
   <MiniStats :items="stats" />
-  <UTabs v-model="tab" :items="tabs" :content="false" variant="link" class="mt-5 mb-2" :ui="{ trigger: 'text-xs px-0 me-4 md:me-16 pb-2.5' }" />
+  <PageTabs v-model="tab" :items="tabs" />
 
   <TwoColumns>
     <!-- Buckets -->
@@ -244,7 +240,7 @@ function copyEnv() {
     </template>
 
     <!-- Objects -->
-    <S3Objects v-else-if="tab === 'objects' && browsing" v-model:bucket="browsing" />
+    <S3Objects v-else-if="tab === 'objects'" v-model:bucket="browsing" />
 
     <!-- Laravel -->
     <template v-else>
@@ -290,8 +286,7 @@ function copyEnv() {
     </template>
   </TwoColumns>
 
-  <InfoBanner v-if="!enabled">{{ t('s3.banner.disabled', { domain: S3_DOMAIN, dir: c.S3_DIR }) }}</InfoBanner>
-  <InfoBanner v-else>{{ t('s3.banner.enabled') }}</InfoBanner>
+  <InfoBanner>{{ t('s3.banner.enabled') }}</InfoBanner>
 
   <ConfirmModal
     v-model:open="confirm.open"

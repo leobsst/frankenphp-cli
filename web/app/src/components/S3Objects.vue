@@ -17,11 +17,15 @@ const { t } = useI18n()
 
 const prefix = ref('')
 watch(bucket, () => { prefix.value = '' })
-// The daemon lists one folder at a time: the open folder is reloaded on every change.
-watch([bucket, prefix], ([b, p]) => { void loadObjects(b, p).catch((e) => toast('error', t('s3Objects.readFailed'), String(e?.message ?? e))) }, { immediate: true })
+// The daemon lists one folder at a time: the open folder is reloaded on every change (none before a bucket is chosen).
+watch([bucket, prefix], ([b, p]) => {
+  if (b) void loadObjects(b, p).catch((e) => toast('error', t('s3Objects.readFailed'), String(e?.message ?? e)))
+}, { immediate: true })
 const b = computed(() => state.s3.buckets.find((x) => x.name === bucket.value))
 
-interface Row { name: string; folder: boolean; obj?: S3Object; count: number }
+interface Row { name: string; folder: boolean; obj?: S3Object; count: number; parent?: boolean }
+/** Folder above the open one ('' for the root of the bucket). */
+const parent = computed(() => prefix.value.replace(/[^/]+\/$/, ''))
 const rows = computed<Row[]>(() => {
   const folders = new Map<string, number>()
   const files: Row[] = []
@@ -33,7 +37,9 @@ const rows = computed<Row[]>(() => {
     if (slash >= 0) folders.set(rest.slice(0, slash + 1), (folders.get(rest.slice(0, slash + 1)) ?? 0) + (o.size || o.modified ? 1 : 0))
     else files.push({ name: rest, folder: false, obj: o, count: 1 })
   }
-  return [...[...folders].map(([name, count]) => ({ name, folder: true, count })), ...files]
+  // Inside a folder, the first row goes back up one level.
+  const up: Row[] = prefix.value ? [{ name: '..', folder: true, count: 0, parent: true }] : []
+  return [...up, ...[...folders].map(([name, count]) => ({ name, folder: true, count })), ...files]
 })
 const crumbs = computed(() => {
   const parts = prefix.value.split('/').filter(Boolean)
@@ -111,14 +117,25 @@ async function submitUpload() {
 </script>
 
 <template>
-  <ResourceTable :title="t('s3Objects.title', { bucket })" :paginate="false" :data="rows" :columns="columns" search-key="name" :empty="t('s3Objects.empty')">
+  <!-- No bucket chosen yet: the choice is on the side (below on a phone). -->
+  <UCard v-if="!bucket" :ui="{ body: 'p-5 sm:p-5' }">
+    <div class="flex flex-col items-center gap-2 py-10 text-center">
+      <UIcon name="i-lucide-folder-search" class="size-8 text-dimmed" />
+      <h2 class="text-sm font-semibold text-highlighted">{{ t('s3Objects.pickTitle') }}</h2>
+      <p class="max-w-xs text-[11px] text-muted">{{ t('s3Objects.pickHelp') }}</p>
+    </div>
+  </UCard>
+  <ResourceTable v-else :title="t('s3Objects.title', { bucket })" :paginate="false" :data="rows" :columns="columns" search-key="name" :empty="t('s3Objects.empty')">
     <template #name-cell="{ row }">
-      <button v-if="row.original.folder" type="button" class="text-left" @click="prefix += row.original.name">
+      <button v-if="row.original.parent" type="button" class="text-left" @click="prefix = parent">
+        <NameCell icon="i-lucide-corner-left-up" :name="t('s3Objects.parentFolder')" :sub="`${bucket}/${parent}`" />
+      </button>
+      <button v-else-if="row.original.folder" type="button" class="text-left" @click="prefix += row.original.name">
         <NameCell icon="i-lucide-folder" :name="row.original.name" :sub="row.original.count ? t('s3Objects.objects', { n: formatNumber(row.original.count) }, row.original.count) : t('s3Objects.folder')" />
       </button>
       <NameCell v-else icon="i-lucide-file" :name="row.original.name" :sub="formatBytes(row.original.obj!.size)" />
     </template>
-    <template #modified-cell="{ row }">{{ row.original.folder ? t('common.none') : ago(row.original.obj!.modified) }}</template>
+    <template #modified-cell="{ row }">{{ row.original.parent ? '' : row.original.folder ? t('common.none') : ago(row.original.obj!.modified) }}</template>
     <template #visibility-cell="{ row }">
       <template v-if="!row.original.folder">
         <UBadge
@@ -137,9 +154,9 @@ async function submitUpload() {
   <div class="flex flex-col gap-6">
     <UCard :ui="{ body: 'p-5 sm:p-5' }">
       <UFormField label="Bucket">
-        <USelect v-model="bucket" :items="state.s3.buckets.map((x) => x.name)" size="lg" class="w-full" />
+        <USelect v-model="bucket" :items="state.s3.buckets.map((x) => x.name)" :placeholder="t('s3Objects.bucketPlaceholder')" size="lg" class="w-full" />
       </UFormField>
-      <nav class="mt-4 flex flex-wrap items-center gap-1 font-mono text-[11px]" :aria-label="t('s3Objects.folder')">
+      <nav v-if="bucket" class="mt-4 flex flex-wrap items-center gap-1 font-mono text-[11px]" :aria-label="t('s3Objects.folder')">
         <template v-for="(cr, i) in crumbs" :key="cr.to">
           <UIcon v-if="i" name="i-lucide-chevron-right" class="size-3 text-dimmed" />
           <button type="button" class="rounded px-1 hover:bg-elevated" :class="cr.to === prefix ? 'text-highlighted' : 'text-muted'" @click="prefix = cr.to">{{ cr.label }}</button>
@@ -147,6 +164,7 @@ async function submitUpload() {
       </nav>
     </UCard>
     <SideForm
+      v-if="bucket"
       :title="t('s3Objects.uploadTitle')"
       :description="t('s3Objects.uploadTo', { path: `${bucket}/${prefix}` })"
       :hint="t('s3Objects.uploadHint')"

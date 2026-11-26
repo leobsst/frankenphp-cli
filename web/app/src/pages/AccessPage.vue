@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import PasswordInput from '../components/PasswordInput.vue'
 import { computed, reactive, ref, watch } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
 import PageHeader from '../components/PageHeader.vue'
 import MiniStats from '../components/MiniStats.vue'
+import PageTabs from '../components/PageTabs.vue'
 import TwoColumns from '../components/TwoColumns.vue'
 import ResourceTable from '../components/ResourceTable.vue'
 import NameCell from '../components/NameCell.vue'
@@ -118,7 +120,7 @@ const logColumns = computed<TableColumn<AccessEvent>[]>(() => [
     <UButton icon="i-lucide-key-round" :label="t('common.password')" size="lg" class="md:w-[205px]" @click="tab = 'settings'; focusField(passwordSet() ? 'pw-current' : 'pw-new')" />
   </PageHeader>
   <MiniStats :items="stats" />
-  <UTabs v-model="tab" :items="tabs" :content="false" variant="link" class="mt-5 mb-2" :ui="{ trigger: 'text-xs px-0 me-16 pb-2.5' }" />
+  <PageTabs v-model="tab" :items="tabs" />
 
   <TwoColumns>
     <UCard v-if="tab === 'settings'" :ui="{ body: 'p-5 sm:p-5 flex flex-col gap-5' }">
@@ -176,13 +178,13 @@ const logColumns = computed<TableColumn<AccessEvent>[]>(() => [
       @submit="submitPassword"
     >
       <UFormField v-if="passwordSet()" :label="t('access.password.current')" :error="pwErrors.current">
-        <UInput id="pw-current" v-model="pw.current" type="password" size="lg" class="w-full" @update:model-value="pwErrors = {}" />
+        <PasswordInput id="pw-current" v-model="pw.current" autocomplete="current-password" size="lg" class="w-full" @update:model-value="pwErrors = {}" />
       </UFormField>
       <UFormField :label="t('access.password.new')" :help="t('access.password.newHelp')" :error="pwErrors.password" :ui="{ help: 'text-[11px]' }">
-        <UInput id="pw-new" v-model="pw.password" type="password" size="lg" class="w-full" @update:model-value="pwErrors = {}" />
+        <PasswordInput id="pw-new" v-model="pw.password" autocomplete="new-password" size="lg" class="w-full" @update:model-value="pwErrors = {}" />
       </UFormField>
       <UFormField :label="t('common.confirm')" :error="pwErrors.again">
-        <UInput v-model="pw.again" type="password" size="lg" class="w-full" @update:model-value="pwErrors = {}" />
+        <PasswordInput v-model="pw.again" autocomplete="new-password" size="lg" class="w-full" @update:model-value="pwErrors = {}" />
       </UFormField>
       <UButton type="submit" :label="t('access.password.save')" size="lg" block :loading="pwBusy" :disabled="!pw.password" />
     </SideForm>

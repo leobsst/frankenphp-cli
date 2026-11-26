@@ -1,5 +1,7 @@
 {
   "common": {
+    "showPassword": "Afficher le mot de passe",
+    "hidePassword": "Masquer le mot de passe",
     "actions": "Actions",
     "cancel": "Annuler",
     "save": "Enregistrer",
@@ -191,8 +193,6 @@
     "submit": "Créer l’alias"
   },
   "header": {
-    "connectionLocal": "Connexion locale à {host} ({address})",
-    "connectionRemote": "Connexion distante à {host} ({address}) · {client}",
     "pages": "Pages",
     "domains": "Domaines",
     "archived": "Archivé",
@@ -215,7 +215,6 @@
     "checkUpdate": "Rechercher une mise à jour",
     "homeLabel": "frankenmanager : vue d’ensemble",
     "hostMachine": "MACHINE HÔTE",
-    "managedMachine": "Machine pilotée : {name}",
     "latestAvailable": "· v{version} disponible",
     "unreachable": "Instance injoignable",
     "live": "En direct",
@@ -318,6 +317,10 @@
     "empty": "Aucun élément."
   },
   "s3Objects": {
+    "pickTitle": "Choisissez un bucket",
+    "pickHelp": "Sélectionnez un bucket pour parcourir ses dossiers et ses objets.",
+    "bucketPlaceholder": "Choisir un bucket",
+    "parentFolder": "Dossier parent",
     "readFailed": "Lecture impossible",
     "agoMinutes": "il y a {n} min",
     "agoHours": "il y a {n} h",
@@ -577,7 +580,6 @@
       "images": "Images PHP"
     },
     "cpuUnderOne": "< {value}",
-    "enableService": "Activer {name}",
     "actions": {
       "start": "Démarrer",
       "restart": "Redémarrer",
@@ -604,8 +606,7 @@
       "resources": "Ressources",
       "image": "Image",
       "domains": "Domaines",
-      "service": "Service",
-      "enabled": "Activé"
+      "service": "Service"
     },
     "table": {
       "docker": "Services Docker",
@@ -636,7 +637,8 @@
       "unreachable": "Docker est injoignable. Démarrez Docker Desktop pour piloter les conteneurs.",
       "healthy": "Docker est connecté. Tous les contrôles de santé sont réussis.",
       "unhealthy": "Docker est connecté. {n} service ne répond pas. | Docker est connecté. {n} services ne répondent pas."
-    }
+    },
+    "configureService": "Configurer {name}"
   },
   "proxy": {
     "subtitle": "Caddy gère le routage et la terminaison HTTPS de vos domaines.",
@@ -719,7 +721,6 @@
   },
   "dns": {
     "subtitle": "Résolvez vos domaines {tld} depuis tous les appareils du réseau.",
-    "enable": "Activer le DNS",
     "restart": "Redémarrer le DNS",
     "copied": "Copié",
     "tabs": {
@@ -785,11 +786,9 @@
       "listen": "Adresse d’écoute",
       "port": "Port d’écoute",
       "upstream": "Résolveurs en amont",
-      "enabled": "Activer le serveur DNS local",
       "invalidPort": "Port invalide ({min}-{max})."
     },
     "banner": {
-      "disabled": "Le serveur DNS est désactivé : vos appareils ne résolvent pas les domaines {tld}.",
       "process": "Le serveur DNS n’est pas un conteneur : il tourne dans un processus d’arrière-plan de FrankenManager, qui voit l’adresse réelle de chaque appareil."
     }
   },
@@ -830,6 +829,7 @@
       "fingerprint": "Empreinte SHA-256 : {value}"
     },
     "form": {
+      "chooseDomain": "Choisir un domaine…",
       "title": "Régénérer un certificat",
       "description": "Le certificat existant sera remplacé pour ce domaine.",
       "hint": "La clé privée de la CA n’est jamais partagée. Désactivez le partage après l’installation.",
@@ -850,7 +850,6 @@
   },
   "redis": {
     "subtitle": "Parcourez les clés du cache partagé et surveillez son utilisation.",
-    "enable": "Activer Redis",
     "copied": "Copié",
     "destructive": "Action destructive",
     "tabs": {
@@ -890,12 +889,9 @@
       "description": "Le daemon interroge Redis avec SCAN, sans bloquer le serveur.",
       "hint": "{any} remplace n’importe quelle suite de caractères, {one} un seul caractère.",
       "pattern": "Motif (SCAN MATCH)",
-      "count": "Clés par page (COUNT)",
-      "enabled": "Service Redis activé",
-      "enabledHelp": "Démarré ou arrêté immédiatement ({command})."
+      "count": "Clés par page (COUNT)"
     },
     "banner": {
-      "disabled": "Redis est désactivé : le conteneur {container} n’existe pas. Activez-le pour utiliser le cache.",
       "confirm": "Supprimer une clé ou vider le cache demande une confirmation, et le mot de passe du dashboard depuis l’accès distant."
     },
     "flush": {
@@ -912,8 +908,6 @@
   },
   "s3": {
     "subtitle": "Serveur S3 Garage pour les disques s3 de vos applications.",
-    "enable": "Activer S3",
-    "disable": "Désactiver S3",
     "tabs": {
       "buckets": "Buckets",
       "objects": "Objets",
@@ -1024,14 +1018,11 @@
       "note": "Un port, la région ou un identifiant modifié s’applique au prochain stop / start. En ligne de commande : {aws} (AWS CLI préconfigurée) et {garage}."
     },
     "banner": {
-      "disabled": "S3 est désactivé. L’activer construit la passerelle ACL, démarre Garage et crée le certificat, les hosts, la route du reverse proxy et les enregistrements DNS de {domain} et des buckets. Les objets restent dans {dir} quand on le désactive.",
       "enabled": "Les buckets sont privés par défaut. Comme sur AWS, un objet écrit avec l’ACL public-read (visibilité « public » de Laravel) se lit sans identifiants ; les autres répondent 403."
     }
   },
   "websocket": {
     "subtitle": "Serveur compatible Pusher pour Laravel Echo et le broadcasting.",
-    "enable": "Activer Soketi",
-    "disable": "Désactiver Soketi",
     "stats": {
       "online": "En ligne",
       "stopped": "Arrêté",
@@ -1059,7 +1050,6 @@
       "note": "Un identifiant modifié s’applique au prochain stop / start."
     },
     "banner": {
-      "disabled": "Soketi est désactivé. L’activer crée le conteneur, son certificat, l’entrée hosts, la route du reverse proxy et l’enregistrement DNS de {domain}.",
       "enabled": "Les navigateurs passent par Caddy en wss:// sur le port 443 ; vos applications PHP publient les événements sur {address}."
     }
   },
@@ -1097,6 +1087,7 @@
       "admin": "administration : phpMyAdmin et pgAdmin sur {url}"
     },
     "form": {
+      "chooseEngine": "Choisir un moteur…",
       "engine": "Moteur de base de données"
     },
     "userForm": {
@@ -1167,7 +1158,9 @@
     "reset": "Réinitialiser",
     "resetKey": "Réinitialiser {key}",
     "empty": "Aucun paramètre ne correspond.",
-    "banner": "Les secrets (mots de passe, app secret Soketi, secrets S3) sont masqués comme dans {cmd}. Réinitialiser une valeur générée en génère une nouvelle au prochain démarrage."
+    "banner": "Les secrets (mots de passe, app secret Soketi, secrets S3) sont masqués comme dans {cmd}. Réinitialiser une valeur générée en génère une nouvelle au prochain démarrage.",
+    "sections": "Sections de la configuration",
+    "servicesHelp": "Les services optionnels s’activent et se désactivent ici uniquement : leur page n’apparaît que lorsqu’ils sont actifs."
   },
   "access": {
     "subtitle": "Ouvrez le dashboard à vos autres appareils, en HTTPS et avec un mot de passe.",
@@ -1712,7 +1705,8 @@
       "dashboard": "Dashboard",
       "web": "Serveur web",
       "phpImages": "Images PHP",
-      "general": "Général"
+      "general": "Général",
+      "services": "Services optionnels"
     }
   }
 }

@@ -1,8 +1,10 @@
 <script setup lang="ts">
+import { NAV, pathAvailable } from '../nav'
 import { computed, ref, watch } from 'vue'
 import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import PageHeader from '../components/PageHeader.vue'
 import MiniStats from '../components/MiniStats.vue'
+import PageTabs from '../components/PageTabs.vue'
 import TwoColumns from '../components/TwoColumns.vue'
 import ResourceTable from '../components/ResourceTable.vue'
 import NameCell from '../components/NameCell.vue'
@@ -16,6 +18,8 @@ import { formatMegabytes, formatNumber, formatPercent } from '../i18n'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
+/** Optional services are turned on and off in Configuration. */
+const CONFIGURATION = NAV.find((n) => n.name === 'configuration')!.path
 /** Plural count message, the number formatted in the active language. */
 const plural = (key: string, n: number) => t(key, { n: formatNumber(n) }, n)
 
@@ -103,7 +107,7 @@ function serviceState(s: ServiceName): 'online' | 'offline' | 'restarting' | 'di
 const serviceColumns = computed<TableColumn<ServiceRow>[]>(() => [
   { accessorKey: 'label', header: t('containers.columns.service') },
   { id: 'state', header: t('common.status'), meta: { class: { th: 'w-28' } } },
-  { id: 'toggle', header: t('containers.columns.enabled'), meta: { class: { th: 'w-20', td: 'pr-0' } } },
+  { id: 'configure', header: '', meta: { class: { th: 'w-10', td: 'pr-0' } } },
 ])
 
 const domainsOn = (c: Container) => active.value.filter((d) => d.php === c.php && d.kind !== 'proxy').length
@@ -119,7 +123,7 @@ const domainsOn = (c: Container) => active.value.filter((d) => d.php === c.php &
   </PageHeader>
   <DockerAlert />
   <MiniStats :items="stats" />
-  <UTabs v-model="tab" :items="tabs" :content="false" variant="link" class="mt-5 mb-2" :ui="{ trigger: 'text-xs px-0 me-4 md:me-16 pb-2.5' }" />
+  <PageTabs v-model="tab" :items="tabs" />
 
   <TwoColumns>
     <ResourceTable v-if="tab === 'all'" storage-key="containers" :title="t('containers.table.docker')" :data="state.containers" :columns="columns" search-key="id">
@@ -136,16 +140,18 @@ const domainsOn = (c: Container) => active.value.filter((d) => d.php === c.php &
     </ResourceTable>
     <ResourceTable v-else-if="tab === 'services'" storage-key="containers-services" :title="t('containers.tabs.services')" :data="services" :columns="serviceColumns">
       <template #label-cell="{ row }">
-        <RouterLink :to="row.original.to" class="block min-w-0 hover:opacity-80">
+        <!-- A service whose page is hidden while it is off (Redis) is not a link. -->
+        <RouterLink v-if="pathAvailable(row.original.to)" :to="row.original.to" class="block min-w-0 hover:opacity-80">
           <NameCell :icon="row.original.icon" :name="row.original.label" :sub="row.original.desc" />
         </RouterLink>
+        <NameCell v-else :icon="row.original.icon" :name="row.original.label" :sub="row.original.desc" />
       </template>
       <template #state-cell="{ row }"><StateBadge :value="serviceState(row.original.name)" /></template>
-      <template #toggle-cell="{ row }">
-        <USwitch
-          :model-value="serviceEnabled(row.original.name)" :disabled="isServiceBusy(row.original.name) || !state.docker"
-          :aria-label="t('containers.enableService', { name: row.original.label })"
-          @update:model-value="(v: boolean) => actions.setService(row.original.name, v)"
+      <!-- Turned on and off in Configuration only (Optional services section). -->
+      <template #configure-cell="{ row }">
+        <UButton
+          color="neutral" variant="ghost" icon="i-lucide-settings-2" :to="{ path: CONFIGURATION, query: { section: 'services' } }"
+          :aria-label="t('containers.configureService', { name: row.original.label })"
         />
       </template>
     </ResourceTable>

@@ -3,6 +3,8 @@ import { computed, reactive, ref } from 'vue'
 import type { DropdownMenuItem, TableColumn } from '@nuxt/ui'
 import PageHeader from '../components/PageHeader.vue'
 import MiniStats from '../components/MiniStats.vue'
+import PasswordInput from '../components/PasswordInput.vue'
+import PageTabs from '../components/PageTabs.vue'
 import TwoColumns from '../components/TwoColumns.vue'
 import ResourceTable from '../components/ResourceTable.vue'
 import NameCell from '../components/NameCell.vue'
@@ -11,7 +13,7 @@ import SideForm from '../components/SideForm.vue'
 import InfoBanner from '../components/InfoBanner.vue'
 import ConfirmModal from '../components/ConfirmModal.vue'
 import { focusField } from '../composables/focus'
-import { actions, state, toast, type Db, type DbUser, type FieldErrors } from '../composables/useFm'
+import { actions, dbEngines, state, toast, type Db, type DbUser, type FieldErrors } from '../composables/useFm'
 import { formatMegabytes } from '../i18n'
 import { useI18n } from 'vue-i18n'
 
@@ -21,27 +23,32 @@ const { t } = useI18n()
 // Passwords and queries go through the environment then the client's stdin, never on the command line.
 const tab = ref('local')
 const tabs = computed(() => [{ label: t('databases.tabs.databases'), value: 'local' }, { label: t('databases.tabs.users'), value: 'users' }, { label: t('databases.tabs.connections'), value: 'conn' }])
-const form = reactive({ engine: 'PostgreSQL' as Db['engine'], name: 'blog', user: 'blog_app', password: 'S3cure-local-pass', grant: true })
-const userForm = reactive({ engine: 'MariaDB' as Db['engine'], name: 'analytics', password: 'An4lytics-pass', database: 'shop' })
+// Nothing chosen or filled in in advance (examples as placeholders); the user of a new database is not created by default.
+const form = reactive({ engine: undefined as Db['engine'] | undefined, name: '', user: '', password: '', grant: false })
+const userForm = reactive({ engine: undefined as Db['engine'] | undefined, name: '', password: '', database: '' })
 const errors = ref<FieldErrors>({})
 const busy = ref(false)
 const drop = ref<Db | null>(null)
 const dropUser = ref<DbUser | null>(null)
 
-const port = (e: Db['engine']) => (e === 'MariaDB' ? 3306 : 5432)
-const up = (e: Db['engine']) => state.containers.find((c) => c.kind === (e === 'MariaDB' ? 'mariadb' : 'postgres'))?.status === 'running'
+// Container and port of each engine (the daemon's defaults when unset).
+const CONTAINERS: Record<Db['engine'], string> = { MariaDB: 'franken_mariadb', MySQL: 'franken_mysql', PostgreSQL: 'franken_postgresql' }
+const port = (e: Db['engine']) => ({ MariaDB: state.config.DB_PORT || '3306', MySQL: state.config.MYSQL_PORT || '3307', PostgreSQL: state.config.POSTGRES_PORT || '5432' })[e]
+const up = (e?: Db['engine']) => !!e && state.containers.find((c) => c.id === CONTAINERS[e])?.status === 'running'
 const maria = computed(() => state.databases.filter((d) => d.engine === 'MariaDB').length)
-const engines = computed(() => (['MariaDB', 'PostgreSQL'] as const).filter(up).length)
+const engines = computed(() => dbEngines.value.filter(up).length)
 const stats = computed(() => [
   { label: t('databases.tabs.databases'), value: state.databases.length, sub: `${maria.value} MariaDB · ${state.databases.length - maria.value} PostgreSQL` },
   { label: t('databases.tabs.users'), value: state.dbUsers.length, sub: t('databases.stats.usersSub') },
-  { label: t('databases.stats.engines'), value: engines.value, sub: engines.value === 2 ? t('databases.stats.allUp') : t('databases.stats.oneDown') },
+  { label: t('databases.stats.engines'), value: engines.value, sub: engines.value === dbEngines.value.length ? t('databases.stats.allUp') : t('databases.stats.oneDown') },
 ])
 const dbItems = computed(() => [{ label: t('databases.userForm.noDatabase'), value: '' }, ...state.databases.filter((d) => d.engine === userForm.engine).map((d) => ({ label: d.name, value: d.name }))])
 
 async function submit() {
   busy.value = true
-  const err = tab.value === 'users' ? await actions.createDbUser({ ...userForm }) : await actions.createDb({ ...form })
+  const err = tab.value === 'users'
+    ? await actions.createDbUser({ ...userForm, engine: userForm.engine as Db['engine'] })
+    : await actions.createDb({ ...form, engine: form.engine as Db['engine'] })
   busy.value = false
   errors.value = err ?? {}
   if (!err && tab.value === 'users') Object.assign(userForm, { name: '', password: '' })
@@ -54,7 +61,7 @@ const openAdmin = (_e: Db['engine']) => { if (adminUrl.value) window.open(adminU
 
 function menuFor(d: Db): DropdownMenuItem[][] {
   const user = d.user || 'root'
-  const url = `${d.engine === 'MariaDB' ? 'mysql' : 'pgsql'}://${user}@127.0.0.1:${port(d.engine)}/${d.name}`
+  const url = `${d.engine === 'PostgreSQL' ? 'pgsql' : 'mysql'}://${user}@127.0.0.1:${port(d.engine)}/${d.name}`
   return [
     [
       ...(adminUrl.value ? [{ label: t('databases.menu.openAdmin', { app: d.engine === 'MariaDB' ? 'phpMyAdmin' : 'pgAdmin' }), icon: 'i-lucide-external-link', onSelect: () => openAdmin(d.engine) }] : []),
@@ -85,7 +92,7 @@ const userColumns = computed<TableColumn<DbUser>[]>(() => [
     />
   </PageHeader>
   <MiniStats :items="stats" />
-  <UTabs v-model="tab" :items="tabs" :content="false" variant="link" class="mt-5 mb-2" :ui="{ trigger: 'text-xs px-0 me-16 pb-2.5' }" @update:model-value="errors = {}" />
+  <PageTabs v-model="tab" :items="tabs" @update:model-value="errors = {}" />
 
   <TwoColumns>
     <ResourceTable v-if="tab === 'local'" storage-key="databases" :title="t('nav.databases')" :data="state.databases" :columns="columns" search-key="name">
@@ -129,18 +136,18 @@ const userColumns = computed<TableColumn<DbUser>[]>(() => [
       @submit="submit"
     >
       <UFormField :label="t('databases.form.engine')">
-        <USelect v-model="userForm.engine" :items="['MariaDB', 'PostgreSQL']" size="lg" class="w-full" @update:model-value="userForm.database = ''" />
+        <USelect v-model="userForm.engine" :items="dbEngines" :placeholder="t('databases.form.chooseEngine')" size="lg" class="w-full" @update:model-value="userForm.database = ''" />
       </UFormField>
       <UFormField :label="t('common.username')" :error="errors.user">
-        <UInput id="db-user" v-model="userForm.name" size="lg" class="w-full" @update:model-value="errors = {}" />
+        <UInput id="db-user" v-model="userForm.name" placeholder="analytics" size="lg" class="w-full" @update:model-value="errors = {}" />
       </UFormField>
       <UFormField :label="t('common.password')" :error="errors.password">
-        <UInput v-model="userForm.password" type="password" size="lg" class="w-full" @update:model-value="errors = {}" />
+        <PasswordInput v-model="userForm.password" autocomplete="new-password" size="lg" class="w-full" @update:model-value="errors = {}" />
       </UFormField>
       <UFormField :label="t('databases.userForm.database')">
         <USelect v-model="userForm.database" :items="dbItems" size="lg" class="w-full" />
       </UFormField>
-      <UButton type="submit" :label="t('databases.userForm.submit')" size="lg" block :loading="busy" :disabled="!userForm.name || !up(userForm.engine)" />
+      <UButton type="submit" :label="t('databases.userForm.submit')" size="lg" block :loading="busy" :disabled="!userForm.engine || !userForm.name || !up(userForm.engine)" />
     </SideForm>
     <SideForm
       v-else
@@ -150,19 +157,19 @@ const userColumns = computed<TableColumn<DbUser>[]>(() => [
       @submit="submit"
     >
       <UFormField :label="t('databases.form.engine')">
-        <USelect v-model="form.engine" :items="['MariaDB', 'PostgreSQL']" size="lg" class="w-full" />
+        <USelect v-model="form.engine" :items="dbEngines" :placeholder="t('databases.form.chooseEngine')" size="lg" class="w-full" />
       </UFormField>
       <UFormField :label="t('databases.dbForm.name')" :error="errors.name">
-        <UInput id="db-name" v-model="form.name" size="lg" class="w-full" @update:model-value="errors = {}" />
+        <UInput id="db-name" v-model="form.name" placeholder="blog" size="lg" class="w-full" @update:model-value="errors = {}" />
       </UFormField>
       <USwitch v-model="form.grant" :label="t('databases.dbForm.grant')" :description="t('databases.dbForm.grantHelp')" />
       <template v-if="form.grant">
-        <UFormField :label="t('common.username')" :error="errors.user"><UInput v-model="form.user" size="lg" class="w-full" @update:model-value="errors = {}" /></UFormField>
+        <UFormField :label="t('common.username')" :error="errors.user"><UInput v-model="form.user" placeholder="blog_app" size="lg" class="w-full" @update:model-value="errors = {}" /></UFormField>
         <UFormField :label="t('common.password')" :error="errors.password">
-          <UInput v-model="form.password" type="password" size="lg" class="w-full" @update:model-value="errors = {}" />
+          <PasswordInput v-model="form.password" autocomplete="new-password" size="lg" class="w-full" @update:model-value="errors = {}" />
         </UFormField>
       </template>
-      <UButton type="submit" :label="t('databases.dbForm.submit')" size="lg" block :loading="busy" :disabled="!form.name || !up(form.engine)" />
+      <UButton type="submit" :label="t('databases.dbForm.submit')" size="lg" block :loading="busy" :disabled="!form.engine || !form.name || !up(form.engine)" />
     </SideForm>
   </TwoColumns>
 

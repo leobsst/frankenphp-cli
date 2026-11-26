@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import type { TableColumn } from '@nuxt/ui'
 import PageHeader from '../components/PageHeader.vue'
 import MiniStats from '../components/MiniStats.vue'
+import PageTabs from '../components/PageTabs.vue'
 import TwoColumns from '../components/TwoColumns.vue'
 import ResourceTable from '../components/ResourceTable.vue'
 import NameCell from '../components/NameCell.vue'
@@ -16,7 +17,8 @@ const { t } = useI18n()
 
 const tab = ref('certs')
 const tabs = computed(() => [{ label: t('ssl.tabs.certs'), value: 'certs' }, { label: t('ssl.tabs.ca'), value: 'ca' }])
-const domain = ref(active.value[0]?.name ?? '')
+// Domain to regenerate: none until one is chosen.
+const domain = ref('')
 const method = ref('force')
 const port = ref(String(state.ssl.caPort))
 
@@ -45,7 +47,7 @@ const columns = computed<TableColumn<Domain>[]>(() => [
     <UButton icon="i-lucide-rotate-cw" :label="t('ssl.regenerateAll')" size="lg" class="md:w-[205px]" :loading="regenerating === 'all'" :disabled="!!regenerating" @click="actions.regenerateCert('all')" />
   </PageHeader>
   <MiniStats :items="stats" />
-  <UTabs v-model="tab" :items="tabs" :content="false" variant="link" class="mt-5 mb-2" :ui="{ trigger: 'text-xs px-0 me-16 pb-2.5' }" />
+  <PageTabs v-model="tab" :items="tabs" />
 
   <TwoColumns>
     <ResourceTable v-if="tab === 'certs'" storage-key="ssl-certs" :title="t('ssl.table.title')" :data="active" :columns="columns" search-key="name">
@@ -76,7 +78,7 @@ const columns = computed<TableColumn<Domain>[]>(() => [
       :hint="t('ssl.form.hint')"
       @submit="actions.regenerateCert(domain)"
     >
-      <UFormField :label="t('ssl.form.domain')"><USelect v-model="domain" :items="domains" size="lg" class="w-full" /></UFormField>
+      <UFormField :label="t('ssl.form.domain')"><USelect v-model="domain" :items="domains" :placeholder="t('ssl.form.chooseDomain')" size="lg" class="w-full" /></UFormField>
       <UFormField :label="t('ssl.form.authority')"><USelect model-value="mkcert" :items="[{ label: t('ssl.form.mkcert'), value: 'mkcert' }]" size="lg" class="w-full" disabled /></UFormField>
       <UFormField :label="t('ssl.form.method')">
         <USelect v-model="method" size="lg" class="w-full" :items="[{ label: t('ssl.form.force'), value: 'force' }, { label: t('ssl.form.expired'), value: 'expired' }]" />

@@ -22,9 +22,8 @@ export function useApplyPrefs() {
     root.style.setProperty('--fm-accent', p.accent)
     root.classList.toggle('reduce-motion', p.reduceMotion)
     setLanguage(p.language)
-    const scale = textScale(p.textSize)
-    // CSS zoom (main.css) only when the application does not zoom natively.
-    root.style.setProperty('--fm-zoom', shell.setZoom?.(scale) ? '1' : String(scale))
+    // CSS zoom of the whole page (main.css).
+    root.style.setProperty('--fm-zoom', String(textScale(p.textSize)))
   })
 }
 

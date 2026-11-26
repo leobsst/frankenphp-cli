@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PasswordInput from '@app/components/PasswordInput.vue'
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { session, signIn } from './session'
@@ -30,7 +31,7 @@ async function submit() {
           </div>
         </div>
         <UFormField :label="t('signIn.password')" :error="error || undefined">
-          <UInput v-model="password" type="password" autocomplete="current-password" autofocus size="lg" class="w-full" @update:model-value="error = ''" />
+          <PasswordInput v-model="password" autocomplete="current-password" autofocus size="lg" class="w-full" @update:model-value="error = ''" />
         </UFormField>
         <UButton type="submit" :label="t('common.signIn')" size="lg" block :loading="busy" :disabled="!password" />
       </form>

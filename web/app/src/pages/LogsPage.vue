@@ -2,6 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import PageHeader from '../components/PageHeader.vue'
 import MiniStats from '../components/MiniStats.vue'
+import PageTabs from '../components/PageTabs.vue'
 import TwoColumns from '../components/TwoColumns.vue'
 import SideForm from '../components/SideForm.vue'
 import InfoBanner from '../components/InfoBanner.vue'
@@ -85,7 +86,7 @@ function exportTxt() {
     <UButton icon="i-lucide-download" :label="t('logs.export')" size="lg" class="md:w-[205px]" @click="exportTxt" />
   </PageHeader>
   <MiniStats :items="stats" />
-  <UTabs v-model="tab" :items="tabs" :content="false" variant="link" class="mt-5 mb-2" :ui="{ trigger: 'text-xs px-0 me-16 pb-2.5' }" />
+  <PageTabs v-model="tab" :items="tabs" />
 
   <TwoColumns>
     <UCard :ui="{ body: 'px-[18px] py-4 sm:px-[18px] sm:py-4' }">

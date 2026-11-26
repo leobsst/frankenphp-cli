@@ -1,3 +1,6 @@
+import { computed } from 'vue'
+import { serviceEnabled } from './composables/useFm'
+
 /**
  * Dashboard pages, shared by the embedded dashboard (web/embedded) and the mobile app: each application mounts them
  * in its own router. `labelKey` is a translation key, resolved at render time (i18n.ts).
@@ -23,3 +26,19 @@ export const NAV = [
 /** Interface preferences page, kept apart in the navigation. */
 export const SETTINGS = { name: 'settings', labelKey: 'nav.settings', path: '/parametres', icon: 'i-lucide-sliders-horizontal' } as const
 
+/**
+ * Pages of the optional services, which are only turned on and off in Configuration: while the service is off, they
+ * leave the menu, the search and their route (the layouts send them to Containers).
+ */
+const AVAILABLE: Record<string, () => boolean> = {
+  dns: () => serviceEnabled('dns'),
+  redis: () => serviceEnabled('redis'),
+  s3: () => serviceEnabled('s3'),
+  websocket: () => serviceEnabled('soketi'),
+}
+/** The page (route name) can be opened. */
+export const pageAvailable = (name: string) => AVAILABLE[name]?.() ?? true
+/** The page at `path` can be opened (links of the pages). */
+export const pathAvailable = (path: string) => pageAvailable(NAV.find((n) => n.path === path)?.name ?? '')
+/** Pages of the menu and of the search. */
+export const visibleNav = computed(() => NAV.filter((n) => pageAvailable(n.name)))
