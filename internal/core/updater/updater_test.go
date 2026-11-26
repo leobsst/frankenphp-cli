@@ -564,6 +564,44 @@ func TestUpdateStopsAndRestartsARunningServer(t *testing.T) {
 	}
 }
 
+func TestUpdateRestartsARunningDaemon(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		running  bool
+		startErr error
+		want     []string
+		last     string
+	}{
+		// The server stopped: nothing else would replace the daemon of the old version
+		{"running", true, nil, []string{"running? " + BundleName, "grant", "daemon start new exe"}, "success: Dashboard daemon restarted."},
+		{"failing", true, errors.New("no socket"), []string{"running? " + BundleName, "grant", "daemon start new exe"},
+			"warning: Could not restart the dashboard daemon (no socket): run `frankenmanager daemon start`."},
+		{"not running", false, nil, []string{"running? " + BundleName, "grant"}, "info: Please restart FrankenManager to use the new version."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			u, f, log := newUpdater(t)
+			newRelease(t, u, f)
+			var calls []string
+			serverHooks(u, false, &calls, nil)
+			u.DaemonRunning = func(context.Context) bool { return tc.running }
+			u.StartDaemon = func(_ context.Context, exe string) error {
+				data, _ := os.ReadFile(exe)
+				calls = append(calls, "daemon start "+string(data))
+				return tc.startErr
+			}
+			if !u.Update(context.Background(), false) {
+				t.Fatalf("update failed: %v", log.Lines)
+			}
+			if !slices.Equal(calls, tc.want) {
+				t.Errorf("calls = %v", calls)
+			}
+			if !slices.Contains(log.Lines, tc.last) {
+				t.Errorf("log = %v", log.Lines)
+			}
+		})
+	}
+}
+
 func TestUpdateLeavesAStoppedServerStopped(t *testing.T) {
 	u, f, log := newUpdater(t)
 	newRelease(t, u, f)

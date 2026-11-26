@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/leobsst/frankenphp-cli/internal/client"
 	"github.com/leobsst/frankenphp-cli/internal/core/dns"
 	"github.com/leobsst/frankenphp-cli/internal/core/updater"
 	"github.com/leobsst/frankenphp-cli/internal/i18n"
@@ -20,7 +21,8 @@ func newUpdateCmd(a *app) *cobra.Command {
 
 This command downloads and installs the latest release from GitHub.
 A running server is stopped before the install and started again on the
-new version right after; a stopped one stays stopped.
+new version right after; a stopped one stays stopped. A running dashboard
+daemon is restarted on the new version.
 Since the binary lives in a system directory (e.g. /usr/local/lib),
 installing it usually requires admin privileges: run with sudo.
 
@@ -36,6 +38,8 @@ Examples:
 			}
 			u := a.deps.Updater(dir, a.log)
 			if !check {
+				// A running dashboard daemon is restarted on the new version
+				u.DaemonRunning = client.New(dir).Running
 				a.grantBindPortOnUpdate(cmd.Context(), u, dir)
 				if !u.Update(cmd.Context(), force) {
 					return exitError(1)

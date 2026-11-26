@@ -118,6 +118,12 @@ type Updater struct {
 	ServerRunning func(ctx context.Context, exe string) bool
 	StopServer    func(ctx context.Context, exe string) error
 	StartServer   func(ctx context.Context, exe string) error
+	// DaemonRunning reports whether the dashboard daemon answers; nil: no
+	// daemon is restarted (the CLI sets it, the updater cannot reach it)
+	DaemonRunning func(ctx context.Context) bool
+	// StartDaemon runs `exe daemon start`, which replaces a daemon of an
+	// older version
+	StartDaemon func(ctx context.Context, exe string) error
 	// GrantBindPort lets the new binary bind port 53 (Linux, setcap); nil
 	// when not needed.
 	GrantBindPort func(ctx context.Context, exe string) error
@@ -143,6 +149,7 @@ func New(dataDir string, log Logger) *Updater {
 		ServerRunning: serverRunning,
 		StopServer:    func(ctx context.Context, exe string) error { return runServer(ctx, exe, "stop") },
 		StartServer:   func(ctx context.Context, exe string) error { return runServer(ctx, exe, "start") },
+		StartDaemon:   startDaemon,
 	}
 }
 
@@ -430,6 +437,9 @@ func (u *Updater) Update(ctx context.Context, force bool) bool {
 		return false
 	}
 	wasRunning := u.ServerRunning != nil && u.ServerRunning(ctx, u.Exe)
+	// The daemon keeps serving the old version (dashboard, mobile app)
+	// until it is replaced: it is restarted on the new one after the install
+	daemonWasRunning := u.DaemonRunning != nil && u.DaemonRunning(ctx)
 	if wasRunning {
 		u.Log.Info(i18n.T("Stopping the server for the update..."))
 		if err := u.StopServer(ctx, u.Exe); err != nil {
@@ -462,10 +472,29 @@ func (u *Updater) Update(ctx context.Context, force bool) bool {
 	}
 	if wasRunning {
 		u.startServer(ctx, exe)
-		return true
 	}
-	u.Log.Info(i18n.T("Please restart FrankenManager to use the new version."))
+	// After the server: its start may already have replaced the daemon
+	if daemonWasRunning {
+		u.restartDaemon(ctx, exe)
+	}
+	if !wasRunning {
+		u.Log.Info(i18n.T("Please restart FrankenManager to use the new version."))
+	}
 	return true
+}
+
+// restartDaemon puts the dashboard daemon on the new binary, a failure
+// being only a warning: the update itself is done.
+func (u *Updater) restartDaemon(ctx context.Context, exe string) {
+	if u.StartDaemon == nil {
+		return
+	}
+	u.Log.Info(i18n.T("Restarting the dashboard daemon..."))
+	if err := u.StartDaemon(ctx, exe); err != nil {
+		u.Log.Warning(i18n.Tf("Could not restart the dashboard daemon (%v): run `frankenmanager daemon start`.", err))
+		return
+	}
+	u.Log.Success(i18n.T("Dashboard daemon restarted."))
 }
 
 // startServer starts the server with exe after an update, a failure being
@@ -735,6 +764,21 @@ func runServer(ctx context.Context, exe, command string) error {
 	platform.AsRealUser(cmd)
 	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
 	return cmd.Run()
+}
+
+// startDaemon runs `exe daemon start` as the real user (never a daemon of
+// root under sudo); its output is only shown when it fails.
+func startDaemon(ctx context.Context, exe string) error {
+	cmd := exec.CommandContext(ctx, exe, "--no-update-check", "daemon", "start")
+	platform.AsRealUser(cmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		if msg := strings.TrimSpace(string(out)); msg != "" {
+			return errors.New(msg)
+		}
+		return err
+	}
+	return nil
 }
 
 // runSync runs syncCommand and returns its exit code.
