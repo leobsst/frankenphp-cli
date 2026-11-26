@@ -47,9 +47,12 @@ Contact information (first name, last name, phone, email) is entered in App Stor
 
 ## Screenshots (`screenshots/<locale>/`)
 
-The app runs on iPhone and iPad, so both sets are required, portrait, 1 to 10 per locale. Six per device and locale,
-taken from the demo mode (fictional data only) in the iOS Simulator, with the native tab bar on iPhone. Each shot shows
-both themes, cut along the diagonal: light above, dark below.
+The app runs on iPhone and iPad, so both sets are required, portrait, 1 to 10 per locale. Seven per device and
+locale: a hero image first (`00_hero`), then six shots taken from the demo mode (fictional data only) in the iOS
+Simulator, with the native tab bar and page tabs on iPhone. Each shot shows both themes, cut along the diagonal: light
+above, dark below. The hero image is not a raw shot: the app icon and a headline over the brand gradient,
+, above two devices showing the overview in light and the containers in dark (HTML rendered at the size of
+each device).
 
 | Device | Simulator | Size (pixels) | Files |
 |---|---|---|---|
@@ -58,11 +61,11 @@ both themes, cut along the diagonal: light above, dark below.
 | iPhone Duo (folded) | iPhone Duo | 1398 × 2034 | `<lang>_iphoneduo_0N_*.png` |
 | iPad 13" | iPad Pro 13-inch (M5) | 2064 × 2752 | `<lang>_ipad13_0N_*.png` |
 
-`<lang>` is `en` or `fr`, then `01_overview`, `02_projects`, `03_containers`, `04_add_project`, `05_pairing`,
+`<lang>` is `en` or `fr`, then `00_hero`, `01_overview`, `02_projects`, `03_containers`, `04_add_project`, `05_pairing`,
 `06_ssl`, in `en-US` and `fr-FR`. fastlane deliver tells the device from the image size; the number sets the order.
 Apple scales the 6.9" set down for the sizes without their own set. The iPhone Duo set is the folded screen: the
-unfolded one (2007 × 2853) needs Simulator.app to unfold the device. To take them again, see "Screenshot builds" in
-[`../README.md`](../README.md). Never use a real machine's domains.
+unfolded one (2007 × 2853) needs Simulator.app to unfold the device. To take them all again: `pnpm store:screenshots` (see "Screenshot
+builds" in [`../README.md`](../README.md)). Never use a real machine's domains.
 
 ## Version
 

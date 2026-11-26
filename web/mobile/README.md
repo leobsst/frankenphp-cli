@@ -86,6 +86,13 @@ Launch the app in the language of the series (`-AppleLanguages`): the `lang` par
 for a whole series. The taps match the labels of that language. The iPhone Duo simulator (runtime
 `iOS-27-2-iPhone19-4`) has two screens: `xcrun simctl io <device> screenshot --display=1` takes the folded one.
 
+`pnpm store:screenshots` (`scripts/store/screenshots.sh`, about 15 minutes) takes the whole set of `store/screenshots/`
+this way: it builds the screenshot variant for the simulator, captures the six screens in both themes and both
+languages on the iPhone 17 Pro, iPhone 17 Pro Max, iPhone Duo and iPad Pro 13-inch (M5) simulators (`capture.sh`, the
+app installed again for default preferences), cuts each pair along the diagonal (`mix.sh`) and renders the hero image
+(`hero.mjs`, from `hero.html`). It needs ImageMagick 7 and the Chromium of Playwright (`pnpm exec playwright install
+chromium`), and leaves the iOS project on the screenshot build: run `pnpm ios` before an archive.
+
 The shots of `store/screenshots/` were taken this way (iPhone 17 Pro Max, iPhone 17 Pro, iPhone Duo and iPad Pro
 13-inch simulators, status bar set with `xcrun simctl status_bar … override --time 9:41`). Each one mixes the two
 themes: the app follows the system theme, so one shot is taken in light, then `xcrun simctl ui <device> appearance
