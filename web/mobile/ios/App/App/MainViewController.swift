@@ -11,6 +11,7 @@ class MainViewController: CAPBridgeViewController {
         bridge?.registerPluginInstance(AppLockPlugin())
         bridge?.registerPluginInstance(DisplayPlugin())
         bridge?.registerPluginInstance(LocalNetworkPlugin())
+        bridge?.registerPluginInstance(FileSharePlugin())
     }
 
     /// Pinch zoom stays possible (accessibility), like in Safari: the maximum-scale of the viewport (index.html) only

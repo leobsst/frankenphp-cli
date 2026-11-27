@@ -17,7 +17,8 @@ import { handOffNativeSplash } from './lib/splash'
 import { registerDemo } from './demo'
 import { loadAppLock } from './lib/appLock'
 import { setUpDisplay } from './lib/display'
-import { setSettingsCard } from '@app/lib/shell'
+import { setSettingsCard, shell } from '@app/lib/shell'
+import { shareText } from './lib/share'
 import AppLockSettings from './components/AppLockSettings.vue'
 import { allowPinchZoom } from '@app/lib/viewport'
 
@@ -55,8 +56,12 @@ async function loadPhoneLanguage() {
   }
 }
 
-// Settings › the lock of the app, only where it exists (iPhone, iPad, Android).
-if (Capacitor.isNativePlatform()) setSettingsCard(AppLockSettings)
+// Settings › the lock of the app, only where it exists (iPhone, iPad, Android). The WebView ignores downloads: the
+// logs export opens the share sheet.
+if (Capacitor.isNativePlatform()) {
+  setSettingsCard(AppLockSettings)
+  shell.saveText = shareText
+}
 
 // Before mounting: the lock (nothing shows before LockScreen) and the interface size (the first screen has it).
 void Promise.all([loadInstances(), loadPhoneLanguage(), loadAppLock().catch(() => {}), setUpDisplay()])

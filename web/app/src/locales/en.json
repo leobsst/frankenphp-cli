@@ -1273,6 +1273,7 @@
     "export": "Export logs",
     "exported": "Export complete",
     "exportedLines": "{n} line exported. | {n} lines exported.",
+    "exportFailed": "Export failed",
     "tabs": {
       "live": "Live stream",
       "history": "History"

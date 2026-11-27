@@ -10,7 +10,11 @@ import TablePagination from '../components/TablePagination.vue'
 import { usePagination } from '../composables/usePagination'
 import { LIVE_NOISE, state, toast, type LogLevel } from '../composables/useFm'
 import { formatNumber } from '../i18n'
+import { shell } from '../lib/shell'
 import { useI18n } from 'vue-i18n'
+
+/** Name of the exported log file. */
+const LOG_FILE = 'frankenmanager.log'
 
 const { t } = useI18n()
 
@@ -71,13 +75,24 @@ function togglePause() {
   apply()
 }
 
-function exportTxt() {
+async function exportTxt() {
   const txt = filtered.value.map((l) => `${l.time} ${l.level.padEnd(5)} [${l.source}] ${l.msg}`).join('\n')
-  const a = document.createElement('a')
-  a.href = URL.createObjectURL(new Blob([txt], { type: 'text/plain' }))
-  a.download = 'frankenmanager.log'
-  a.click()
-  toast('success', t('logs.exported'), t('logs.exportedLines', { n: formatNumber(filtered.value.length) }, filtered.value.length))
+  const lines = filtered.value.length
+  if (shell.saveText) {
+    // The mobile app: the share sheet decides where the file goes; cancelled (or not told), no confirmation.
+    try {
+      if (!(await shell.saveText(LOG_FILE, txt))) return
+    } catch (e) {
+      toast('error', t('logs.exportFailed'), e instanceof Error ? e.message : String(e))
+      return
+    }
+  } else {
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(new Blob([txt], { type: 'text/plain' }))
+    a.download = LOG_FILE
+    a.click()
+  }
+  toast('success', t('logs.exported'), t('logs.exportedLines', { n: formatNumber(lines) }, lines))
 }
 </script>
 

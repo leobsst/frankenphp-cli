@@ -20,6 +20,12 @@ export const shell = reactive({
   settingsCard: null as Component | null,
   /** Native tabs of the pages on a phone (the iPhone app: a segmented control below the header); null: drawn in HTML. */
   pageTabs: null as PageTabsHost | null,
+  /**
+   * Saves a text file through the application (the mobile app, whose WebView ignores downloads: the share sheet of the
+   * system). Resolves true once done, false when cancelled, null when the system does not tell. Null: a browser
+   * download.
+   */
+  saveText: null as ((name: string, text: string) => Promise<boolean | null>) | null,
 })
 
 /** A tab of a page: its label and the value it selects. */

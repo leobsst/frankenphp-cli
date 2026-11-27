@@ -11,6 +11,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(SecureStorePlugin.class);
         registerPlugin(AppLockPlugin.class);
         registerPlugin(LocalNetworkPlugin.class);
+        registerPlugin(FileSharePlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

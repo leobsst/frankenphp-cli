@@ -1273,6 +1273,7 @@
     "export": "Exporter les journaux",
     "exported": "Export terminé",
     "exportedLines": "{n} ligne exportée. | {n} lignes exportées.",
+    "exportFailed": "Export impossible",
     "tabs": {
       "live": "Flux en direct",
       "history": "Historique"
