@@ -11,13 +11,15 @@ It is a member of the `web/` pnpm workspace: the pages, components and store com
 |---|---|
 | `src/main.ts`, `src/App.vue`, `src/router.ts` | Entry point, root component (toasts, splash screen, Android back button, pairing links), routes |
 | `src/DashboardLayout.vue` | Dashboard layout on the chosen instance; fills `shell` (`web/app/src/lib/shell.ts`) with its name, address and the way back to the list |
-| `src/pages/InstancesPage.vue`, `InstanceForm.vue`, `PairPage.vue` | Instance list, sign-in with the password, QR code pairing |
-| `src/lib/instances.ts` | Instance list (Capacitor Preferences) and their tokens (secure store) |
+| `src/pages/PairPage.vue` | QR code pairing (the instance list and the sign-in with the password are shared with the dashboard: `web/app/src/pages/InstancesPage.vue`, `InstanceForm.vue`, `web/app/src/lib/instances.ts`) |
+| `src/lib/instances.ts` | Storage of the instance list (Capacitor Preferences) and of their tokens (secure store), QR code scan and demo for the shared list |
 | `src/lib/secureStore.ts` | Keychain / Keystore access (`SecureStore` plugin of the app) |
 | `src/lib/pairing.ts` | Pairing link parsing, QR code scanner, `frankenmanager://` links |
 | `src/lib/nativeTabBar.ts`, `src/lib/nativeSegments.ts`, `src/lib/overlays.ts` | Native iOS tab bar and page tabs, hidden while a modal, the menu or a toast is open |
 | `src/lib/splash.ts`, `src/lib/display.ts` | Splash screen hand-off, automatic text size of the iPad app on a Mac |
-| `ios/`, `android/` | Native projects, with the app's own plugins (`NativeTabBarPlugin.swift`, `NativeSegmentsPlugin.swift`, `SecureStorePlugin.swift`, `SecureStorePlugin.java`) |
+| `src/lib/localNetwork.ts` | Private IPv4 network of the phone, for the address placeholder of the add form (`192.168.0.x`) |
+| `src/lib/share.ts` | Share sheet of a text file: the logs export (the WebView ignores the downloads of the page) |
+| `ios/`, `android/` | Native projects, with the app's own plugins (`NativeTabBarPlugin.swift`, `NativeSegmentsPlugin.swift`, `SecureStorePlugin.swift`, `SecureStorePlugin.java`, `LocalNetworkPlugin.swift`, `LocalNetworkPlugin.java`, `FileSharePlugin.swift`, `FileSharePlugin.java`) |
 | `scripts/` | Version and build number, iOS signing, extra icons |
 | `assets/` | Sources of the icons and splash screens |
 
@@ -147,8 +149,9 @@ checks, the fingerprint is only shown.
 ## On the daemon side
 
 The remote access of the daemon answers the CORS requests of the app (`capacitor://localhost` on iOS,
-`https://localhost` on Android, `http://localhost:<port>` for the dev server), without
-`Access-Control-Allow-Credentials`: the app signs in with a Bearer token, the cookie never crosses origins. Once:
+`https://localhost` on Android, `http://localhost:<port>` for the dev server, like those of the dashboard of another
+machine), without `Access-Control-Allow-Credentials`: the app signs in with a Bearer token, the cookie never crosses
+origins. Once:
 
 ```bash
 frankenmanager daemon password                        # dashboard password
@@ -233,6 +236,22 @@ Nothing to configure for testing: the debug build is signed by the machine's deb
 outside the repository). The release build (`./gradlew assembleRelease`) is signed with `ANDROID_KEYSTORE` when set,
 unsigned otherwise; `*.jks` and `*.keystore` files are git-ignored. The app needs Android 8.0 or later (API 26, for
 the QR code scanner).
+
+### Local network access
+
+The instances are reached on the local network, which both systems guard:
+
+- **iOS** asks the user by itself on the first connection to a device of the local network
+  (`NSLocalNetworkUsageDescription`, translated in `InfoPlist.strings`).
+- **Android 17** (API 37) blocks it for an app targeting API 37, until the user allows "Nearby devices"
+  (`ACCESS_LOCAL_NETWORK`). Below, `INTERNET` grants it, and Google asks not to declare the permission: it lives in
+  `android/app/src/localNetwork/AndroidManifest.xml`, which `app/build.gradle` merges from `targetSdkVersion = 37`
+  only. The app then asks for it before its first request to an address that may be local (a host name, a private,
+  link-local or unique local IP; `src/lib/localNetwork.ts`, `LocalNetworkPlugin.java`). Raising `targetSdkVersion`
+  in `android/variables.gradle` is all it takes.
+
+Refused, the "unreachable" message of an instance says where to allow it again (Settings › Privacy & Security ›
+Local Network on iOS, the app's permissions on Android).
 
 ## Version and build number
 
