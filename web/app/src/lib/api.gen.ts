@@ -2380,6 +2380,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/client/network": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The private IPv4 network of the device asking
+         * @description The address the request comes from, with the prefix length of this machine's interface on that network; on this machine itself (loopback), its LAN address. Empty (`{}`) for a public address, IPv6, a tunnel or a network this machine is not on. The dashboard suggests the addresses of the other machines from it.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The network of the device. */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ClientNetwork"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth": {
         parameters: {
             query?: never;
@@ -3329,6 +3368,12 @@ export interface components {
             mode: "local" | "lan" | "internet";
             /** @description Where the remote access answers, when on: the LAN address of this machine, or the first name of the certificate of DASHBOARD_TLS_CERT. */
             remote_url?: string;
+        };
+        ClientNetwork: {
+            /** @description Private IPv4 address of the device. */
+            ip?: string;
+            /** @description Prefix length of its network. */
+            prefix?: number;
         };
         HostSystem: {
             hostname: string;

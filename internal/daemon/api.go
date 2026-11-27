@@ -67,6 +67,7 @@ func (s *Server) routeTable() []route {
 		{"POST /api/daemon/stop", s.stopDaemon},
 		{"GET /api/v1/host", s.hostInfo},
 		{"GET /api/v1/host/system", s.hostSystem},
+		{"GET /api/v1/client/network", s.clientNetwork},
 		{"GET /api/v1/update", s.updateInfo},
 		{"GET /api/v1/auth", s.authState},
 		{"POST /api/v1/auth/login", s.login},

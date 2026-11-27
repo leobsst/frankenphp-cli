@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"runtime"
 	"time"
@@ -119,6 +120,64 @@ func projectsDir(ws *Workspace) string {
 		return platform.DefaultProjectsDir()
 	}
 	return ws.Env.Get("DEFAULT_PROJECT_PATH")
+}
+
+// ClientNetwork is the private IPv4 network of the device sending a
+// request, as this machine sees it; empty when it cannot tell.
+type ClientNetwork struct {
+	IP     string `json:"ip,omitempty"`
+	Prefix int    `json:"prefix,omitempty"`
+}
+
+// clientNetwork answers GET /api/v1/client/network: the address the request
+// comes from, with the prefix of this machine's interface on that network.
+// On this machine itself (loopback), its LAN address. The dashboard suggests
+// the addresses of the other machines from it.
+func (s *Server) clientNetwork(w http.ResponseWriter, r *http.Request) {
+	ip := clientAddr(r)
+	if ip.IsLoopback() && !requesterOf(r).remote && s.LANIP != nil {
+		ip, _ = netip.ParseAddr(s.LANIP())
+	}
+	writeJSON(w, http.StatusOK, networkOf(ip, interfaceNets()))
+}
+
+// networkOf finds the network of ip among nets: a private IPv4 address
+// only (a tunnel, a public address or IPv6 give nothing), on a network
+// wider than one address.
+func networkOf(ip netip.Addr, nets []netip.Prefix) ClientNetwork {
+	if !ip.Is4() || !ip.IsPrivate() {
+		return ClientNetwork{}
+	}
+	for _, n := range nets {
+		if n.Addr().Is4() && n.Bits() < 32 && n.Contains(ip) {
+			return ClientNetwork{IP: ip.String(), Prefix: n.Bits()}
+		}
+	}
+	return ClientNetwork{}
+}
+
+// interfaceNets lists the networks of the interfaces that are up.
+func interfaceNets() []netip.Prefix {
+	var out []netip.Prefix
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return out
+	}
+	for _, ifc := range ifaces {
+		if ifc.Flags&net.FlagUp == 0 {
+			continue
+		}
+		addrs, err := ifc.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, a := range addrs {
+			if p, err := netip.ParsePrefix(a.String()); err == nil {
+				out = append(out, netip.PrefixFrom(p.Addr().Unmap(), p.Bits()).Masked())
+			}
+		}
+	}
+	return out
 }
 
 // interfacesOf lists the network interfaces that have an address, the

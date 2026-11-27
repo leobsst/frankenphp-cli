@@ -1060,6 +1060,21 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/HostSystem" }
 
+  /api/v1/client/network:
+    get:
+      tags: [auth]
+      summary: The private IPv4 network of the device asking
+      description: >-
+        The address the request comes from, with the prefix length of this machine's interface on that network;
+        on this machine itself (loopback), its LAN address. Empty (`{}`) for a public address, IPv6, a tunnel or a
+        network this machine is not on. The dashboard suggests the addresses of the other machines from it.
+      responses:
+        "200":
+          description: The network of the device.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClientNetwork" }
+
   /api/v1/auth:
     get:
       tags: [auth]
@@ -2006,6 +2021,12 @@ components:
           description: >-
             Where the remote access answers, when on: the LAN address of this machine, or the first name of the
             certificate of DASHBOARD_TLS_CERT.
+
+    ClientNetwork:
+      type: object
+      properties:
+        ip: { type: string, description: Private IPv4 address of the device. }
+        prefix: { type: integer, minimum: 1, maximum: 31, description: Prefix length of its network. }
 
     HostSystem:
       type: object
