@@ -19,8 +19,10 @@ public class NativeTabBarPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarDelegate {
     private var tabBar: UITabBar?
     /// Tab ids, in order (the tag of a UITabBarItem is its index).
     private var ids: [String] = []
-    /// Primary colour of the app (#RRGGBB) and its theme (light, dark or system), kept for a recreated bar.
+    /// Colours of the active and of the other tabs, and look (light, dark or system) of the page, kept for a
+    /// recreated bar.
     private var tint: UIColor?
+    private var normal: UIColor?
     private var theme = "system"
 
     /// Shows the bar with `items` ([{ id, title, icon }], icon: name of an SF Symbol) and the `selected` tab.
@@ -79,13 +81,17 @@ public class NativeTabBarPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarDelegate {
         }
     }
 
-    /// Tint of the active tab (the primary colour chosen in the app, `tint` as #RRGGBB) and theme of the bar
-    /// (`theme`: light, dark, or system to follow iOS), as the dashboard's.
+    /// Colours of the BottomNav it replaces, as the page shows them (#RRGGBB, read by src/lib/nativeTabBar.ts after
+    /// each change): `tint` for the active tab (--ui-primary), `normal` for the others (--ui-text-muted), and the
+    /// `theme` of the page (light or dark; system to follow iOS). Called again on every change of the page's theme or
+    /// colours, the system appearance included.
     @objc func setAppearance(_ call: CAPPluginCall) {
-        let hex = call.getString("tint")
+        let tint = call.getString("tint").flatMap(Self.color(hex:))
+        let normal = call.getString("normal").flatMap(Self.color(hex:))
         let theme = call.getString("theme") ?? "system"
         DispatchQueue.main.async {
-            self.tint = hex.flatMap(Self.color(hex:))
+            self.tint = tint
+            self.normal = normal
             self.theme = theme
             if let bar = self.tabBar { self.applyAppearance(bar) }
             call.resolve()
@@ -94,14 +100,10 @@ public class NativeTabBarPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarDelegate {
 
     private func applyAppearance(_ bar: UITabBar) {
         bar.overrideUserInterfaceStyle = theme == "dark" ? .dark : theme == "light" ? .light : .unspecified
-        guard let base = tint else {
-            bar.tintColor = nil
-            return
-        }
-        // In dark mode, the dashboard lightens its primary colour (brand-400): same here, for the contrast.
-        bar.tintColor = UIColor { traits in
-            traits.userInterfaceStyle == .dark ? Self.mix(base, with: .white, amount: 0.4) : base
-        }
+        bar.tintColor = tint
+        // The classic bar (before iOS 26) takes it; the Liquid Glass bar keeps the other tabs in its own vibrant colour,
+        // legible over the glass, whatever is asked (UITabBarAppearance included).
+        bar.unselectedItemTintColor = normal
     }
 
     private static func color(hex: String) -> UIColor? {
@@ -109,13 +111,6 @@ public class NativeTabBarPlugin: CAPPlugin, CAPBridgedPlugin, UITabBarDelegate {
         guard digits.count == 6, let value = UInt32(digits, radix: 16) else { return nil }
         return UIColor(red: CGFloat((value >> 16) & 0xFF) / 255, green: CGFloat((value >> 8) & 0xFF) / 255,
                        blue: CGFloat(value & 0xFF) / 255, alpha: 1)
-    }
-
-    private static func mix(_ a: UIColor, with b: UIColor, amount: CGFloat) -> UIColor {
-        var (r1, g1, b1, a1, r2, g2, b2, a2): (CGFloat, CGFloat, CGFloat, CGFloat, CGFloat, CGFloat, CGFloat, CGFloat) = (0, 0, 0, 0, 0, 0, 0, 0)
-        a.getRed(&r1, green: &g1, blue: &b1, alpha: &a1)
-        b.getRed(&r2, green: &g2, blue: &b2, alpha: &a2)
-        return UIColor(red: r1 + (r2 - r1) * amount, green: g1 + (g2 - g1) * amount, blue: b1 + (b2 - b1) * amount, alpha: a1)
     }
 
     public func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {

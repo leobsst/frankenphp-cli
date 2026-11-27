@@ -1,8 +1,6 @@
 import { ref, watch } from 'vue'
 import type { Router } from 'vue-router'
 import { Capacitor, registerPlugin, type PluginListenerHandle } from '@capacitor/core'
-import { state } from '@app/composables/useFm'
-import { draftPrefs } from '@app/composables/usePrefs'
 import { language, t } from '@app/i18n'
 import { splashDone } from './splash'
 import { dialogOpen, watchOverlays } from './overlays'
@@ -16,7 +14,8 @@ interface NativeTabBarPlugin {
   select(options: { id?: string }): Promise<void>
   setHidden(options: { hidden: boolean }): Promise<void>
   remove(): Promise<void>
-  setAppearance(options: { tint: string; theme: 'light' | 'dark' | 'system' }): Promise<void>
+  /** Colours as #RRGGBB (empty: the system's), and the look of the page. */
+  setAppearance(options: { tint: string; normal: string; theme: 'light' | 'dark' }): Promise<void>
   addListener(event: 'tabSelected', fn: (data: { id: string }) => void): Promise<PluginListenerHandle>
 }
 const NativeTabBar = registerPlugin<NativeTabBarPlugin>('NativeTabBar')
@@ -38,6 +37,49 @@ export const nativeTabs = ref(false)
 /** Phone: above that width, the dashboard sidebar replaces the bottom bar. */
 const phone = () => window.matchMedia('(max-width: 719px)')
 
+/** A canvas pixel: resolves any CSS colour (oklch, color-mix…) to sRGB. */
+let pixel: CanvasRenderingContext2D | null = null
+
+/** Colour of a CSS variable of the page, as it shows it now (light or dark), as #RRGGBB; null when unreadable. */
+function cssColor(variable: string): string | null {
+  const probe = document.createElement('span')
+  probe.style.cssText = `display:none;color:var(${variable})`
+  document.body.append(probe)
+  const value = getComputedStyle(probe).color
+  probe.remove()
+  pixel ??= Object.assign(document.createElement('canvas'), { width: 1, height: 1 }).getContext('2d', { willReadFrequently: true })
+  if (!pixel || !value) return null
+  pixel.clearRect(0, 0, 1, 1)
+  pixel.fillStyle = value
+  pixel.fillRect(0, 0, 1, 1)
+  const [r = 0, g = 0, b = 0] = pixel.getImageData(0, 0, 1, 1).data
+  return `#${[r, g, b].map((x) => x.toString(16).padStart(2, '0')).join('')}`
+}
+
+/**
+ * Gives the bar the colours of the BottomNav it replaces: the active tab in `--ui-primary`, the others in
+ * `--ui-text-muted`, and the light or dark look of the page. Read from the page itself, so they follow every change of
+ * `<html>` (its `dark` class, its colour variables); returns the function that stops following.
+ */
+function followAppearance(): () => void {
+  let last = ''
+  const apply = () => {
+    const appearance = {
+      tint: cssColor('--ui-primary') ?? '',
+      normal: cssColor('--ui-text-muted') ?? '',
+      theme: document.documentElement.classList.contains('dark') ? 'dark' as const : 'light' as const,
+    }
+    const key = JSON.stringify(appearance)
+    if (key === last) return
+    last = key
+    void NativeTabBar.setAppearance(appearance).catch(() => {})
+  }
+  const observer = new MutationObserver(apply)
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'style'] })
+  apply()
+  return () => observer.disconnect()
+}
+
 /** Shows the native bar and links it to the router; returns the function that removes it. */
 export async function mountNativeTabBar(router: Router): Promise<() => void> {
   if (Capacitor.getPlatform() !== 'ios' || !phone().matches) return () => {}
@@ -54,12 +96,9 @@ export async function mountNativeTabBar(router: Router): Promise<() => void> {
   // Screen points: divided by the interface zoom (main.css) to stay the same on screen.
   document.documentElement.style.setProperty('--native-tabbar-height', `calc(${height}px / var(--fm-zoom, 1))`)
 
-  // Primary colour and theme of the app (Settings): the Settings page previews them before saving them.
-  const stopAppearance = watch(
-    () => (router.currentRoute.value.name === 'settings' ? draftPrefs.value : state.prefs),
-    (p) => { void NativeTabBar.setAppearance({ tint: p.primary, theme: p.theme }) },
-    { immediate: true, deep: true },
-  )
+  // Colours of the bar: those the page shows, read after each change of the theme, of the colours (the Settings
+  // preview included) or of the system appearance (theme « Système »).
+  const stopAppearance = followAppearance()
 
   const tap = await NativeTabBar.addListener('tabSelected', ({ id }) => { void router.push(id) })
   const stopRoute = watch(() => router.currentRoute.value.path, () => { void NativeTabBar.select({ id: current() }) })
