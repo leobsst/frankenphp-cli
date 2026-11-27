@@ -1,8 +1,8 @@
 import { markRaw, reactive, type Component } from 'vue'
 
 /**
- * What the application mounting the dashboard provides to it: the name and address of the managed instance and, if
- * there are several (the mobile app), the page used to switch between them.
+ * What the application mounting the dashboard provides to it: the name and address of the managed instance and the
+ * page used to switch between instances (the mobile app and the embedded dashboard both manage several).
  */
 export const shell = reactive({
   /** Displayed instance name; empty: the machine name, read from the API. */

@@ -1,52 +1,42 @@
-import { reactive } from 'vue'
 import { Preferences } from '@capacitor/preferences'
-import type { Instance as ApiInstance } from '@app/lib/api'
 import { t } from '@app/i18n'
+import type { Instance, InstancePlatform } from '@app/lib/instances'
 import { secureGet, secureRemove, secureSet } from './secureStore'
+import { deviceName } from './device'
+import { openPairing, scanPairing } from './pairing'
 import { DEMO_ID, DEMO_URL, isDemoUrl } from '../demo'
 import { resetDemo } from '../demo/server'
 
 /**
- * A FrankenManager instance managed by the app: the address of its remote access (HTTPS) and the session opened with
- * the dashboard password or a pairing code. The token can be revoked from the dashboard (Remote access › Devices)
- * and expires after 30 days without use.
- *
- * Storage: the list itself (name, address, session id…) is not secret and stays in Capacitor Preferences; each token
- * lives in the secure store (iOS Keychain, Android Keystore: src/lib/secureStore.ts), under `token.<id>`.
+ * Storage of the instances in the mobile app (the list and its pages are shared: web/app/src/lib/instances.ts). The
+ * list itself (name, address, session id…) is not secret and stays in Capacitor Preferences; each token lives in the
+ * secure store (iOS Keychain, Android Keystore: src/lib/secureStore.ts), under `token.<id>`.
  */
-export interface Instance extends ApiInstance {
-  name: string
-  /** Origin of the remote access, for example https://192.168.1.42:9443. */
-  url: string
-  /** Session id on the daemon side (to recognize it in the list of devices). */
-  session: string
-  /** Daemon version at the last contact. */
-  version?: string
-  /** The session was rejected (revoked, expired, password changed): signing in again is needed. */
-  expired?: boolean
-  added: number
-}
 
 /** What is kept in Preferences: everything but the token (present only in lists written by app 0.1.0). */
 type StoredInstance = Omit<Instance, 'token'> & { token?: string }
 
 const KEY = 'fm-instances'
-/** Default port of the remote access (DASHBOARD_REMOTE_PORT). */
-export const DEFAULT_REMOTE_PORT = 9443
+/** Instance open at the last launch, stored by earlier versions: a cold start now opens the list. */
+const LEGACY_CURRENT = 'fm-current'
 
 const tokenKey = (id: string) => `token.${id}`
 
-export const store = reactive<{ list: Instance[]; loaded: boolean }>({ list: [], loaded: false })
-
 /** Instances whose token could not be moved to the secure store yet: it stays in Preferences until it is. */
 const unmigrated = new Set<string>()
+
+async function saveList(list: Instance[]) {
+  const stored: StoredInstance[] = list.map(({ token, ...rest }) => (unmigrated.has(rest.id) ? { ...rest, token } : rest))
+  await Preferences.set({ key: KEY, value: JSON.stringify(stored) })
+}
 
 /**
  * Reads the instance list and their tokens. The demo app (0.1.0) kept the tokens in Preferences, next to the list:
  * they are moved to the secure store, then removed from Preferences once safely written there. A token that cannot
  * be moved stays where it was, and the move is tried again on the next launch.
  */
-export async function loadInstances() {
+async function load(): Promise<Instance[]> {
+  void Preferences.remove({ key: LEGACY_CURRENT }).catch(() => {})
   let stored: StoredInstance[] = []
   try {
     const { value } = await Preferences.get({ key: KEY })
@@ -55,7 +45,7 @@ export async function loadInstances() {
     stored = []
   }
   let migrated = false
-  store.list = await Promise.all(
+  const list = await Promise.all(
     stored.map(async ({ token: legacy, ...rest }): Promise<Instance> => {
       // The demo instance has no session: nothing to read from the secure store.
       if (isDemoUrl(rest.url)) return { ...rest, token: '', expired: false }
@@ -73,98 +63,33 @@ export async function loadInstances() {
       return { ...rest, token: token ?? '', expired: rest.expired || !token }
     }),
   )
-  if (migrated) await save()
-  store.loaded = true
+  if (migrated) await saveList(list)
+  return list
 }
 
-/** Writes the list without the tokens (they are in the secure store), except those not moved there yet. */
-async function save() {
-  const list: StoredInstance[] = store.list.map(({ token, ...rest }) => (unmigrated.has(rest.id) ? { ...rest, token } : rest))
-  await Preferences.set({ key: KEY, value: JSON.stringify(list) })
-}
-
-export const findInstance = (id: string) => store.list.find((i) => i.id === id)
-export const findByUrl = (url: string) => store.list.find((i) => i.url === url)
-
-export async function upsertInstance(inst: Instance) {
-  await secureSet(tokenKey(inst.id), inst.token)
-  unmigrated.delete(inst.id)
-  const i = store.list.findIndex((x) => x.id === inst.id)
-  if (i >= 0) store.list[i] = inst
-  else store.list.push(inst)
-  await save()
-}
-
-export async function patchInstance(id: string, patch: Partial<Instance>) {
-  const inst = findInstance(id)
-  if (!inst) return
-  if (patch.token) {
-    await secureSet(tokenKey(id), patch.token)
+export const mobilePlatform: InstancePlatform = {
+  kind: 'app',
+  load,
+  save: saveList,
+  async setToken(id, token) {
+    await secureSet(tokenKey(id), token)
     unmigrated.delete(id)
-  }
-  Object.assign(inst, patch)
-  await save()
+  },
+  async removeToken(id) {
+    unmigrated.delete(id)
+    await secureRemove(tokenKey(id))
+  },
+  deviceName,
+  async scan(router) {
+    const link = await scanPairing()
+    if (link) await openPairing(router, link)
+  },
+  demo: {
+    isDemo: isDemoUrl,
+    create() {
+      resetDemo()
+      return { id: DEMO_ID, name: 'Demo', url: DEMO_URL, token: '', session: '', added: Date.now() }
+    },
+  },
+  footer: () => t('mobile.instances.version', { version: __APP_VERSION__, build: __APP_BUILD__ }),
 }
-
-export async function removeInstance(id: string) {
-  store.list = store.list.filter((i) => i.id !== id)
-  unmigrated.delete(id)
-  await save()
-  await secureRemove(tokenKey(id)).catch(() => {})
-}
-
-/** The demo instance (simulated data, see src/demo): never a token, so never in the secure store. */
-export const isDemo = (inst: Pick<Instance, 'url'>) => isDemoUrl(inst.url)
-
-/** Adds the demo instance, fresh, unless it is already in the list; returns it. */
-export async function addDemoInstance(): Promise<Instance> {
-  const existing = store.list.find(isDemo)
-  if (existing) return existing
-  resetDemo()
-  const inst: Instance = { id: DEMO_ID, name: 'Demo', url: DEMO_URL, token: '', session: '', added: Date.now() }
-  store.list.push(inst)
-  await save()
-  return inst
-}
-
-/** Name shown for an instance: the demo's follows the interface language. */
-export const displayName = (inst: Instance) => (isDemo(inst) ? t('mobile.demo.name') : inst.name)
-/** Address shown for an instance: the demo has none, it says its data is simulated. */
-export const displayAddress = (inst: Instance) => (isDemo(inst) ? t('mobile.demo.address') : inst.url.replace('https://', ''))
-
-export const newId = () => Math.random().toString(36).slice(2, 10)
-
-/**
- * Typed address → HTTPS origin of the remote access. Accepts « 192.168.1.42 », « mac.local:9443 » or a full URL;
- * remote access only exists over HTTPS, so an http:// is corrected.
- */
-export function normalizeUrl(input: string): string {
-  let s = input.trim()
-  if (!s) throw new Error(t('mobile.form.errors.addressRequired'))
-  s = s.replace(/^http:\/\//i, 'https://')
-  if (!/^https:\/\//i.test(s)) s = `https://${s}`
-  let u: URL
-  try {
-    u = new URL(s)
-  } catch {
-    throw new Error(t('mobile.form.errors.invalidAddress'))
-  }
-  // Without a typed port, the remote access one; an explicit :443 (tunnel, public name) is kept.
-  if (!u.port && !/^https:\/\/[^/]+:\d+/i.test(s)) u.port = String(DEFAULT_REMOTE_PORT)
-  return u.origin
-}
-
-// ---------- Instance open in the dashboard ----------
-const CURRENT = 'fm-current'
-export const current = reactive<{ id: string | null }>({ id: null })
-
-/**
- * Kept in memory only: a cold start opens the instance list, never straight into the last instance. The key that
- * earlier versions stored is removed.
- */
-export async function setCurrent(id: string | null) {
-  current.id = id
-  await Preferences.remove({ key: CURRENT }).catch(() => {})
-}
-
-export const currentInstance = () => (current.id ? findInstance(current.id) : undefined)

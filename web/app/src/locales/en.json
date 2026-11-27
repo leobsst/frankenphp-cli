@@ -1344,6 +1344,20 @@
     "password": "Dashboard password",
     "error": "Error {status}"
   },
+  "instances": {
+    "home": "This dashboard’s machine",
+    "homeBadge": "This dashboard",
+    "signInRequired": "Sign-in required",
+    "remove": "Remove from the list",
+    "removeTitle": "Remove {name} from the list?",
+    "removeHelp": "Its session is closed on the machine, where FrankenManager keeps running. Add it again with the password to get it back.",
+    "webDevice": "FrankenManager dashboard · {host}",
+    "firstTime": {
+      "title": "First connection to another machine",
+      "ca": "Share its CA ({trustCa}) and install it on this device, like the one of this dashboard’s machine.",
+      "version": "Update FrankenManager on the machine ({update}): earlier versions refuse other dashboards."
+    }
+  },
   "mobile": {
     "device": {
       "name": "FrankenManager app",
@@ -1383,8 +1397,9 @@
       "add": "Add an instance",
       "scanHelp": "Show the pairing QR code in the machine's dashboard (Remote access).",
       "orPassword": "or with the password",
-      "address": "Remote access address",
-      "addressHelp": "IP or name of the machine, port 9443 by default (DASHBOARD_REMOTE_PORT).",
+      "address": "IP address or name",
+      "addressHelp": "The remote access of the machine listens on port 9443 by default (DASHBOARD_REMOTE_PORT).",
+      "port": "Port",
       "nameHelp": "Defaults to the machine's name.",
       "wrongPassword": "Wrong password.",
       "firstTime": {
@@ -1395,7 +1410,8 @@
       },
       "errors": {
         "addressRequired": "Enter the instance address.",
-        "invalidAddress": "Invalid address."
+        "invalidAddress": "Invalid address.",
+        "invalidPort": "Invalid port (1 to 65535)."
       }
     },
     "pair": {

@@ -1,17 +1,23 @@
 <script setup lang="ts">
-import { watch } from 'vue'
+import { computed, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useToast } from '@nuxt/ui/composables'
 import ConfirmPassword from '@app/components/ConfirmPassword.vue'
 import { uiLocale } from '@app/i18n'
 import { bindNotifier } from '@app/composables/useFm'
 import { useApplyPrefs } from '@app/composables/usePrefs'
-import DashboardLayout from './DashboardLayout.vue'
+import { currentInstance, INSTANCES_PATH } from '@app/lib/instances'
 import SignIn from './SignIn.vue'
 import { setupServiceWorker } from './pwa'
 import { boot, session } from './session'
 
 const { t } = useI18n()
+
+// The dashboard of this machine waits for its session (sign-in, or its daemon answering); the instance pages and the
+// other instances do not.
+const route = useRoute()
+const waitsForHome = computed(() => !!route.meta.dashboard && !!currentInstance()?.home && session.phase !== 'ready')
 
 // Store notifications (operation progress), as in the POC.
 const toast = useToast()
@@ -45,7 +51,7 @@ watch(
 
 <template>
   <UApp :locale="uiLocale" :toaster="{ position: 'bottom-right', max: 4 }">
-    <DashboardLayout v-if="session.phase === 'ready'" />
+    <RouterView v-if="!waitsForHome" />
     <SignIn v-else-if="session.phase === 'login'" />
     <div v-else class="grid min-h-dvh place-items-center bg-muted p-6">
       <div v-if="session.phase === 'error'" class="max-w-md space-y-4 text-center">
@@ -55,7 +61,11 @@ watch(
         <i18n-t keypath="app.daemonDown.help" tag="p" scope="global" class="text-sm text-muted">
           <template #cmd><code class="font-mono">frankenmanager dashboard</code></template>
         </i18n-t>
-        <UButton icon="i-lucide-rotate-cw" :label="t('common.retry')" @click="boot()" />
+        <div class="flex flex-wrap justify-center gap-2">
+          <UButton icon="i-lucide-rotate-cw" :label="t('common.retry')" @click="boot()" />
+          <!-- The other instances stay reachable while this machine's daemon is down. -->
+          <UButton icon="i-lucide-server-cog" :label="t('sidebar.switchInstance')" color="neutral" variant="outline" :to="INSTANCES_PATH" />
+        </div>
       </div>
       <UIcon v-else name="i-lucide-loader-circle" class="size-8 animate-spin text-primary" :aria-label="t('common.loading')" />
     </div>

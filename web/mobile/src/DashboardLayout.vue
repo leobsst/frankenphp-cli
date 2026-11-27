@@ -11,7 +11,7 @@ import { sidebarCollapsed } from '@app/composables/useSidebar'
 import { connect, disconnect, loadPage, pause, refresh, resume, state, toast } from '@app/composables/useFm'
 import { shell } from '@app/lib/shell'
 import { deviceLabel } from './lib/device'
-import { currentInstance, displayAddress, displayName, isDemo } from './lib/instances'
+import { currentInstance, displayAddress, displayName, isDemo, noteVersion, signInPath } from '@app/lib/instances'
 import { mountNativeTabBar, nativeTabs } from './lib/nativeTabBar'
 import { mountNativeSegments, nativeSegments } from './lib/nativeSegments'
 import { INSTANCES } from './router'
@@ -60,11 +60,14 @@ watch([() => route.name, () => state.loaded], ([name, loaded]) => { if (loaded) 
 // Page hidden while its service is off (nav.ts): back to Containers, where it is turned on.
 watch(() => state.loaded && !pageAvailable(String(route.name ?? '')), (off) => { if (off) void router.replace({ name: 'containers' }) }, { immediate: true })
 
+// Daemon version read with the status (updated daemon): the instance list shows it right away.
+watch(() => state.app.version, (version) => void noteVersion(inst.id, version))
+
 // Session revoked or expired (401, marked by main.ts): back to the sign-in.
 watch(() => inst.expired, (expired) => {
   if (!expired) return
   toast('error', t('mobile.session.expired'), t('mobile.session.expiredHelp'))
-  void router.replace(`/instances/${inst.id}/connexion`)
+  void router.replace(signInPath(inst.id))
 })
 </script>
 

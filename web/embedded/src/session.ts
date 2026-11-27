@@ -1,6 +1,7 @@
 import { reactive } from 'vue'
 import { connect, disconnect, reconnect } from '@app/composables/useFm'
-import { setUnauthorizedHandler, type Instance } from '@app/lib/api'
+import { setUnauthorizedHandler } from '@app/lib/api'
+import { homeInstance, patchInstance, setCurrent, setHomeInstance, type Instance } from '@app/lib/instances'
 import { t } from '@app/i18n'
 
 /**
@@ -13,6 +14,9 @@ import { t } from '@app/i18n'
  *
  * The token is kept in this browser (localStorage of this origin): a new visit resumes the same session as long as
  * the daemon recognizes it (30 days without use at most).
+ *
+ * This machine is the first instance of the list (`home`, see @app/lib/instances), the one the dashboard opens on;
+ * the others are added from the instance list, like in the mobile app, and reached through their remote access.
  */
 interface Config {
   /** API address; empty: the page's origin. */
@@ -20,6 +24,9 @@ interface Config {
   mode: 'local' | 'remote'
   version: string
 }
+
+/** Id of this machine in the instance list. */
+export const HOME_ID = 'dashboard'
 
 const KEY = 'fm-dashboard-session'
 const read = () => { try { return localStorage.getItem(KEY) ?? '' } catch { return '' } }
@@ -37,8 +44,14 @@ export const session = reactive({
 
 const bearer = (token: string): Record<string, string> => (token ? { Authorization: `Bearer ${token}` } : {})
 
-/** Token of the session in use: a 401 on an older one (request sent before a re-sign-in) is ignored. */
-let current = ''
+/** This machine in the instance list, with the token of its session (empty: the cookie, or not signed in). */
+function setHome(token: string) {
+  setHomeInstance({ id: HOME_ID, name: '', url: session.base || location.origin, token, session: '', added: 0 })
+}
+// The dashboard opens on this machine.
+setHome('')
+setCurrent(HOME_ID)
+
 /** Automatic retry of boot() while the daemon does not answer: 2 s, 4 s… 30 s. */
 let bootRetry: ReturnType<typeof setTimeout> | undefined
 let bootDelay = 0
@@ -51,14 +64,26 @@ async function recognized(token: string) {
   return !a.session_required || a.authenticated
 }
 
-const instance = (token: string): Instance => ({ id: 'dashboard', url: session.base, token })
-
 function start(token: string) {
-  const inst = instance(token)
-  current = token
   bootDelay = 0
-  connect(inst, { mode: session.mode, client: session.mode === 'local' ? t('app.client.local') : t('app.client.remote') })
+  setHome(token)
   session.phase = 'ready'
+}
+
+// ---------- Connection of the dashboard ----------
+/** Instance the dashboard is connected to (DashboardLayout), null on the instance pages. */
+let connected: string | null = null
+
+/** Connects the dashboard to an instance: this machine as its page signed in (local or remote), the others remotely. */
+export function openInstance(inst: Instance) {
+  connected = inst.id
+  const mode = inst.home ? session.mode : 'remote'
+  connect(inst, { mode, client: mode === 'local' ? t('app.client.local') : t('app.client.remote') })
+}
+
+export function closeInstance() {
+  connected = null
+  disconnect()
 }
 
 /**
@@ -93,6 +118,7 @@ export async function boot() {
       const fresh = await localSession()
       if (fresh) return start(fresh)
     }
+    setHome('')
     session.phase = 'login'
     session.error = ''
   } catch (e) {
@@ -122,26 +148,33 @@ export async function signIn(password: string): Promise<string | null> {
 }
 
 /**
- * Session revoked, expired, or lost by a restarted daemon: forget the token. On this machine, a new local session is
- * opened in place, keeping the page as is; otherwise (or when it fails), start over (password, or error screen).
+ * Session revoked, expired, or lost by a restarted daemon.
+ *
+ * - Another instance: it is marked, DashboardLayout then leads to its sign-in, and the list shows it.
+ * - This machine: forget the token. On this machine, a new local session is opened in place, keeping the page as
+ *   is; otherwise (or when it fails), start over (password, or error screen).
  */
 let resigning = false
 setUnauthorizedHandler(async (inst) => {
+  if (inst.id !== HOME_ID) {
+    void patchInstance(inst.id, { expired: true })
+    return
+  }
   // Requests and streams sent in parallel fail together: one re-sign-in, and none for an already replaced token.
-  if (resigning || inst.token !== current) return
+  if (resigning || inst.token !== homeInstance()?.token) return
   resigning = true
   try {
     write('')
     if (session.mode === 'local') {
       const fresh = await localSession().catch(() => null)
       if (fresh) {
-        current = fresh
-        reconnect(instance(fresh))
+        setHome(fresh)
+        if (connected === HOME_ID) reconnect(homeInstance()!)
         return
       }
     }
-    current = ''
-    disconnect()
+    setHome('')
+    if (connected === HOME_ID) closeInstance()
     await boot()
   } finally {
     resigning = false

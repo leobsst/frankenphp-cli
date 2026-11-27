@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { ApiError, hostInfo, logout, pair } from '@app/lib/api'
 import { deviceName } from '../lib/device'
-import { findByUrl, newId, setCurrent, upsertInstance } from '../lib/instances'
+import { findByUrl, newId, setCurrent, upsertInstance } from '@app/lib/instances'
 import { formatFingerprint, parsePairLink, type PairRequest } from '../lib/pairing'
 
 /**
@@ -63,7 +63,7 @@ async function confirm() {
       expired: false,
       added: prev?.added ?? Date.now(),
     })
-    await setCurrent(id)
+    setCurrent(id)
     await router.replace('/')
   } catch (e) {
     error.value = explain(e)

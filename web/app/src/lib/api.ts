@@ -205,6 +205,10 @@ export const pair = (url: string, code: string, device: string) =>
 
 export const hostInfo = (url: string, token: string) => send<HostInfo>(url, token, 'GET', '/api/v1/host', { timeout: 8_000 })
 
+/** Private IPv4 network of this device as the daemon sees it (empty when it cannot tell); a rejected session is not reported. */
+export const clientNetwork = (url: string, token: string) =>
+  send<ApiResponse<'/api/v1/client/network'>>(url, token, 'GET', '/api/v1/client/network', { timeout: 5_000 })
+
 /** Closes the session on the daemon side; no effect if the instance is unreachable. */
 export async function logout(inst: Instance) {
   await send(inst.url, inst.token, 'POST', '/api/v1/auth/logout', { body: {}, timeout: 5_000 }).catch(() => {})

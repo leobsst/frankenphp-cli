@@ -10,7 +10,8 @@ import { state } from '@app/composables/useFm'
 import { setUnauthorizedHandler } from '@app/lib/api'
 import App from './App.vue'
 import { router } from './router'
-import { loadInstances, patchInstance } from './lib/instances'
+import { loadInstances, patchInstance, setInstancePlatform } from '@app/lib/instances'
+import { mobilePlatform } from './lib/instances'
 import { handOffNativeSplash } from './lib/splash'
 import { registerDemo } from './demo'
 import { loadAppLock } from './lib/appLock'
@@ -26,6 +27,9 @@ handOffNativeSplash()
 
 // Demo mode: the `demo:` instance is answered in memory (src/demo), before anything connects.
 registerDemo()
+
+// The instance list (shared with the dashboard), stored in Preferences and the Keychain / Keystore.
+setInstancePlatform(mobilePlatform)
 
 // Session rejected by the daemon (revoked, expired, password changed): the instance is marked, DashboardLayout then
 // leads to its sign-in, and the list shows it.

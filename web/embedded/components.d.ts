@@ -35,6 +35,7 @@ declare module 'vue' {
     UProgress: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_a50b459873bc368f53f7678f3ff7c574/node_modules/@nuxt/ui/dist/runtime/components/Progress.vue')['default']
     URadioGroup: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_a50b459873bc368f53f7678f3ff7c574/node_modules/@nuxt/ui/dist/runtime/components/RadioGroup.vue')['default']
     USelect: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_a50b459873bc368f53f7678f3ff7c574/node_modules/@nuxt/ui/dist/runtime/components/Select.vue')['default']
+    USeparator: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_a50b459873bc368f53f7678f3ff7c574/node_modules/@nuxt/ui/dist/runtime/components/Separator.vue')['default']
     USkeleton: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_a50b459873bc368f53f7678f3ff7c574/node_modules/@nuxt/ui/dist/runtime/components/Skeleton.vue')['default']
     USlideover: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_a50b459873bc368f53f7678f3ff7c574/node_modules/@nuxt/ui/dist/runtime/components/Slideover.vue')['default']
     USwitch: typeof import('./../node_modules/.pnpm/@nuxt+ui@4.12.0_a50b459873bc368f53f7678f3ff7c574/node_modules/@nuxt/ui/dist/runtime/components/Switch.vue')['default']

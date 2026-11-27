@@ -2,6 +2,7 @@
 import PasswordInput from '@app/components/PasswordInput.vue'
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
+import { INSTANCES_PATH } from '@app/lib/instances'
 import { session, signIn } from './session'
 
 const { t } = useI18n()
@@ -34,6 +35,8 @@ async function submit() {
           <PasswordInput v-model="password" autocomplete="current-password" autofocus size="lg" class="w-full" @update:model-value="error = ''" />
         </UFormField>
         <UButton type="submit" :label="t('common.signIn')" size="lg" block :loading="busy" :disabled="!password" />
+        <!-- The other instances do not need this machine's password. -->
+        <UButton icon="i-lucide-server-cog" :label="t('sidebar.switchInstance')" color="neutral" variant="ghost" size="lg" block :to="INSTANCES_PATH" />
       </form>
     </UCard>
   </div>

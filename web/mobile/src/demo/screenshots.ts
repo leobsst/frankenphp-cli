@@ -1,7 +1,7 @@
 import type { Router } from 'vue-router'
 import { Preferences } from '@capacitor/preferences'
 import { setLanguage, type LanguagePref } from '@app/i18n'
-import { addDemoInstance, setCurrent } from '../lib/instances'
+import { addDemoInstance, setCurrent } from '@app/lib/instances'
 
 /**
  * Screenshot builds only (`vite build --mode screenshots`, see README): a link opens a page of the demo directly, so
@@ -39,7 +39,7 @@ export async function openScreenshotLink(router: Router, url: string) {
     await router.push('/instances')
   } else {
     const inst = await addDemoInstance()
-    await setCurrent(inst.id)
+    setCurrent(inst.id)
     await router.push(`/${path}`)
   }
   for (const text of link.searchParams.getAll('tap')) {

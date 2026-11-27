@@ -67,8 +67,8 @@ const navUi = {
   </div>
 
   <!--
-    Managed machine, only where several can be managed (the mobile app): it leads back to the instance list. The
-    dashboard of the binary only manages its own machine.
+    Managed machine, where several can be managed (the mobile app, the embedded dashboard): it leads back to the
+    instance list.
   -->
   <div v-if="!collapsed && shell.switchTo" class="mt-7 shrink-0">
     <p class="mx-3 mb-2 text-[10px] font-semibold tracking-[1.4px] text-muted">{{ t('sidebar.hostMachine') }}</p>
