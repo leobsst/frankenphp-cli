@@ -3,6 +3,7 @@ import { t } from '@app/i18n'
 import type { Instance, InstancePlatform } from '@app/lib/instances'
 import { secureGet, secureRemove, secureSet } from './secureStore'
 import { deviceName } from './device'
+import { localNetwork } from './localNetwork'
 import { openPairing, scanPairing } from './pairing'
 import { DEMO_ID, DEMO_URL, isDemoUrl } from '../demo'
 import { resetDemo } from '../demo/server'
@@ -92,4 +93,5 @@ export const mobilePlatform: InstancePlatform = {
     },
   },
   footer: () => t('mobile.instances.version', { version: __APP_VERSION__, build: __APP_BUILD__ }),
+  localNetwork,
 }

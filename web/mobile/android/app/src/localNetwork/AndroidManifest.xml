@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Merged into the debug and release builds from targetSdkVersion 37 only (app/build.gradle): Android 17 then blocks the
+  local network until the user allows it, which LocalNetworkPlugin asks before the first connection to an instance.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
+</manifest>

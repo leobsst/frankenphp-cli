@@ -22,6 +22,7 @@
 		F1A1B2CA2DB0000100EA8C5F /* AppLockPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A1B2C92DB0000100EA8C5F /* AppLockPlugin.swift */; };
 		F1A1B2CC2DB0000100EA8C5F /* DisplayPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A1B2CB2DB0000100EA8C5F /* DisplayPlugin.swift */; };
 		F1A1B2CE2DB0000100EA8C5F /* NativeSegmentsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A1B2CD2DB0000100EA8C5F /* NativeSegmentsPlugin.swift */; };
+		F1A1B2D52DB0000100EA8C5F /* LocalNetworkPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1A1B2D42DB0000100EA8C5F /* LocalNetworkPlugin.swift */; };
 		F1A1B2D32DB0000100EA8C5F /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = F1A1B2D02DB0000100EA8C5F /* InfoPlist.strings */; };
 /* End PBXBuildFile section */
 
@@ -44,6 +45,7 @@
 		F1A1B2C92DB0000100EA8C5F /* AppLockPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLockPlugin.swift; sourceTree = "<group>"; };
 		F1A1B2CB2DB0000100EA8C5F /* DisplayPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayPlugin.swift; sourceTree = "<group>"; };
 		F1A1B2CD2DB0000100EA8C5F /* NativeSegmentsPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSegmentsPlugin.swift; sourceTree = "<group>"; };
+		F1A1B2D42DB0000100EA8C5F /* LocalNetworkPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalNetworkPlugin.swift; sourceTree = "<group>"; };
 		F1A1B2D12DB0000100EA8C5F /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		F1A1B2D22DB0000100EA8C5F /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fr; path = fr.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -88,6 +90,7 @@
 				F1A1B2C92DB0000100EA8C5F /* AppLockPlugin.swift */,
 				F1A1B2CB2DB0000100EA8C5F /* DisplayPlugin.swift */,
 				F1A1B2CD2DB0000100EA8C5F /* NativeSegmentsPlugin.swift */,
+				F1A1B2D42DB0000100EA8C5F /* LocalNetworkPlugin.swift */,
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
@@ -192,6 +195,7 @@
 				F1A1B2CA2DB0000100EA8C5F /* AppLockPlugin.swift in Sources */,
 				F1A1B2CC2DB0000100EA8C5F /* DisplayPlugin.swift in Sources */,
 				F1A1B2CE2DB0000100EA8C5F /* NativeSegmentsPlugin.swift in Sources */,
+				F1A1B2D52DB0000100EA8C5F /* LocalNetworkPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

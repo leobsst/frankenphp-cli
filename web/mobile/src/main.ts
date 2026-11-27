@@ -7,11 +7,12 @@ import { Capacitor } from '@capacitor/core'
 import { Device } from '@capacitor/device'
 import { i18n, setLanguage, setSystemLanguages } from '@app/i18n'
 import { state } from '@app/composables/useFm'
-import { setUnauthorizedHandler } from '@app/lib/api'
+import { setBeforeRequest, setUnauthorizedHandler, setUnreachableHint } from '@app/lib/api'
 import App from './App.vue'
 import { router } from './router'
 import { loadInstances, patchInstance, setInstancePlatform } from '@app/lib/instances'
 import { mobilePlatform } from './lib/instances'
+import { allowLocalNetwork, localNetworkHint } from './lib/localNetwork'
 import { handOffNativeSplash } from './lib/splash'
 import { registerDemo } from './demo'
 import { loadAppLock } from './lib/appLock'
@@ -30,6 +31,11 @@ registerDemo()
 
 // The instance list (shared with the dashboard), stored in Preferences and the Keychain / Keystore.
 setInstancePlatform(mobilePlatform)
+
+// Local network: Android 17 needs the user's permission, asked before the first request (iOS asks by itself).
+// Refused, the « unreachable » message says where to allow it.
+setBeforeRequest(allowLocalNetwork)
+setUnreachableHint(localNetworkHint)
 
 // Session rejected by the daemon (revoked, expired, password changed): the instance is marked, DashboardLayout then
 // leads to its sign-in, and the list shows it.

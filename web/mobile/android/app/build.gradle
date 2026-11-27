@@ -54,6 +54,15 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
     }
+    // Android 17 (API 37) blocks the local network of an app targeting it until the user allows it
+    // (LocalNetworkPlugin asks before the first connection to an instance). Below 37, INTERNET grants it and Google asks
+    // not to declare the permission: its manifest only joins the build from targetSdkVersion 37.
+    if (rootProject.ext.targetSdkVersion >= 37) {
+        sourceSets {
+            debug { manifest.srcFile 'src/localNetwork/AndroidManifest.xml' }
+            release { manifest.srcFile 'src/localNetwork/AndroidManifest.xml' }
+        }
+    }
 }
 
 repositories {

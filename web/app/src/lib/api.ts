@@ -50,8 +50,27 @@ export class ApiError extends Error {
   }
 }
 
-/** Message for a request that did not go through: most often an untrusted certificate or closed remote access. */
-export const unreachableMessage = () => t('errors.unreachable', { setting: 'DASHBOARD_ACCESS=lan' })
+/**
+ * Message for a request that did not go through: most often an untrusted certificate or closed remote access. The
+ * application can add its own lead for the address (setUnreachableHint).
+ */
+export function unreachableMessage(url?: string) {
+  const message = t('errors.unreachable', { setting: 'DASHBOARD_ACCESS=lan' })
+  const hint = url ? unreachableHint(url) : null
+  return hint ? `${message} ${hint}` : message
+}
+
+let unreachableHint: (url: string) => string | null = () => null
+/** Lead of the application for an unreachable address (the mobile app: its access to the local network). */
+export function setUnreachableHint(fn: (url: string) => string | null) {
+  unreachableHint = fn
+}
+
+let beforeRequest: (url: string) => Promise<void> = () => Promise.resolve()
+/** Awaited before each request to an address (the mobile app: asks for the local network on Android 17). */
+export function setBeforeRequest(fn: (url: string) => Promise<void>) {
+  beforeRequest = fn
+}
 
 // ---------- Password confirmation ----------
 
@@ -79,6 +98,7 @@ async function send<T>(base: string, token: string | null, method: string, path:
   if (token) headers.Authorization = `Bearer ${token}`
   if (opts.body !== undefined) headers['Content-Type'] = 'application/json'
   if (opts.password) headers['X-FM-Password'] = opts.password
+  await beforeRequest(base).catch(() => {})
   let res: Response
   try {
     res = await fetch(base + path, {
@@ -88,7 +108,7 @@ async function send<T>(base: string, token: string | null, method: string, path:
       signal: AbortSignal.timeout(opts.timeout ?? 15_000),
     })
   } catch {
-    throw new ApiError(0, unreachableMessage())
+    throw new ApiError(0, unreachableMessage(base))
   }
   const data = await res.json().catch(() => null)
   if (!res.ok) throw new ApiError(res.status, (data && data.error) || t('errors.http', { status: res.status }))
@@ -161,7 +181,7 @@ function httpClient(inst: Instance) {
       try {
         res = await fetch(inst.url + path, { method: 'PUT', headers: { ...(inst.token ? { Authorization: `Bearer ${inst.token}` } : {}), 'Content-Type': file.type || 'application/octet-stream' }, body: file })
       } catch {
-        throw new ApiError(0, unreachableMessage())
+        throw new ApiError(0, unreachableMessage(inst.url))
       }
       const data = await res.json().catch(() => null)
       if (!res.ok) throw new ApiError(res.status, (data && data.error) || t('errors.http', { status: res.status }))

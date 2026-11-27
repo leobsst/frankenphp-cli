@@ -1371,7 +1371,9 @@
       "unreachable": "{name} ne répond pas"
     },
     "errors": {
-      "forbidden": "{message} Vérifiez DASHBOARD_ACCESS et DASHBOARD_ALLOWED_IPS."
+      "forbidden": "{message} Vérifiez DASHBOARD_ACCESS et DASHBOARD_ALLOWED_IPS.",
+      "localNetworkIos": "Sur iPhone et iPad, FrankenManager doit aussi avoir accès au réseau local : Réglages › Confidentialité et sécurité › Réseau local.",
+      "localNetworkAndroid": "FrankenManager n’a pas accès au réseau local : autorisez « Appareils à proximité » dans Paramètres › Applications › FrankenManager › Autorisations."
     },
     "instances": {
       "title": "Instances",

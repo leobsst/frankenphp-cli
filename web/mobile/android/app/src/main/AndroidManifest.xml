@@ -58,5 +58,7 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <!-- App lock (AppLockPlugin): fingerprint / face unlock through BiometricPrompt. -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <!-- Address placeholder of the instance form (LocalNetworkPlugin): the IPv4 network of the device, no prompt. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 </manifest>
