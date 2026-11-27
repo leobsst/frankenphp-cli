@@ -299,8 +299,9 @@ func (s *Server) guard(next http.Handler) http.Handler {
 
 // remoteGuard protects the remote access (HTTPS): the address must be
 // allowed by the mode (private networks for lan) and DASHBOARD_ALLOWED_IPS,
-// the Origin must be the address itself, a session is required, and the
-// destructive actions need the password again (X-FM-Password).
+// the Origin must be the address itself or a client of corsOrigin (signed
+// in with a Bearer token only), a session is required, and the destructive
+// actions need the password again (X-FM-Password).
 func (s *Server) remoteGuard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Strict-Transport-Security", "max-age=31536000")
@@ -311,9 +312,9 @@ func (s *Server) remoteGuard(next http.Handler) http.Handler {
 		rq := requester{remote: true, ip: addr.String()}
 		origin := r.Header.Get("Origin")
 		crossOrigin := origin != "" && !strings.EqualFold(strings.TrimPrefix(origin, "https://"), r.Host)
-		if crossOrigin && appOrigin(origin) {
-			// First, so that the app can read every answer, a refusal too
-			allowApp(w, origin)
+		if crossOrigin && corsOrigin(origin) {
+			// First, so that the client can read every answer, a refusal too
+			allowCORS(w, origin)
 		}
 		if !access.Remote(cfg.Mode) || (cfg.Mode == access.LAN && !access.Private(addr)) || !cfg.Allow.Allows(addr) {
 			s.logAccess(rq, "refused", r.UserAgent())
@@ -326,7 +327,7 @@ func (s *Server) remoteGuard(next http.Handler) http.Handler {
 			return
 		}
 		if crossOrigin {
-			if !appOrigin(origin) {
+			if !corsOrigin(origin) {
 				writeError(w, http.StatusForbidden, i18n.T("Forbidden origin."))
 				return
 			}
@@ -335,6 +336,10 @@ func (s *Server) remoteGuard(next http.Handler) http.Handler {
 				w.WriteHeader(http.StatusNoContent)
 				return
 			}
+			// Another origin signs in with its Bearer token only: the cookie
+			// of this address, which a browser may still attach (same site,
+			// credentials: include), never authenticates it
+			r.Header.Del("Cookie")
 		}
 		s.requireSession(w, r, rq, next)
 	})
@@ -385,25 +390,31 @@ func (s *Server) dashboardGuard(next http.Handler) http.Handler {
 	})
 }
 
-// appOrigin reports whether origin is the mobile app (Capacitor serves it
-// from capacitor://localhost on iOS, https://localhost on Android) or its
-// dev server (http://localhost:<port>). The app signs in with a Bearer
-// token: the cookie is never allowed across origins.
-func appOrigin(origin string) bool {
+// corsOrigin reports whether a page of origin may call the remote access
+// across origins: the mobile app (Capacitor serves it from
+// capacitor://localhost on iOS, https://localhost on Android) or its dev
+// server (http://localhost:<port>), and the dashboard of another machine
+// (any HTTPS origin), whose instance list manages this one too. They all
+// sign in with a Bearer token, the cookie is never used across origins:
+// without a session of this machine, a page of any origin reaches nothing
+// but the public routes (sign-in, pairing), guarded against guessing.
+func corsOrigin(origin string) bool {
 	u, err := url.Parse(origin)
-	if err != nil || u.Hostname() != "localhost" {
+	if err != nil || u.Host == "" {
 		return false
 	}
 	switch u.Scheme {
-	case "capacitor", "https", "http":
+	case "https":
 		return true
+	case "capacitor", "http":
+		return u.Hostname() == "localhost"
 	}
 	return false
 }
 
-// allowApp answers the CORS headers of the mobile app, without
+// allowCORS answers the CORS headers of a client of corsOrigin, without
 // Access-Control-Allow-Credentials.
-func allowApp(w http.ResponseWriter, origin string) {
+func allowCORS(w http.ResponseWriter, origin string) {
 	h := w.Header()
 	h.Set("Access-Control-Allow-Origin", origin)
 	h.Add("Vary", "Origin")

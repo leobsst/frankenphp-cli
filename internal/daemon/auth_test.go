@@ -85,8 +85,9 @@ func TestRemoteAccess(t *testing.T) {
 		map[string]string{"Authorization": "Bearer forged"}); w.Code != http.StatusUnauthorized {
 		t.Errorf("forged session: %d", w.Code)
 	}
+	// Across origins, HTTPS pages only (TestRemoteAccessCrossOrigins)
 	if w := remoteRequest(h, http.MethodGet, "/api/health", "192.168.1.5", "",
-		map[string]string{"Origin": "https://evil.test"}); w.Code != http.StatusForbidden {
+		map[string]string{"Origin": "http://evil.test"}); w.Code != http.StatusForbidden {
 		t.Errorf("foreign origin: %d", w.Code)
 	}
 
@@ -136,11 +137,13 @@ func TestRemoteAccess(t *testing.T) {
 }
 
 // The mobile app (Capacitor: capacitor://localhost on iOS, https://localhost
-// on Android) and its dev server call the remote access across origins: the
-// CORS headers let them read every answer, a refusal too, and the preflight
-// passes without a session. The cookie never crosses origins: no
-// Access-Control-Allow-Credentials. Any other origin stays refused.
-func TestRemoteAccessAppOrigins(t *testing.T) {
+// on Android), its dev server and the dashboard of another machine (any
+// HTTPS origin) call the remote access across origins: the CORS headers let
+// them read every answer, a refusal too, and the preflight passes without a
+// session. The cookie never crosses origins: no
+// Access-Control-Allow-Credentials, and a cookie sent anyway is ignored.
+// Any other origin stays refused.
+func TestRemoteAccessCrossOrigins(t *testing.T) {
 	allow, _ := access.ParseAllowList("192.168.1.0/24")
 	s := authServer(t, AccessConfig{Mode: access.LAN, Allow: allow})
 	h := s.remoteGuard(s.routes())
@@ -152,7 +155,7 @@ func TestRemoteAccessAppOrigins(t *testing.T) {
 		return headers
 	}
 
-	for _, origin := range []string{"capacitor://localhost", "https://localhost", "http://localhost:5174"} {
+	for _, origin := range []string{"capacitor://localhost", "https://localhost", "http://localhost:5174", "https://192.168.1.42:9443"} {
 		w := remoteRequest(h, http.MethodOptions, "/api/v1/auth/login", "192.168.1.5", "",
 			app(origin, map[string]string{"Access-Control-Request-Method": "POST"}))
 		got := w.Header()
@@ -187,7 +190,22 @@ func TestRemoteAccessAppOrigins(t *testing.T) {
 		t.Errorf("sessions: %d %v", w.Code, w.Header())
 	}
 
-	for _, foreign := range []string{"https://evil.test", "http://localhost.evil.test", "capacitor://evil.test", "file://localhost"} {
+	// The dashboard of another machine: its Bearer token, never the cookie
+	dashboard := "https://192.168.1.42:9443"
+	if w := remoteRequest(h, http.MethodGet, "/api/v1/auth/sessions", "192.168.1.5", "",
+		app(dashboard, map[string]string{"Authorization": "Bearer " + token})); w.Code != http.StatusOK ||
+		w.Header().Get("Access-Control-Allow-Origin") != dashboard {
+		t.Errorf("sessions from another dashboard: %d %v", w.Code, w.Header())
+	}
+	cookie := map[string]string{"Cookie": sessionCookie + "=" + token}
+	if w := remoteRequest(h, http.MethodGet, "/api/v1/auth/sessions", "192.168.1.5", "", app(dashboard, cookie)); w.Code != http.StatusUnauthorized {
+		t.Errorf("cookie across origins: %d", w.Code)
+	}
+	if w := remoteRequest(h, http.MethodGet, "/api/v1/auth/sessions", "192.168.1.5", "", cookie); w.Code != http.StatusOK {
+		t.Errorf("cookie on the same origin: %d", w.Code)
+	}
+
+	for _, foreign := range []string{"http://192.168.1.42:9443", "http://localhost.evil.test", "capacitor://evil.test", "file://localhost", "null"} {
 		w := remoteRequest(h, http.MethodOptions, "/api/v1/auth/login", "192.168.1.5", "", app(foreign, nil))
 		if w.Code != http.StatusForbidden || w.Header().Get("Access-Control-Allow-Origin") != "" {
 			t.Errorf("foreign origin %s: %d %v", foreign, w.Code, w.Header())
